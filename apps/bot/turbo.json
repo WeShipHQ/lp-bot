@@ -1,0 +1,13 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "env": ["NODE_ENV", "TELEGRAM_BOT_TOKEN"],
+      "outputs": ["dist/**"]
+    },
+    "dev": {
+      "env": ["NODE_ENV", "TELEGRAM_BOT_TOKEN"],
+      "persistent": true
+    }
+  }
+}
