@@ -15,6 +15,20 @@ export class MessageService {
   }
 
   /**
+   * Generate wallet information message
+   */
+  static getWalletMessage(walletAddress: string, solBalance: number, usdValue: number): string {
+    const balanceText = solBalance > 0 
+      ? `${solBalance.toFixed(3)} SOL ($${usdValue.toFixed(2)})`
+      : "0 SOL ($0)";
+
+    return `🏦 <b>Wallet SOL Balance:</b> ${balanceText}\n\n` +
+      `<b>Wallet Address:</b>\n` +
+      `<code>${walletAddress}</code> (tap to copy)\n\n` +
+      `Use the buttons below to manage your wallet.`;
+  }
+
+  /**
    * Generate error message
    */
   static getErrorMessage(message: string = "Something went wrong. Please try again later."): string {
@@ -35,5 +49,19 @@ export class MessageService {
     return `🎉 <b>Wallet Created Successfully!</b>\n\n` +
       `🏦 <b>Wallet Address:</b> <code>${walletAddress}</code> (tap to copy)\n\n` +
       `Your Solana wallet is ready! You can now deposit SOL and start LPing.`;
+  }
+
+  /**
+   * Generate no wallet found message
+   */
+  static getNoWalletMessage(): string {
+    return "❌ No wallet found. Please contact support.";
+  }
+
+  /**
+   * Generate authentication error message
+   */
+  static getAuthErrorMessage(): string {
+    return "❌ Unable to authenticate user. Please try again.";
   }
 }

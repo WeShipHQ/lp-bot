@@ -5,7 +5,7 @@ import { userService } from "../../services/user.service";
 import { MessageService } from "../../services/message.service";
 
 interface BotContext extends Context {
-  userId?: string; // thêm field để lưu id từ privy
+  userId?: string; // Privy user ID
 }
 
 export function startCommand(bot: Telegraf, _server: FastifyInstance) {
@@ -17,7 +17,7 @@ export function startCommand(bot: Telegraf, _server: FastifyInstance) {
         return;
       }
 
-      // Get or create user using service
+      // Get or create user using Privy service
       const userInfo = await userService.getOrCreateUser(telegramUserId);
       
       // Set userId in context for later use
