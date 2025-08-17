@@ -18,11 +18,16 @@ export const CONFIG = {
     BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || "",
     WEBHOOK_URL: process.env.TELEGRAM_WEBHOOK_URL || "",
   },
- 
+
+  PRIVY: {
+    PRIVY_APP_ID: process.env.PRIVY_APP_ID as string,
+    PRIVY_APP_SECRET: process.env.PRIVY_APP_SECRET as string,
+    PRIVI_SIGNERS_ID: process.env.PRIVI_SIGNERS_ID as string,
+  },
+
   // Solana Configuration
   SOLANA: {
-    RPC_URL:
-      process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com",
+    RPC_URL: process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com",
     NETWORK: process.env.SOLANA_NETWORK || "devnet",
   },
 
