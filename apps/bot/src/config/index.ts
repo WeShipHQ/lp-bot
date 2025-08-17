@@ -22,7 +22,8 @@ export const CONFIG = {
   PRIVY: {
     PRIVY_APP_ID: process.env.PRIVY_APP_ID as string,
     PRIVY_APP_SECRET: process.env.PRIVY_APP_SECRET as string,
-    PRIVI_SIGNERS_ID: process.env.PRIVI_SIGNERS_ID as string,
+    PRIVI_AUTH_ID: process.env.PRIVI_AUTH_ID as string,
+    PRIVY_AUTH_PRIVATE_KEY: process.env.PRIVY_AUTH_PRIVATE_KEY as string,
   },
 
   // Solana Configuration

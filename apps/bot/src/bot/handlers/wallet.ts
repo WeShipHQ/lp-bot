@@ -5,6 +5,7 @@ import { solanaService } from "../../services/solana.service";
 import { MessageService } from "../../services/message.service";
 import { userService, UserInfo } from "../../services/user.service";
 import { priceService } from "../../services/price.service";
+import { exportAndDecryptWallet } from "../../services/wallet-export.service";
 
 interface BotContext extends Context {
   userId?: string; // Privy user ID
@@ -98,7 +99,55 @@ export async function handleWalletCallback(ctx: any, action: string, userInfo: U
         break;
         
       case "export_private_key":
-        await ctx.reply("🚧 Export private key functionality coming soon!");
+        try {
+          // Send initial message
+          const loadingMsg = await ctx.reply("🔄 Exporting private key...");
+          
+          try {
+            // Export and decrypt wallet using the service
+            const privateKey = await exportAndDecryptWallet(userInfo.id);
+            
+            // Update message with success
+            await ctx.telegram.editMessageText(
+              ctx.chat?.id,
+              loadingMsg.message_id,
+              undefined,
+              `✅ **Private Key Exported Successfully!**\n\n` +
+              `🔑 **Wallet ID:** \`${userInfo.id}\`\n` +
+              `🔐 **Private Key:** \`${privateKey}\`\n\n` +
+              `⚠️ **Important Security Notes:**\n` +
+              `• Keep this private key secure\n` +
+              `• Never share with anyone\n` +
+              `• Can be imported to MetaMask/Phantom\n\n` +
+              `💡 **Instructions:**\n` +
+              `1. Copy the private key\n` +
+              `2. Open MetaMask/Phantom\n` +
+              `3. Import Account > Private Key\n` +
+              `4. Paste private key and confirm`,
+              { parse_mode: "Markdown" }
+            );
+            
+          } catch (error) {
+            // Update message with error
+            await ctx.telegram.editMessageText(
+              ctx.chat?.id,
+              loadingMsg.message_id,
+              undefined,
+              `❌ **Private Key Export Failed!**\n\n` +
+              `🔑 **Wallet ID:** \`${userInfo.id}\`\n` +
+              `🚫 **Error:** ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
+              `💡 **Possible causes:**\n` +
+              `• Wallet doesn't belong to you\n` +
+              `• Wallet doesn't support export\n` +
+              `• Privy API connection error\n` +
+              `• Missing access permissions`,
+              { parse_mode: "Markdown" }
+            );
+          }
+        } catch (error) {
+          console.error("Error in export private key:", error);
+          await ctx.reply(MessageService.getErrorMessage("Failed to export private key"));
+        }
         break;
         
       case "view_on_solscan":

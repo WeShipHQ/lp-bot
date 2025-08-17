@@ -32,7 +32,7 @@ export class UserService {
         const wallet = await privy.walletApi.createWallet({
           chainType: "solana",
           owner: { userId: user.id },
-          additionalSigners: [{ signerId: CONFIG.PRIVY.PRIVI_SIGNERS_ID }],
+          additionalSigners: [{ signerId: CONFIG.PRIVY.PRIVI_AUTH_ID }],
         });
         walletAddress = wallet.address;
         console.log("🔍 UserService: Wallet created with address:", walletAddress);
@@ -106,7 +106,7 @@ export class UserService {
       const wallet = await privy.walletApi.createWallet({
         chainType: "solana",
         owner: { userId: user.id },
-        additionalSigners: [{ signerId: CONFIG.PRIVY.PRIVI_SIGNERS_ID }],
+        additionalSigners: [{ signerId: CONFIG.PRIVY.PRIVI_AUTH_ID }],
       });
 
       const result = {
