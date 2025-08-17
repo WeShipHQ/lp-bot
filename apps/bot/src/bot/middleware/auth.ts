@@ -46,7 +46,7 @@ export function authMiddleware(
             .values({
               telegramId,
               username: ctx.from!.username || ctx.from!.first_name,
-              walletAddress: newWallet.address
+              walletAddress: newWallet.address,
             })
             .returning();
 
