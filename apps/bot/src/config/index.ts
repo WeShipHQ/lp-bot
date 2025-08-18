@@ -18,17 +18,23 @@ export const CONFIG = {
     BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || "",
     WEBHOOK_URL: process.env.TELEGRAM_WEBHOOK_URL || "",
   },
- 
+
   // Solana Configuration
   SOLANA: {
-    RPC_URL:
-      process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com",
+    RPC_URL: process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com",
     NETWORK: process.env.SOLANA_NETWORK || "devnet",
   },
 
   // Meteora SDK Configuration
   METEORA: {
     API_URL: process.env.METEORA_API_URL || "https://dlmm-api.meteora.ag",
+  },
+
+  // Dexscreener API Configuration
+  DEXSCREENER: {
+    API_URL:
+      process.env.DEXSCREENER_API_URL ||
+      "https://api.dexscreener.com/latest/dex",
   },
 
   // Redis Configuration
@@ -99,6 +105,7 @@ export const {
   TELEGRAM,
   SOLANA,
   METEORA,
+  DEXSCREENER,
   REDIS,
   ENCRYPTION_KEY,
   REBALANCING,
