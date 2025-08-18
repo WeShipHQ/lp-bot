@@ -16,6 +16,9 @@ export function helpCommand(bot: Telegraf, _server: FastifyInstance) {
 /balance - Check wallet balance
 /disconnect_wallet - Disconnect wallet
 
+*Market Commands:*
+/trending - View trending tokens on Meteora (25 tokens, paginated)
+
 *Position Commands:*
 /create_position - Create new liquidity position
 /my_positions - View all your positions
