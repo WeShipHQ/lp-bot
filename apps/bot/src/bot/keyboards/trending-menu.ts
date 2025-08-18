@@ -1,4 +1,3 @@
-// bot/keyboards/trending-menu.ts
 import { Markup } from "telegraf";
 import { trendingService } from "../../services/trending.service";
 
