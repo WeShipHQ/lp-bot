@@ -1,4 +1,4 @@
-import { Telegraf, Context } from "telegraf";
+import { Telegraf } from "telegraf";
 import { FastifyInstance } from "fastify";
 import { authMiddleware } from "./auth";
 import { loggingMiddleware } from "./logging";

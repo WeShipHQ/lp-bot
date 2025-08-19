@@ -2,26 +2,24 @@ import { Telegraf, Context } from "telegraf";
 import { FastifyInstance } from "fastify";
 import { getMainKeyboard } from "../keyboards/main-menu";
 import { MessageService } from "@/services/message.service";
-import { userService } from "@/services/user.service";
 
 interface BotContext extends Context {
-  userId?: string;
+  user?: {
+    id: string;
+    walletAddress?: string;
+    telegramUserId: string;
+  };
 }
 
 export function startCommand(bot: Telegraf, _server: FastifyInstance) {
   bot.start(async (ctx: BotContext) => {
     try {
-      const telegramUserId = ctx.from?.id?.toString();
-      if (!telegramUserId) {
-        await ctx.reply(MessageService.getPrivateChatRequiredMessage());
+      if (!ctx.user) {
+        await ctx.reply(MessageService.getErrorMessage("Authentication failed"));
         return;
       }
 
-      const userInfo = await userService.getOrCreateUser(telegramUserId);
-      
-      ctx.userId = userInfo.id;
-
-      const welcomeMessage = MessageService.getWelcomeMessage(userInfo.walletAddress);
+      const welcomeMessage = MessageService.getWelcomeMessage(ctx.user.walletAddress);
 
       await ctx.reply(welcomeMessage, {
         parse_mode: "Markdown",
