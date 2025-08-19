@@ -41,15 +41,14 @@ export async function handleTrendingCallback(
   _server: FastifyInstance
 ) {
   try {
-    const data =
-      (ctx.callbackQuery?.data as string) || (ctx.match?.input as string);
+    const raw = String(ctx.callbackQuery?.data ?? ctx.match?.input ?? "");
 
-    if (!data || !data.includes("_")) {
+    const match = /^tr_(prev|next|refresh)_(\d+)$/.exec(raw);
+    if (!match) {
       await ctx.answerCbQuery("❌ Invalid callback data.");
       return;
     }
-
-    const [, action, chatIdStr] = data.split("_");
+    const [, action, chatIdStr] = match;
 
     if (!action || !chatIdStr) {
       await ctx.answerCbQuery("❌ Invalid callback data format.");
