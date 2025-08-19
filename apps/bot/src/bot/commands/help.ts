@@ -1,8 +1,12 @@
-import { Telegraf, Context } from "telegraf";
+import { Telegraf } from "telegraf";
 import { FastifyInstance } from "fastify";
+import { BotContext } from "@/types/bot.types";
 
-export function helpCommand(bot: Telegraf, _server: FastifyInstance) {
-  bot.help(async (ctx: Context) => {
+export function helpCommand(
+  bot: Telegraf<BotContext>,
+  _server: FastifyInstance
+) {
+  bot.help(async (ctx: BotContext) => {
     const helpMessage = `
 🤖 *Meteora Liquidity Bot Commands*
 

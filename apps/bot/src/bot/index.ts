@@ -4,8 +4,9 @@ import { FastifyInstance } from "fastify";
 import { setupMiddleware } from "./middleware";
 import { registerCommands } from "./commands";
 import { handleTokenInput } from "./handlers";
+import { BotContext } from "@/types/bot.types";
 
-export async function setupBotCommands(bot: Telegraf, server: FastifyInstance) {
+export async function setupBotCommands(bot: Telegraf<BotContext>, server: FastifyInstance) {
   // Setup middleware
   setupMiddleware(bot, server);
 

@@ -18,6 +18,13 @@ export const CONFIG = {
     BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || "",
     WEBHOOK_URL: process.env.TELEGRAM_WEBHOOK_URL || "",
   },
+
+  PRIVY: {
+    PRIVY_APP_ID: process.env.PRIVY_APP_ID as string,
+    PRIVY_APP_SECRET: process.env.PRIVY_APP_SECRET as string,
+    PRIVI_AUTH_ID: process.env.PRIVI_AUTH_ID as string,
+    PRIVY_AUTH_PRIVATE_KEY: process.env.PRIVY_AUTH_PRIVATE_KEY as string,
+  },
  
   // Solana Configuration
   SOLANA: {
