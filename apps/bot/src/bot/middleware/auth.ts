@@ -3,14 +3,7 @@ import { FastifyInstance } from "fastify";
 import { privy } from "../../services/privy.service";
 import { WalletWithMetadata } from "@privy-io/server-auth";
 import { CONFIG } from "../../config";
-
-interface BotContext extends Context {
-  user?: {
-    id: string;
-    walletAddress?: string;
-    telegramUserId: string;
-  };
-}
+import { BotContext } from "@/types/bot.types";
 
 export function authMiddleware(
   server: FastifyInstance
@@ -37,7 +30,7 @@ export function authMiddleware(
           additionalSigners: [{ signerId: CONFIG.PRIVY.PRIVI_AUTH_ID }],
         });
         walletAddress = wallet.address;
-        
+
         server.log.info(`New user registered: ${telegramUserId}`);
       } else {
         // Find existing Privy wallet

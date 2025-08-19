@@ -1,13 +1,9 @@
-import { Context } from "telegraf";
 import { FastifyInstance } from "fastify";
 import { formatCurrency } from "../utils/formatters";
 import { getWalletKeyboard } from "../keyboards/wallet-menu";
 import { solanaService } from "../../services/solana.service";
 import { User } from "../../db";
-
-interface BotContext extends Context {
-  user?: User;
-}
+import { BotContext } from "@/types/bot.types";
 
 export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
   try {
