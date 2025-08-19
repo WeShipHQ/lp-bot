@@ -1,4 +1,4 @@
-import { meteoraService } from "./meteora.service";
+import { meteoraTrendingService } from "./meteora-trending.service";
 import {
   PairItem,
   TrendingItem,
@@ -26,7 +26,7 @@ export class TrendingService {
   private readonly pageStates = new Map<number, TrendingPageState>();
 
   async loadApiPage(chatId: number, apiPage = 0): Promise<TrendingItem[]> {
-    const pairs = await meteoraService.fetchPairsPage(
+    const pairs = await meteoraTrendingService.fetchPairsPage(
       apiPage,
       TRENDING_CONSTANTS.DEFAULT_LIMIT,
       "volume12h"
