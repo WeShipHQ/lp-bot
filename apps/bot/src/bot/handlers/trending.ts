@@ -18,21 +18,19 @@ export async function trendingHandler(
 
     await trendingService.loadApiPage(chatId, 0);
 
-    const st = trendingService.getState(chatId)!;
-    const text = trendingService.formatPage(st.items, st.page);
-    const kb = getTrendingKeyboard(chatId);
+    const state = trendingService.getState(chatId)!;
+    const text = trendingService.formatPage(state.items, state.page);
+    const keyboard = getTrendingKeyboard(chatId);
 
-    const sent = await ctx.reply(text, {
+    const replyResponse = await ctx.reply(text, {
       parse_mode: "Markdown",
-      link_preview_options: { is_disabled: true } as any,
-      reply_markup: kb.reply_markup,
-    } as any);
+      link_preview_options: { is_disabled: true },
+      reply_markup: keyboard.reply_markup,
+    });
 
-    trendingService.setMessageId(chatId, sent.message_id);
+    trendingService.setMessageId(chatId, replyResponse.message_id);
 
-    try {
-      await ctx.telegram.deleteMessage(chatId, loading.message_id);
-    } catch {}
+    await ctx.telegram.deleteMessage(chatId, loading.message_id);
   } catch {
     await ctx.reply(TRENDING_MESSAGES.ERROR_GENERIC);
   }
@@ -45,8 +43,25 @@ export async function handleTrendingCallback(
   try {
     const data =
       (ctx.callbackQuery?.data as string) || (ctx.match?.input as string);
+
+    if (!data || !data.includes("_")) {
+      await ctx.answerCbQuery("❌ Invalid callback data.");
+      return;
+    }
+
     const [, action, chatIdStr] = data.split("_");
+
+    if (!action || !chatIdStr) {
+      await ctx.answerCbQuery("❌ Invalid callback data format.");
+      return;
+    }
+
     const chatId = Number(chatIdStr);
+
+    if (isNaN(chatId)) {
+      await ctx.answerCbQuery("❌ Invalid chat ID.");
+      return;
+    }
 
     if (chatId !== ctx.chat!.id) {
       await ctx.answerCbQuery("❌ This button is not for you.", {
@@ -56,13 +71,13 @@ export async function handleTrendingCallback(
     }
 
     // check state exists
-    let st = trendingService.getState(chatId);
-    if (!st) {
+    let currentState = trendingService.getState(chatId);
+    if (!currentState) {
       await trendingService.loadApiPage(chatId, 0);
-      st = trendingService.getState(chatId)!;
+      currentState = trendingService.getState(chatId)!;
     }
 
-    const beforeApi = st.apiPage ?? 0;
+    const beforeApi = currentState.apiPage ?? 0;
 
     if (action === "next") {
       await trendingService.loadApiPage(chatId, beforeApi + 1);
@@ -79,7 +94,7 @@ export async function handleTrendingCallback(
 
     const state = trendingService.getState(chatId)!;
     const text = trendingService.formatPage(state.items, state.page);
-    const kb = getTrendingKeyboard(chatId);
+    const keyboard = getTrendingKeyboard(chatId);
     const messageId = state.messageId ?? ctx.callbackQuery?.message?.message_id;
 
     let edited = false;
@@ -87,8 +102,8 @@ export async function handleTrendingCallback(
       try {
         await ctx.telegram.editMessageText(chatId, messageId, undefined, text, {
           parse_mode: "Markdown",
-          disable_web_page_preview: true,
-          reply_markup: kb.reply_markup,
+          link_preview_options: { is_disabled: true },
+          reply_markup: keyboard.reply_markup,
         });
         edited = true;
       } catch (err: any) {
@@ -98,12 +113,12 @@ export async function handleTrendingCallback(
     }
 
     if (!edited) {
-      const sent = await ctx.reply(text, {
+      const replyResponse = await ctx.reply(text, {
         parse_mode: "Markdown",
-        link_preview_options: { is_disabled: true } as any,
-        reply_markup: kb.reply_markup,
-      } as any);
-      trendingService.setMessageId(chatId, sent.message_id);
+        link_preview_options: { is_disabled: true },
+        reply_markup: keyboard.reply_markup,
+      });
+      trendingService.setMessageId(chatId, replyResponse.message_id);
     }
 
     await ctx.answerCbQuery();
