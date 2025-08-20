@@ -10,7 +10,16 @@ export function trendingCommand(
   bot.command("trending", (ctx: Context) =>
     trendingHandler(ctx as any, server)
   );
+
   bot.action(/^tr_(next|prev|refresh)_[0-9]+$/, (ctx) => {
+    return handleTrendingCallback(ctx, server);
+  });
+
+  // bot.action(/^tr_sort_(apy|fee24h|fee_tvl_ratio)_[0-9]+$/, (ctx) => {
+  //   return handleTrendingCallback(ctx, server);
+  // });
+
+  bot.action(/^tr_src_(dlmm|dammv1|dammv2)_[0-9]+$/, (ctx) => {
     return handleTrendingCallback(ctx, server);
   });
 }

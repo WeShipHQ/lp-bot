@@ -1,54 +1,66 @@
-import { TRENDING_CONSTANTS } from "@/bot/constants/trending.constants";
-import { PairItem, TrendingItem, TrendingPageState } from "@/types/trending.types";
-import { meteoraTrendingService } from "./meteora-trending.service";
-
-
-function guessSymbol(name: string, mint: string) {
-  const p = name?.split("-") || [];
-  return p.length >= 2 ? p[0].trim() : mint.slice(0, 4).toUpperCase();
-}
-function vol12h(p: PairItem) {
-  return p.volume?.hour_12 ?? 0;
-}
-function fmt(n?: number | null) {
-  if (n == null) return "N/A";
-  const v = Math.abs(n);
-  if (v >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
-  if (v >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
-  if (v >= 1e3) return `$${(n / 1e3).toFixed(2)}K`;
-  return `$${n.toFixed(2)}`;
-}
+import { PoolTrendingItem, TrendingPageState } from "@/types/trending.types";
+import {
+  HotPoolsService,
+  hotPoolsService,
+  PoolSortCriteria,
+  PoolSource,
+} from "./hot-pools.service";
 
 export class TrendingService {
   private readonly pageStates = new Map<number, TrendingPageState>();
 
-  async loadApiPage(chatId: number, apiPage = 0): Promise<TrendingItem[]> {
-    const pairs = await meteoraTrendingService.fetchPairsPage(
-      apiPage,
-      TRENDING_CONSTANTS.DEFAULT_LIMIT,
-      "volume12h"
+  async loadHotPoolsPage(
+    chatId: number,
+    apiPage = 0,
+    sortBy: PoolSortCriteria = "apy",
+    source: PoolSource = "dlmm"
+  ): Promise<PoolTrendingItem[]> {
+    const clamped = Math.max(
+      0,
+      Math.min(apiPage, HotPoolsService.TOTAL_PAGES - 1)
     );
 
-    const items: TrendingItem[] = pairs.map((p) => ({
-      mint: p.mint_x,
-      symbol: guessSymbol(p.name, p.mint_x),
-      totalVol12h: vol12h(p),
-      bestPool: p,
+    const pools = await hotPoolsService.getHotPoolsPage(source, clamped, {
+      sortBy,
+      minTvl: 50000,
+      onlyVerified: true,
+      includeUnknown: false,
+    });
+
+    const poolItems: PoolTrendingItem[] = pools.map((pool) => ({
+      poolAddress: pool.address,
+      poolName: pool.name,
+      poolType: pool.type,
+      tokenPair: `${pool.tokenASymbol}/${pool.tokenBSymbol}`,
+      apy: pool.apy,
+      fee24h: pool.fee24h,
+      tvl: pool.tvl,
+      feeTvlRatio: pool.feeTvlRatio,
+      isVerified: pool.isVerified,
     }));
 
     const st =
       this.pageStates.get(chatId) ||
       ({ items: [], page: 1 } as TrendingPageState);
-    st.items = items;
-    st.page = apiPage + 1;
-    st.apiPage = apiPage;
+
+    st.poolItems = poolItems;
+    st.page = clamped + 1;
+    st.apiPage = clamped;
+    st.displayMode = "pools";
+    st.sortBy = sortBy;
+    st.poolSource = source;
+    st.totalPages = HotPoolsService.TOTAL_PAGES;
     this.pageStates.set(chatId, st);
 
-    return items;
+    return poolItems;
   }
 
   setMessageId(chatId: number, messageId: number) {
-    const st = this.pageStates.get(chatId) || { items: [], page: 1 };
+    const st = this.pageStates.get(chatId) || {
+      items: [],
+      page: 1,
+      displayMode: "pools" as const,
+    };
     st.messageId = messageId;
     this.pageStates.set(chatId, st);
   }
@@ -57,30 +69,52 @@ export class TrendingService {
     return this.pageStates.get(chatId) || null;
   }
 
-  formatPage(items: TrendingItem[], page: number): string {
-    const lines = items.map((it, idx) => {
-      const pos = (page - 1) * TRENDING_CONSTANTS.DEFAULT_LIMIT + idx + 1;
+  formatPoolPage(
+    poolItems: PoolTrendingItem[],
+    page: number,
+    source: PoolSource,
+    sortBy: PoolSortCriteria
+  ): string {
+    if (!poolItems || poolItems.length === 0) {
+      return [
+        `🔥 *Hot Pools - ${source.toUpperCase()}*`,
+        "",
+        "No pools found. Try another source or sort.",
+      ].join("\n");
+    }
 
-      const vol12Val = fmt(it.totalVol12h);
-      const volStr = `Volume 12h: *${vol12Val}*`;
+    const fmt = (n?: number | null) => {
+      if (n == null) return "N/A";
+      const v = Math.abs(n);
+      if (v >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+      if (v >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+      if (v >= 1e3) return `$${(n / 1e3).toFixed(2)}K`;
+      return `$${n.toFixed(2)}`;
+    };
+    const fmtPercent = (n: number) => `${n.toFixed(2)}%`;
 
-      const title = `/${pos} ${it.symbol}`;
-
-      return `${title} | ${volStr}`;
+    const lines = poolItems.map((pool, idx) => {
+      const apy = fmtPercent(pool.apy);
+      const fee24h = fmt(pool.fee24h);
+      const tvl = fmt(pool.tvl);
+      return `${(page - 1) * 5 + idx + 1}) ${pool.tokenPair} APY: *${apy}* | Fee24h: *${fee24h}* | TVL: *${tvl}*`;
     });
 
-    const spacedLines: string[] = [];
-    lines.forEach((line, i) => {
-      spacedLines.push(line);
-      if (i < lines.length - 1) spacedLines.push("");
+    const spaced: string[] = [];
+    lines.forEach((l, i) => {
+      spaced.push(l);
+      if (i < lines.length - 1) spaced.push("");
     });
 
     return [
-      "Enter CA or meteora link in bot chat or choose a token from the below trending list:",
+      `🔥 *Hot Pools - ${source.toUpperCase()}*`,
       "",
-      ...spacedLines,
+      "Choose a pool from the trending list below:",
       "",
-      `💡 Trending tokens by 12h volume. Page ${page}`,
+      ...spaced,
+      "",
+      `💡 Sorted by ${sortBy === "fee_tvl_ratio" ? "Fee/TVL Ratio" : sortBy.toUpperCase()}. Page ${page}/${HotPoolsService.TOTAL_PAGES}`,
+      "",
     ].join("\n");
   }
 }
