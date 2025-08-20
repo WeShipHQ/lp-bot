@@ -2,9 +2,9 @@ import { PoolTrendingItem, TrendingPageState } from "@/types/trending.types";
 import {
   HotPoolsService,
   hotPoolsService,
-  PoolSortCriteria,
-  PoolSource,
+  
 } from "./hot-pools.service";
+import { PoolSortCriteria, PoolSource } from "./hot-pools/types";
 
 export class TrendingService {
   private readonly pageStates = new Map<number, TrendingPageState>();
