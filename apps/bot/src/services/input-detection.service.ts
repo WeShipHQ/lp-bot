@@ -8,7 +8,7 @@ export class InputDetectionService {
   // Regex patterns for different input types
   private readonly patterns = {
     // Solana token address: 44 characters, base58 encoded
-    tokenAddress: /^[1-9A-HJ-NP-Za-km-z]{44}$/,
+    tokenAddress: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/,
     
     // Meteora DAMM v1: https://www.meteora.ag/pools/{poolId}
     meteoraDammV1: /^https:\/\/(?:www\.)?meteora\.ag\/pools\/([1-9A-HJ-NP-Za-km-z]{32,44})(?:\?.*)?$/,

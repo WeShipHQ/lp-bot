@@ -60,14 +60,58 @@ export function formatNumber(num: number | string): string {
 /**
  * Format price with appropriate decimal places
  */
+// export function formatPrice(price: number): string {
+//   if (price >= 1) {
+//     return `$${price.toFixed(4)}`;
+//   }
+//   if (price >= 0.01) {
+//     return `$${price.toFixed(6)}`;
+//   }
+//   return `$${price.toExponential(3)}`;
+// }
+
 export function formatPrice(price: number): string {
-  if (price >= 1) {
-    return `$${price.toFixed(4)}`;
-  }
+  if (price === 0) return "$0.000";
+
+  // Unicode subscript mapping
+  const subscriptMap: { [key: string]: string } = {
+    "0": "₀",
+    "1": "₁",
+    "2": "₂",
+    "3": "₃",
+    "4": "₄",
+    "5": "₅",
+    "6": "₆",
+    "7": "₇",
+    "8": "₈",
+    "9": "₉",
+  };
+
+  // Handle regular numbers (>= 0.01)
   if (price >= 0.01) {
-    return `$${price.toFixed(6)}`;
+    return `$${price.toFixed(3)}`;
   }
-  return `$${price.toExponential(3)}`;
+
+  // Handle very small numbers (< 0.01)
+  const str = price.toFixed(20);
+  const afterDecimal = str.split(".")[1];
+  const zerosCount = afterDecimal.search(/[1-9]/);
+
+  if (zerosCount > 0) {
+    const significantDigits = afterDecimal.slice(zerosCount, zerosCount + 3);
+
+    // Convert zeros count to subscript
+    const subscriptZeros = zerosCount
+      .toString()
+      .split("")
+      .map((digit) => subscriptMap[digit])
+      .join("");
+
+    return `$0.0${subscriptZeros}${significantDigits}`;
+  }
+
+  // Fallback for edge cases
+  return `$${price.toExponential(2)}`;
 }
 
 /**
@@ -80,7 +124,7 @@ export function formatTokenInfo(token: TokenInfo): string {
   return (
     `🪙 **${token.name} (${token.symbol})** ${verifiedEmoji}\n` +
     `📍 Address: \`${token.address}\`\n` +
-    `💰 Price: ${formatPrice(token.price)}\n` +
+    `💰 Price: **${formatPrice(token.price)}**\n` +
     `📈 24h Change: ${priceChangeEmoji} ${formatPercentage(token.priceChange24h)}\n` +
     `🏦 Market Cap: $${formatNumber(token.marketCap)}\n` +
     `📊 24h Volume: $${formatNumber(token.volume24h)}\n` +
@@ -94,18 +138,61 @@ export function formatTokenInfo(token: TokenInfo): string {
  */
 export function formatPoolInfo(pool: MeteoraPoolData): string {
   const aprEmoji = pool.apr >= 10 ? "🔥" : pool.apr >= 5 ? "📈" : "📊";
+  const farmEmoji = pool.has_farm ? (pool.farm_active ? "🚜✅" : "🚜⏸️") : "";
+  const verifiedEmoji = pool.tokens_verified ? "✅" : "⚠️";
+
+  // Calculate exchange rate (1 token_a = X token_b)
+  const exchangeRate =
+    pool.token_a_amount > 0
+      ? (pool.token_b_amount / pool.token_a_amount).toFixed(6)
+      : "0";
+
+  // Calculate total LP fee (base + dynamic)
+  const totalLpFee = ((pool.base_fee + pool.dynamic_fee) * 100).toFixed(5);
+  const baseFeePercent = (pool.base_fee * 100).toFixed(2);
+  const dynamicFeePercent = (pool.dynamic_fee * 100).toFixed(5);
+
+  // Determine fee collection token (usually the quote token)
+  const feeCollectionToken = pool.token_b_symbol; // Assuming token_b is quote token
+
+  // Calculate pool age
+  const poolAgeHours = pool.created_at_slot_timestamp
+    ? Math.floor((Date.now() / 1000 - pool.created_at_slot_timestamp) / 3600)
+    : 0;
+  const poolAgeDisplay =
+    poolAgeHours < 24
+      ? `${poolAgeHours}h`
+      : `${Math.floor(poolAgeHours / 24)}d`;
 
   return (
-    `🏊‍♂️ **${pool.pool_name}**\n` +
-    `📍 Pool Address: \`${pool.pool_address}\`\n` +
-    `💱 Pair: ${pool.token_a_symbol}/${pool.token_b_symbol}\n` +
-    `💰 TVL: $${formatNumber(pool.tvl)}\n` +
-    `📈 APR: ${aprEmoji} ${pool.apr.toFixed(2)}%\n` +
-    `📊 24h Volume: $${formatNumber(pool.volume24h)}\n` +
-    `💸 24h Fees: $${formatNumber(pool.fee24h)}\n` +
+    `🏊‍♂️ **${pool.pool_name}** ${verifiedEmoji}\n` +
+    `📍 Pool: \`${truncateAddress(pool.pool_address)}\`\n` +
+    `\n` +
+    `💱 **Current Pool Price**\n` +
+    `1 ${pool.token_a_symbol} ≈ ${exchangeRate} ${pool.token_b_symbol}\n` +
     `⚖️ Pool Price: ${formatPrice(pool.pool_price)}\n` +
-    `🔒 Permanent Lock: ${formatNumber(pool.permanent_lock_liquidity)}\n` +
-    `✅ Tokens Verified: ${pool.tokens_verified ? "Yes" : "No"}`
+    `📊 Virtual Price: ${formatPrice(pool.virtual_price)}\n` +
+    `\n` +
+    `💰 **Liquidity & Volume**\n` +
+    `💧 TVL: **$${formatNumber(pool.tvl)}**\n` +
+    `📈 24h Volume: $${formatNumber(pool.volume24h)}\n` +
+    `💸 24h Fees: $${formatNumber(pool.fee24h)}\n` +
+    `📊 Fee/TVL Ratio: ${(pool.fee_tvl_ratio * 100).toFixed(3)}%\n` +
+    `\n` +
+    `🎯 **Fee Structure**\n` +
+    `⚡ Base Fee: ${baseFeePercent}%\n` +
+    `🔄 Dynamic Fee: ${pool.dynamic_fee > 0 ? `Yes (Current: ${dynamicFeePercent}%)` : "No"}\n` +
+    `💎 Total LP Fee: **${totalLpFee}%**\n` +
+    `🪙 Fee Collection: ${feeCollectionToken}\n` +
+    `\n` +
+    `📈 **Yield Information**\n` +
+    `🎯 APR: ${aprEmoji} **${pool.apr.toFixed(2)}%**\n` +
+    `${pool.has_farm ? `🚜 Farm: ${pool.farm_active ? "Active" : "Inactive"} ${farmEmoji}\n` : ""}` +
+    `\n` +
+    `🏗️ **Pool Composition**\n` +
+    `${pool.token_a_symbol}: ${formatTokenAmount(pool.token_a_amount)} ($${formatNumber(pool.token_a_amount_usd)})\n` +
+    `${pool.token_b_symbol}: ${formatTokenAmount(pool.token_b_amount)} ($${formatNumber(pool.token_b_amount_usd)})\n` +
+    `🔒 Permanent Lock: ${formatNumber(pool.permanent_lock_liquidity)}\n`
   );
 }
 

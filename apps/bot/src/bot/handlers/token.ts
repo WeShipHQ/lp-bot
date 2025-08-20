@@ -10,6 +10,7 @@ import {
   formatPoolInfo,
 } from "../utils/formatters";
 import { TokenDisplayData } from "../../types/token.types";
+import { getTokenInfoKeyboard } from "../keyboards";
 
 /**
  * Handle token address or Meteora pool URL inputs
@@ -35,8 +36,6 @@ export async function handleTokenInput(ctx: Context, server: FastifyInstance) {
   try {
     const loadingMessage = formatLoadingMessage(detection.type);
     const sentMessage = await ctx.reply(loadingMessage);
-
-    await new Promise((resolve) => setTimeout(resolve, 2000));
 
     let responseMessage: string;
 
@@ -64,7 +63,12 @@ export async function handleTokenInput(ctx: Context, server: FastifyInstance) {
       sentMessage.message_id,
       undefined,
       responseMessage,
-      { parse_mode: "Markdown" }
+      {
+        parse_mode: "Markdown",
+        reply_markup: {
+          inline_keyboard: getTokenInfoKeyboard().inline_keyboard,
+        },
+      }
     );
   } catch (error) {
     server.log.error("Error handling token input:", error);
@@ -106,6 +110,7 @@ async function handleTokenAddress(
 
     return formatTokenDisplayData(displayData);
   } catch (error) {
+    console.error(error);
     server.log.error(`Error fetching token info for ${tokenAddress}:`, error);
     return formatErrorMessage(
       tokenAddress,
