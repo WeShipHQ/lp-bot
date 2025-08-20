@@ -3,6 +3,7 @@ import GracefulServer from "@gquittet/graceful-server";
 import { randomUUID } from "node:crypto";
 import { CONFIG } from "./config";
 import server from "@/server";
+import { pathToFileURL } from "node:url";
 
 async function init() {
   const fastify = Fastify({
@@ -56,7 +57,10 @@ async function init() {
   }
 }
 
-// Only start the server if this file is run directly
-if (import.meta.url === `file://${process.argv[1]}`) {
-  init();
+if (
+  process.argv[1] &&
+  pathToFileURL(process.argv[1]).href === import.meta.url
+) {
+  void init();
 }
+

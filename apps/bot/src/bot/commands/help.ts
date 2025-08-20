@@ -20,6 +20,9 @@ export function helpCommand(
 /balance - Check wallet balance
 /disconnect_wallet - Disconnect wallet
 
+*Trending Commands:*
+/trending - View trending tokens
+
 *Position Commands:*
 /create_position - Create new liquidity position
 /my_positions - View all your positions
