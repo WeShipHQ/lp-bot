@@ -1,13 +1,27 @@
 // @ts-expect-error
 import { InlineKeyboardMarkup } from "telegraf/typings/core/types/typegram";
 
-export function getWalletKeyboard(): InlineKeyboardMarkup {
+export function getWalletKeyboard(walletAddress?: string): InlineKeyboardMarkup {
+  const solscanUrl = walletAddress 
+    ? `https://solscan.io/account/${walletAddress}`
+    : "https://solscan.io";
+
   return {
     inline_keyboard: [
-      [{ text: "💰 Deposit SOL", callback_data: "deposit_sol" }],
-      [{ text: "📤 Send SOL", callback_data: "send_sol" }],
-      [{ text: "📋 Transaction History", callback_data: "transaction_history" }],
-      [{ text: "🔙 Back to Menu", callback_data: "main_menu" }],
+      [
+        { text: "Transfer all SOL", callback_data: "transfer_all_sol" },
+        { text: "Transfer X SOL", callback_data: "transfer_x_sol" }
+      ],
+      [
+        { text: "Transfer all tokens", callback_data: "transfer_all_tokens" },
+        { text: "Transfer X tokens", callback_data: "transfer_x_tokens" }
+      ],
+      [{ text: "Export private key", callback_data: "export_private_key" }],
+      [{ text: "View on Solscan", url: solscanUrl }],
+      [
+        { text: "Close", callback_data: "close_wallet" },
+        { text: "Refresh", callback_data: "refresh_wallet" }
+      ]
     ],
   };
 }

@@ -117,6 +117,20 @@ export class SolanaService {
       return false;
     }
   }
+
+  /**
+   * Get current SOL price in USD
+   * @returns SOL price in USD
+   */
+  async getSolPrice(): Promise<number> {
+    try {
+      const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+      const data = await response.json();
+      return data.solana.usd || 0;
+    } catch (error) {
+      return 0;
+    }
+  }
 }
 
 // Export singleton instance

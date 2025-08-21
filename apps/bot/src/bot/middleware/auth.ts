@@ -1,7 +1,6 @@
-import { Context, MiddlewareFn } from "telegraf";
+import { MiddlewareFn } from "telegraf";
 import { FastifyInstance } from "fastify";
 import { privy } from "../../services/privy.service";
-import { WalletWithMetadata } from "@privy-io/server-auth";
 import { CONFIG } from "../../config";
 import { BotContext } from "@/types/bot.types";
 
@@ -9,46 +8,49 @@ export function authMiddleware(
   server: FastifyInstance
 ): MiddlewareFn<BotContext> {
   return async (ctx, next) => {
-    if (!ctx.from) {
-      return;
-    }
+    if (!ctx.from) return;
 
     const telegramUserId = ctx.from.id.toString();
 
     try {
       let user = await privy.getUserByTelegramUserId(telegramUserId);
-      let walletAddress: string | undefined;
+      let walletAddress: string;
+      let walletId: string;
 
       if (!user) {
-        user = await privy.importUser({
-          linkedAccounts: [{ type: "telegram", telegramUserId }],
-        });
-
         const wallet = await privy.walletApi.createWallet({
           chainType: "solana",
-          owner: { userId: user.id },
-          additionalSigners: [{ signerId: CONFIG.PRIVY.PRIVI_AUTH_ID }],
+          ownerId: CONFIG.PRIVY.PRIVY_AUTH_ID,
+          additionalSigners: [{ signerId: CONFIG.PRIVY.PRIVY_AUTH_ID }],
         });
+
+        user = await privy.importUser({
+          linkedAccounts: [{ type: "telegram", telegramUserId }],
+          customMetadata: {
+            walletId: wallet.id,
+            walletAddress: wallet.address,
+          },
+        });
+
         walletAddress = wallet.address;
+        walletId = wallet.id;
 
         server.log.info(`New user registered: ${telegramUserId}`);
       } else {
-        // Find existing Privy wallet
-        walletAddress = user.linkedAccounts.find(
-          (a): a is WalletWithMetadata =>
-            a.type === "wallet" && a.walletClientType === "privy"
-        )?.address;
+        walletAddress = user.customMetadata?.walletAddress as string;
+        walletId = user.customMetadata?.walletId as string;
       }
 
       ctx.user = {
         id: user.id,
         walletAddress,
+        walletId,
         telegramUserId,
       };
 
       server.log.info(`User authenticated: ${telegramUserId}`);
     } catch (error) {
-      server.log.error("Auth middleware error:", error);
+      server.log.error({ err: error }, "Auth middleware error");
     }
 
     return next();

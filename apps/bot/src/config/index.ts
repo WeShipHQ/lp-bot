@@ -22,7 +22,7 @@ export const CONFIG = {
   PRIVY: {
     PRIVY_APP_ID: process.env.PRIVY_APP_ID as string,
     PRIVY_APP_SECRET: process.env.PRIVY_APP_SECRET as string,
-    PRIVI_AUTH_ID: process.env.PRIVI_AUTH_ID as string,
+    PRIVY_AUTH_ID: process.env.PRIVY_AUTH_ID as string,
     PRIVY_AUTH_PRIVATE_KEY: process.env.PRIVY_AUTH_PRIVATE_KEY as string,
   },
  
@@ -76,27 +76,6 @@ export const CONFIG = {
   JWT_SECRET: process.env.JWT_SECRET || "",
   CORS_ORIGIN: process.env.CORS_ORIGIN || "*",
 };
-
-// Validation function
-export function validateConfig(): void {
-  const requiredVars = ["TELEGRAM_BOT_TOKEN", "DATABASE_URL", "ENCRYPTION_KEY"];
-
-  const missing = requiredVars.filter((varName) => {
-    const value = process.env[varName];
-    return !value || value.trim() === "";
-  });
-
-  if (missing.length > 0) {
-    throw new Error(
-      `Missing required environment variables: ${missing.join(", ")}`
-    );
-  }
-
-  // Validate encryption key length
-  if (CONFIG.ENCRYPTION_KEY.length < 32) {
-    throw new Error("ENCRYPTION_KEY must be at least 32 characters long");
-  }
-}
 
 // Export individual configs for convenience
 export const {
