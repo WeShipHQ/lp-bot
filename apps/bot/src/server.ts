@@ -1,5 +1,5 @@
-import path from "node:path";
-import AutoLoad from "@fastify/autoload";
+// import path from "node:path";
+// import AutoLoad from "@fastify/autoload";
 // import Cors from "@fastify/cors";
 import Helmet from "@fastify/helmet";
 import { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
