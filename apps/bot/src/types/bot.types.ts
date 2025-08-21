@@ -4,6 +4,7 @@ export interface BotContext extends Context {
   user: {
     id: string;
     walletAddress?: string;
+    walletId?: string;
     telegramUserId: string;
   };
 }

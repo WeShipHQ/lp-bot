@@ -5,8 +5,6 @@ import { decryptHPKEMessage } from "../bot/utils/hpke-decrypt";
 
 export interface WalletExportResult {
   privateKey: string;
-  publicKey: string;
-  address: string;
 }
 
 export class WalletService {
@@ -39,10 +37,6 @@ export class WalletService {
         authorizationPrivateKey: CONFIG.PRIVY.PRIVY_AUTH_PRIVATE_KEY,
       });
 
-      // Debug logs
-      console.log("🔑 Privy App ID:", `"${CONFIG.PRIVY.PRIVY_APP_ID}"`, "len =", CONFIG.PRIVY.PRIVY_APP_ID?.length);
-      console.log("📩 Request body:", input.body);
-
       const headers = {
         "privy-app-id": CONFIG.PRIVY.PRIVY_APP_ID?.trim(),
         "Content-Type": "application/json",
@@ -51,11 +45,6 @@ export class WalletService {
           `${CONFIG.PRIVY.PRIVY_APP_ID}:${CONFIG.PRIVY.PRIVY_APP_SECRET}`
         ).toString("base64"),
       };
-
-console.log("CONFIG PRIVY_APP_ID:", CONFIG.PRIVY.PRIVY_APP_ID);
-
-
-      console.log("📬 Request headers:", headers);
 
       // 3. Call Privy API
       const res = await fetch(input.url, {
@@ -66,7 +55,7 @@ console.log("CONFIG PRIVY_APP_ID:", CONFIG.PRIVY.PRIVY_APP_ID);
 
       if (!res.ok) {
         throw new Error(`Export wallet failed: ${res.status} ${await res.text()}`);
-      }
+      } 
 
       const response = await res.json();
 
@@ -77,12 +66,29 @@ console.log("CONFIG PRIVY_APP_ID:", CONFIG.PRIVY.PRIVY_APP_ID);
         response.ciphertext
       );
 
-      const walletData = JSON.parse(decryptedData);
+      if (typeof decryptedData === 'string') {
+        if (decryptedData.includes('error') || decryptedData.includes('Error') || decryptedData.includes('failed')) {
+          throw new Error(`Privy returned error in decrypted data: ${decryptedData}`);
+        }
+      }
+
+      let walletData;
+      
+      if (typeof decryptedData === 'string' && decryptedData.length > 50 && !decryptedData.includes('{') && !decryptedData.includes('"')) {
+
+        walletData = {
+          privateKey: decryptedData,
+        };
+      } else {
+        try {
+          walletData = JSON.parse(decryptedData);
+        } catch (parseError) {
+          throw new Error(`Failed to parse decrypted wallet data: ${parseError instanceof Error ? parseError.message : 'Unknown parse error'}`);
+        }
+      }
 
       return {
         privateKey: walletData.privateKey || walletData.secretKey,
-        publicKey: walletData.publicKey,
-        address: walletData.address || walletData.publicKey,
       };
     } catch (error) {
       console.error("Error exporting wallet:", error);

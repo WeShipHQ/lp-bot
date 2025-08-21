@@ -1,7 +1,6 @@
-import { Context, MiddlewareFn } from "telegraf";
+import { MiddlewareFn } from "telegraf";
 import { FastifyInstance } from "fastify";
 import { privy } from "../../services/privy.service";
-import { WalletWithMetadata } from "@privy-io/server-auth";
 import { CONFIG } from "../../config";
 import { BotContext } from "@/types/bot.types";
 
@@ -20,29 +19,30 @@ export function authMiddleware(
       let walletAddress: string | undefined;
 
       if (!user) {
-        user = await privy.importUser({
-          linkedAccounts: [{ type: "telegram", telegramUserId }],
-        });
 
         const wallet = await privy.walletApi.createWallet({
           chainType: "solana",
-          owner: { userId: user.id },
+          ownerId : CONFIG.PRIVY.PRIVY_AUTH_ID,
           additionalSigners: [{ signerId: CONFIG.PRIVY.PRIVY_AUTH_ID }],
         });
-        walletAddress = wallet.address;
+
+        user = await privy.importUser({
+          linkedAccounts: [{ type: "telegram", telegramUserId }],
+          customMetadata : {
+            walletId : wallet.id,
+            walletAddress : wallet.address,
+          }
+        });
 
         server.log.info(`New user registered: ${telegramUserId}`);
       } else {
-        // Find existing Privy wallet
-        walletAddress = user.linkedAccounts.find(
-          (a): a is WalletWithMetadata =>
-            a.type === "wallet" && a.walletClientType === "privy"
-        )?.address;
+        walletAddress = user.customMetadata.walletAddress as string;
       }
 
       ctx.user = {
         id: user.id,
         walletAddress,
+        walletId: user.customMetadata?.walletId as string,
         telegramUserId,
       };
 
