@@ -27,7 +27,7 @@ export function authMiddleware(
         const wallet = await privy.walletApi.createWallet({
           chainType: "solana",
           owner: { userId: user.id },
-          additionalSigners: [{ signerId: CONFIG.PRIVY.PRIVI_AUTH_ID }],
+          additionalSigners: [{ signerId: CONFIG.PRIVY.PRIVY_AUTH_ID }],
         });
         walletAddress = wallet.address;
 

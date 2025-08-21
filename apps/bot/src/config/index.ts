@@ -22,7 +22,7 @@ export const CONFIG = {
   PRIVY: {
     PRIVY_APP_ID: process.env.PRIVY_APP_ID as string,
     PRIVY_APP_SECRET: process.env.PRIVY_APP_SECRET as string,
-    PRIVI_AUTH_ID: process.env.PRIVI_AUTH_ID as string,
+    PRIVY_AUTH_ID: process.env.PRIVY_AUTH_ID as string,
     PRIVY_AUTH_PRIVATE_KEY: process.env.PRIVY_AUTH_PRIVATE_KEY as string,
   },
  
@@ -96,6 +96,25 @@ export function validateConfig(): void {
   if (CONFIG.ENCRYPTION_KEY.length < 32) {
     throw new Error("ENCRYPTION_KEY must be at least 32 characters long");
   }
+
+  // Validate Privy configuration
+  const privyVars = ["PRIVY_APP_ID", "PRIVY_APP_SECRET", "PRIVY_AUTH_ID", "PRIVY_AUTH_PRIVATE_KEY"];
+  const missingPrivy = privyVars.filter((varName) => {
+    const value = process.env[varName];
+    return !value || value.trim() === "";
+  });
+
+  if (missingPrivy.length > 0) {
+    throw new Error(
+      `Missing required Privy environment variables: ${missingPrivy.join(", ")}`
+    );
+  }
+
+  // Log Privy configuration for debugging (mask sensitive values)
+  console.log("🔍 Config: PRIVY_APP_ID:", CONFIG.PRIVY.PRIVY_APP_ID);
+  console.log("🔍 Config: PRIVY_APP_SECRET:", CONFIG.PRIVY.PRIVY_APP_SECRET ? `${CONFIG.PRIVY.PRIVY_APP_SECRET.substring(0, 8)}...` : "undefined");
+  console.log("🔍 Config: PRIVY_AUTH_ID:", CONFIG.PRIVY.PRIVY_AUTH_ID);
+  console.log("🔍 Config: PRIVY_AUTH_PRIVATE_KEY:", CONFIG.PRIVY.PRIVY_AUTH_PRIVATE_KEY ? `${CONFIG.PRIVY.PRIVY_AUTH_PRIVATE_KEY.substring(0, 8)}...` : "undefined");
 }
 
 // Export individual configs for convenience

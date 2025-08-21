@@ -5,9 +5,15 @@ export class MessageService {
      * Generate welcome message for new users
      */
     static getWelcomeMessage(walletAddress?: string): string {
-      const walletInfo = walletAddress 
-        ? `🏦 **Wallet Address:** \`${walletAddress}\` (tap to copy)\n\n`
-        : "🏦 **Wallet Address:** \`Creating...\`\n\n";
+      let walletInfo: string;
+      
+      if (walletAddress) {
+        walletInfo = `🏦 **Wallet Address:** \`${walletAddress}\` (tap to copy)\n\n`;
+      } else {
+        walletInfo = "🏦 **Wallet Status:** Creating wallet...\n\n" +
+          "⏳ Please wait while we set up your Solana wallet.\n" +
+          "This may take a few moments.\n\n";
+      }
   
       return `🚀 **Welcome to Weship Liquidity Bot!**\n\n` +
         `The easiest way to LP on Solana DEXes.\n\n` +

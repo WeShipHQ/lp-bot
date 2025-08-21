@@ -24,11 +24,15 @@ export class UserService {
           linkedAccounts: [{ type: "telegram", telegramUserId }],
         });
 
+        // Log the app ID for debugging
+        console.log("🔍 UserService: PRIVY_APP_ID:", CONFIG.PRIVY.PRIVY_APP_ID);
+
         const wallet = await privy.walletApi.createWallet({
           chainType: "solana",
           owner: { userId: user.id },
-          additionalSigners: [{ signerId: CONFIG.PRIVY.PRIVI_AUTH_ID }],
+          additionalSigners: [{ signerId: CONFIG.PRIVY.PRIVY_AUTH_ID }],
         });
+        
         walletAddress = wallet.address;
       } else {
         walletAddress = user.linkedAccounts.find(
