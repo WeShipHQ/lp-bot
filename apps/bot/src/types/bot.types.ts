@@ -1,3 +1,4 @@
+import { User } from "@/db";
 import type { Context } from "telegraf";
 
 interface TransferState {
@@ -20,12 +21,7 @@ interface TwoFactorVerificationState {
 }
 
 export interface BotContext extends Context {
-  user: {
-    id: string;
-    walletAddress?: string;
-    walletId?: string;
-    telegramUserId: string;
-  };
+  user: User,
   session?: {
     transferState?: TransferState;
     twoFactorVerification?: TwoFactorVerificationState;

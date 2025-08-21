@@ -35,8 +35,9 @@ async function init() {
     closePromises: [],
   });
 
-  gracefulServer.on(GracefulServer.READY, () => {
+  gracefulServer.on(GracefulServer.READY, async () => {
     fastify.log.info("Server is ready");
+    await fastify.bot.launch({ dropPendingUpdates: true });
   });
 
   gracefulServer.on(GracefulServer.SHUTTING_DOWN, () => {
@@ -63,4 +64,3 @@ if (
 ) {
   void init();
 }
-
