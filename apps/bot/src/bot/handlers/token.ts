@@ -12,11 +12,6 @@ import {
 import { TokenDisplayData } from "../../types/token.types";
 import { getTokenInfoKeyboard } from "../keyboards";
 
-/**
- * Handle token address or Meteora pool URL inputs
- * @param ctx - Telegram context
- * @param server - Fastify server instance
- */
 export async function handleTokenInput(ctx: Context, server: FastifyInstance) {
   const messageText =
     ctx.message && "text" in ctx.message ? ctx.message.text : "";
@@ -27,8 +22,6 @@ export async function handleTokenInput(ctx: Context, server: FastifyInstance) {
 
   const detection = inputDetectionService.detectInput(messageText);
 
-  console.log("detection", detection);
-
   if (!detection) {
     return;
   }
@@ -38,16 +31,24 @@ export async function handleTokenInput(ctx: Context, server: FastifyInstance) {
     const sentMessage = await ctx.reply(loadingMessage);
 
     let responseMessage: string;
+    let type: "token" | "pool" | "unknown" = "unknown";
+    let poolType: "damm_v1" | "damm_v2" | "dlmm" | undefined;
 
     switch (detection.type) {
       case "address":
         responseMessage = await handleTokenAddress(detection.value, server);
+        type = "token";
         break;
 
       case "meteora_damm_v1":
       case "meteora_damm_v2":
       case "meteora_dlmm":
         responseMessage = await handleMeteoraPool(detection, server);
+        type = "pool";
+        // ✅ Extract and preserve the pool type
+        poolType =
+          inputDetectionService.getMeteoraPoolType(detection.originalInput) ||
+          undefined;
         break;
 
       default:
@@ -57,7 +58,6 @@ export async function handleTokenInput(ctx: Context, server: FastifyInstance) {
         );
     }
 
-    // Edit the loading message with the result
     await ctx.telegram.editMessageText(
       ctx.chat?.id,
       sentMessage.message_id,
@@ -66,7 +66,8 @@ export async function handleTokenInput(ctx: Context, server: FastifyInstance) {
       {
         parse_mode: "Markdown",
         reply_markup: {
-          inline_keyboard: getTokenInfoKeyboard().inline_keyboard,
+          inline_keyboard: getTokenInfoKeyboard(detection.value, type, poolType)
+            .inline_keyboard,
         },
       }
     );
@@ -82,12 +83,6 @@ export async function handleTokenInput(ctx: Context, server: FastifyInstance) {
   }
 }
 
-/**
- * Handle token address input
- * @param tokenAddress - Solana token address
- * @param server - Fastify server instance
- * @returns Formatted token information message
- */
 async function handleTokenAddress(
   tokenAddress: string,
   server: FastifyInstance
@@ -119,12 +114,6 @@ async function handleTokenAddress(
   }
 }
 
-/**
- * Handle Meteora pool URL input
- * @param detection - Input detection result
- * @param server - Fastify server instance
- * @returns Formatted pool information message
- */
 async function handleMeteoraPool(
   detection: any,
   server: FastifyInstance

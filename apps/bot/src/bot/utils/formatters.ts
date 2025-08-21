@@ -60,16 +60,6 @@ export function formatNumber(num: number | string): string {
 /**
  * Format price with appropriate decimal places
  */
-// export function formatPrice(price: number): string {
-//   if (price >= 1) {
-//     return `$${price.toFixed(4)}`;
-//   }
-//   if (price >= 0.01) {
-//     return `$${price.toFixed(6)}`;
-//   }
-//   return `$${price.toExponential(3)}`;
-// }
-
 export function formatPrice(price: number): string {
   if (price === 0) return "$0.000";
 
@@ -249,4 +239,59 @@ export function formatLoadingMessage(inputType: string): string {
     typeMessages[inputType as keyof typeof typeMessages] ||
     "⏳ Processing your request..."
   );
+}
+
+/**
+ * Format pool selection message
+ */
+export function formatPoolSelectionMessage(
+  tokenInfo: TokenInfo,
+  pools: MeteoraPoolData[]
+): string {
+  const tokenEmoji = tokenInfo.isVerified ? "✅" : "⚠️";
+
+  let message = `🎯 **Select Pool for ${tokenInfo.symbol}** ${tokenEmoji}\n\n`;
+  message += `📊 **Token**: ${tokenInfo.name}\n`;
+  message += `💰 **Price**: $${tokenInfo.price.toFixed(6)}\n\n`;
+  message += `🏊‍♂️ **Available Pools** (${pools.length}):\n\n`;
+
+  pools.forEach((pool, index) => {
+    const farmEmoji = pool.has_farm ? (pool.farm_active ? "🚜✅" : "🚜⏸️") : "";
+    message += `**${index + 1}. ${pool.pool_name}** ${farmEmoji}\n`;
+    message += `   💹 APR: **${pool.apr.toFixed(1)}%**\n`;
+    message += `   💰 TVL: $${formatNumber(pool.tvl)}\n`;
+    message += `   📊 24h Vol: $${formatNumber(pool.volume24h)}\n\n`;
+  });
+
+  message += `👆 Select a pool to open your position`;
+
+  return message;
+}
+
+/**
+ * Format position confirmation message
+ */
+export function formatPositionConfirmation(pool: MeteoraPoolData): string {
+  const farmEmoji = pool.has_farm ? (pool.farm_active ? "🚜✅" : "🚜⏸️") : "";
+  const verifiedEmoji = pool.tokens_verified ? "✅" : "⚠️";
+
+  let message = `🎯 **Open Position** ${verifiedEmoji}\n\n`;
+  message += `🏊‍♂️ **Pool**: ${pool.pool_name} ${farmEmoji}\n`;
+  message += `📍 \`${truncateAddress(pool.pool_address)}\`\n\n`;
+
+  message += `📊 **Pool Metrics**\n`;
+  message += `💹 APR: **${pool.apr.toFixed(1)}%**\n`;
+  message += `💰 TVL: $${formatNumber(pool.tvl)}\n`;
+  message += `📈 24h Volume: $${formatNumber(pool.volume24h)}\n`;
+  message += `💸 24h Fees: $${formatNumber(pool.fee24h)}\n\n`;
+
+  message += `⚖️ **Deposit Types**:\n`;
+  message += `• **Spot**: Balanced 50/50 deposit\n`;
+  message += `• **Curve**: Concentrated liquidity\n`;
+  message += `• **Single-sided**: Deposit one token only\n\n`;
+
+  message += `⚠️ **Risk Warning**: Liquidity provision involves impermanent loss risk\n\n`;
+  message += `👆 Choose your deposit type to continue`;
+
+  return message;
 }

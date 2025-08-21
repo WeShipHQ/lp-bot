@@ -109,8 +109,6 @@ export class MeteoraService {
         return null;
       }
 
-      console.log("data", data);
-
       return this.mapDammV2ToMeteoraPoolData(data.data);
     } catch (error) {
       console.error(`[Meteora] Error fetching DAMM v2 pool ${poolId}:`, error);
@@ -147,7 +145,6 @@ export class MeteoraService {
    */
   async validatePool(poolId: string): Promise<boolean> {
     try {
-      // Try each pool type to see if the pool exists
       const dlmmPool = await this.getDlmmPoolInfo(poolId);
       if (dlmmPool) return true;
 

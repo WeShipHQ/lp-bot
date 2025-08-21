@@ -1,10 +1,24 @@
 // @ts-expect-error
 import { InlineKeyboardMarkup } from "telegraf/typings/core/types/typegram";
 
-export function getTokenInfoKeyboard(): InlineKeyboardMarkup {
+export function getTokenInfoKeyboard(
+  address: string,
+  type: "token" | "pool" | "unknown",
+  poolType?: "damm_v1" | "damm_v2" | "dlmm"
+): InlineKeyboardMarkup {
+  // For pools, include the pool type in callback data
+  const callbackData = type === "pool" && poolType 
+    ? `position_${type}_${address}_${poolType}`
+    : `position_${type}_${address}`;
+
   return {
     inline_keyboard: [
-      [{ text: "💰 Open position", callback_data: "open_position" }],
+      [
+        {
+          text: "💰 Open position",
+          callback_data: callbackData,
+        },
+      ],
       [
         { text: "Buy 1 SOL", callback_data: "buy_1_sol" },
         { text: "Buy 5 SOL", callback_data: "buy_5_sol" },
