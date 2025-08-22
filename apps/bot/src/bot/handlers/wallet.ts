@@ -1,5 +1,5 @@
 import { FastifyInstance } from "fastify";
-import { getWalletKeyboard } from "../keyboards/wallet-menu";
+import { getWalletKeyboard, getTransferConfirmKeyboard } from "../keyboards/wallet-menu";
 import { solanaService } from "../../services/solana.service";
 import { MessageService } from "../../services/message.service";
 import { WalletService } from "../../services/wallet.service";
@@ -53,9 +53,106 @@ export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
   }
 }
 
-export async function handleWalletCallback(ctx: any | BotContext, _server: FastifyInstance) {
+// Handle text input for transfers
+export async function handleTransferInput(ctx: BotContext, _server: FastifyInstance) {
   try {
-    const callbackData = String(ctx.callbackQuery?.data ?? "");
+    // Debug logging to see what's happening
+    console.log("handleTransferInput called with message:", ctx.message);
+    console.log("Current session state:", ctx.session);
+    
+    // Check if we're in a transfer state
+    if (!ctx.session?.transferState) {
+      console.log("No transfer state found in session");
+      return false; // Not in transfer mode
+    }
+
+    const transferState = ctx.session.transferState;
+    const messageText = ctx.message && 'text' in ctx.message ? ctx.message.text : undefined;
+
+    if (!messageText) {
+      await ctx.reply(MessageService.getErrorMessage("Invalid input. Please try again or type /cancel to cancel."));
+      return true;
+    }
+
+    // Check for cancel command
+    if (messageText.toLowerCase() === '/cancel') {
+      delete ctx.session.transferState;
+      await ctx.reply("✅ Transfer cancelled.");
+      return true;
+    }
+
+    if (transferState.step === "address_input") {
+      // Parse input: "address amount" or just "address" for transfer_all
+      const parts = messageText.trim().split(/\s+/);
+      let recipientAddress, amount;
+
+      if (transferState.type === "all_sol") {
+        // For transfer all, we expect just the address
+        if (parts.length !== 1) {
+          await ctx.reply(MessageService.getErrorMessage("Please enter only the recipient address for transferring all SOL."));
+          return true;
+        }
+        recipientAddress = parts[0];
+        amount = transferState.amount; // Already set from balance
+      } else {
+        // For transfer specific amount, we expect address and amount
+        if (parts.length !== 2) {
+          await ctx.reply(MessageService.getErrorMessage("Please enter both recipient address and amount in the format: address amount"));
+          return true;
+        }
+        recipientAddress = parts[0];
+        amount = parseFloat(parts[1]);
+
+        if (isNaN(amount) || amount <= 0) {
+          await ctx.reply(MessageService.getErrorMessage("Please enter a valid amount greater than 0."));
+          return true;
+        }
+      }
+
+      // Validate address
+      if (!solanaService.validateAddress(recipientAddress)) {
+        await ctx.reply(MessageService.getErrorMessage("Invalid Solana address. Please check and try again."));
+        return true;
+      }
+
+      // Get current SOL price for USD value
+      const solPrice = await solanaService.getSolPrice();
+      const usdValue = (amount as number) * solPrice;
+
+      // Update state
+      ctx.session.transferState = {
+        ...transferState,
+        recipientAddress,
+        amount: amount as number, // We've already validated this is a number above
+        step: "confirmation"
+      };
+
+      // Send confirmation message
+      await ctx.reply(
+        MessageService.getTransferConfirmationMessage(recipientAddress, amount as number, usdValue),
+        {
+          parse_mode: "Markdown",
+          reply_markup: getTransferConfirmKeyboard()
+        }
+      );
+
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    console.error("Transfer input error:", error);
+    await ctx.reply(MessageService.getErrorMessage("Error processing transfer. Please try again."));
+    return true;
+  }
+}
+
+export async function handleWalletCallback(ctx: BotContext, _server: FastifyInstance) {
+  try {
+    // Handle different callback query types
+    const callbackData = ctx.callbackQuery && 'data' in ctx.callbackQuery 
+      ? String(ctx.callbackQuery.data ?? "") 
+      : "";
 
     if (!callbackData) {
       await ctx.answerCbQuery();
@@ -134,21 +231,58 @@ export async function handleWalletCallback(ctx: any | BotContext, _server: Fasti
         break;
 
       case "transfer_all_sol":
-        await ctx.reply(
-          "🚧 *Transfer All SOL*\n\nThis feature is coming soon! You'll be able to transfer all your SOL to another wallet.",
-          {
-            parse_mode: "Markdown",
+        try {
+          await ctx.answerCbQuery("⏳ Preparing to transfer all SOL");
+          
+          if (!ctx.user?.walletAddress) {
+            await ctx.reply(MessageService.getErrorMessage("No wallet found. Please try again."));
+            return;
           }
-        );
+          
+          // Get current SOL balance
+          const solBalance = await solanaService.getBalance(ctx.user.walletAddress);
+          
+          // Save state in session for the next step
+          ctx.session = {
+            ...ctx.session,
+            transferState: {
+              type: "all_sol",
+              amount: solBalance,
+              step: "address_input"
+            }
+          };
+          
+          await ctx.reply(MessageService.getTransferSolRequestMessage(), {
+            parse_mode: "Markdown",
+            reply_markup: { force_reply: true }
+          });
+        } catch (error) {
+          console.error("Transfer all SOL error:", error);
+          await ctx.reply(MessageService.getErrorMessage("Failed to prepare transfer. Please try again."));
+        }
         break;
 
       case "transfer_x_sol":
-        await ctx.reply(
-          "🚧 *Transfer X SOL*\n\nThis feature is coming soon! You'll be able to transfer a specific amount of SOL to another wallet.",
-          {
+        try {
+          await ctx.answerCbQuery("⏳ Preparing to transfer SOL");
+          
+          // Save state in session for the next step
+          ctx.session = {
+            ...ctx.session,
+            transferState: {
+              type: "specific_sol",
+              step: "address_input"
+            }
+          };
+          
+          await ctx.reply(MessageService.getTransferSolRequestMessage(), {
             parse_mode: "Markdown",
-          }
-        );
+            reply_markup: { force_reply: true }
+          });
+        } catch (error) {
+          console.error("Transfer X SOL error:", error);
+          await ctx.reply(MessageService.getErrorMessage("Failed to prepare transfer. Please try again."));
+        }
         break;
 
       case "transfer_all_tokens":
@@ -207,6 +341,70 @@ export async function handleWalletCallback(ctx: any | BotContext, _server: Fasti
         }
         break;
 
+      case "confirm_transfer":
+        try {
+          await ctx.answerCbQuery("⏳ Processing transfer...");
+          
+          if (!ctx.session) {
+            ctx.session = {};
+          }
+          const transferState = ctx.session.transferState;
+          if (!transferState || !transferState.recipientAddress || !transferState.amount) {
+            await ctx.reply(MessageService.getErrorMessage("Transfer details not found. Please try again."));
+            return;
+          }
+          
+          if (!ctx.user?.walletId) {
+            await ctx.reply(MessageService.getErrorMessage("Wallet ID not found. Please try again."));
+            return;
+          }
+          
+          // Execute transfer using Privy
+          console.log("Executing transfer via Privy:", {
+            walletId: ctx.user.walletId,
+            recipientAddress: transferState.recipientAddress,
+            amount: transferState.amount
+          });
+          
+          const signature = await solanaService.transferSol({
+            walletId: ctx.user.walletId,
+            walletAddress: ctx.user.walletAddress as string,
+            recipientAddress: transferState.recipientAddress,
+            amount: transferState.amount
+          });
+          
+          // Send success message
+          await ctx.reply(
+            MessageService.getTransferSuccessMessage(
+              transferState.recipientAddress,
+              transferState.amount,
+              signature
+            ),
+            { parse_mode: "Markdown" }
+          );
+          
+          // Clear transfer state
+          delete ctx.session.transferState;
+          
+        } catch (error) {
+          console.error("Transfer confirmation error:", error);
+          await ctx.reply(MessageService.getTransferErrorMessage(
+            error instanceof Error ? error.message : "Unknown error occurred"
+          ), { parse_mode: "Markdown" });
+        }
+        break;
+        
+      case "cancel_transfer":
+        try {
+          await ctx.answerCbQuery("✅ Transfer cancelled");
+          delete ctx.session?.transferState;
+          await ctx.reply("✅ Transfer cancelled.");
+        } catch (error) {
+          console.error("Cancel transfer error:", error);
+          await ctx.reply(MessageService.getErrorMessage("Error cancelling transfer."));
+        }
+        break;
+        
       default:
         await ctx.answerCbQuery("❌ Unknown action");
         break;

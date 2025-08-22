@@ -46,4 +46,40 @@ export class MessageService {
     static getPrivateChatRequiredMessage(): string {
       return "❌ Please start the bot in a private chat with me.";
     }
+
+    /**
+     * Generate transfer SOL request message
+     */
+    static getTransferSolRequestMessage(): string {
+      return "💸 *Transfer SOL*\n\nPlease enter the recipient's wallet address and the amount to transfer in the format:\n\n`address amount`\n\nExample: `GgS64xkW9JqR3VkBn4fpPi7sMqcnAzqRWTUXbBZhHpLT 0.1`\n\nOr type /cancel to cancel the transfer.";
+    }
+
+    /**
+     * Generate transfer SOL confirmation message
+     */
+    static getTransferConfirmationMessage(recipientAddress: string, amount: number, usdValue: number): string {
+      return `🔍 *Confirm Transfer*\n\n` +
+        `You are about to send *${amount} SOL* (${formatCurrency(usdValue)}) to:\n` +
+        `\`${recipientAddress}\`\n\n` +
+        `Please confirm this transaction by clicking the button below.`;
+    }
+
+    /**
+     * Generate transfer SOL success message
+     */
+    static getTransferSuccessMessage(recipientAddress: string, amount: number, signature: string): string {
+      return `✅ *Transfer Successful*\n\n` +
+        `Successfully sent *${amount} SOL* to:\n` +
+        `\`${recipientAddress}\`\n\n` +
+        `Transaction signature:\n` +
+        `\`${signature}\`\n\n` +
+        `View on Solscan: https://solscan.io/tx/${signature}`;
+    }
+
+    /**
+     * Generate transfer SOL error message
+     */
+    static getTransferErrorMessage(error: string): string {
+      return `❌ *Transfer Failed*\n\n${error}`;
+    }
 }

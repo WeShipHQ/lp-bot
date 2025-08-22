@@ -1,4 +1,4 @@
-// @ts-expect-error
+// @ts-expect-error - Telegraf typings are incomplete
 import { InlineKeyboardMarkup } from "telegraf/typings/core/types/typegram";
 
 export function getWalletKeyboard(walletAddress?: string): InlineKeyboardMarkup {
@@ -21,6 +21,20 @@ export function getWalletKeyboard(walletAddress?: string): InlineKeyboardMarkup 
       [
         { text: "Close", callback_data: "close_wallet" },
         { text: "Refresh", callback_data: "refresh_wallet" }
+      ]
+    ],
+  };
+}
+
+/**
+ * Get keyboard for transfer confirmation
+ */
+export function getTransferConfirmKeyboard(): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [
+        { text: "✅ Confirm Transfer", callback_data: "confirm_transfer" },
+        { text: "❌ Cancel", callback_data: "cancel_transfer" }
       ]
     ],
   };
