@@ -239,10 +239,8 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
             return;
           }
           
-          // Get current SOL balance
           const solBalance = await solanaService.getBalance(ctx.user.walletAddress);
           
-          // Save state in session for the next step
           ctx.session = {
             ...ctx.session,
             transferState: {
@@ -266,7 +264,6 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
         try {
           await ctx.answerCbQuery("⏳ Preparing to transfer SOL");
           
-          // Save state in session for the next step
           ctx.session = {
             ...ctx.session,
             transferState: {
@@ -366,22 +363,41 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
             amount: transferState.amount
           });
           
-          const signature = await solanaService.transferSol({
+          // Track the original requested amount
+          const requestedAmount = transferState.amount;
+          
+          // Call transferSol which may adjust the amount for fees
+          const result = await solanaService.transferSol({
             walletId: ctx.user.walletId,
             walletAddress: ctx.user.walletAddress as string,
             recipientAddress: transferState.recipientAddress,
             amount: transferState.amount
           });
           
-          // Send success message
-          await ctx.reply(
-            MessageService.getTransferSuccessMessage(
+          // Get the signature and actual amount sent
+          const { signature, actualAmount } = result;
+          
+          // Create appropriate message based on whether amount was adjusted
+          let message;
+          if (actualAmount !== undefined && Math.abs(actualAmount - requestedAmount) > 0.00001) {
+            // Amount was adjusted
+            message = MessageService.getTransferSuccessWithAdjustmentMessage(
               transferState.recipientAddress,
-              transferState.amount,
+              requestedAmount,
+              actualAmount,
               signature
-            ),
-            { parse_mode: "Markdown" }
-          );
+            );
+          } else {
+            // Amount was not adjusted
+            message = MessageService.getTransferSuccessMessage(
+              transferState.recipientAddress,
+              requestedAmount,
+              signature
+            );
+          }
+          
+          // Send success message
+          await ctx.reply(message, { parse_mode: "Markdown" });
           
           // Clear transfer state
           delete ctx.session.transferState;

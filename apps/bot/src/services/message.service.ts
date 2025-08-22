@@ -75,6 +75,19 @@ export class MessageService {
         `\`${signature}\`\n\n` +
         `View on Solscan: https://solscan.io/tx/${signature}`;
     }
+    
+    /**
+     * Generate transfer SOL success message with amount adjustment
+     */
+    static getTransferSuccessWithAdjustmentMessage(recipientAddress: string, requestedAmount: number, actualAmount: number, signature: string): string {
+      return `✅ *Transfer Successful*\n\n` +
+        `You requested to send *${requestedAmount} SOL*, but the amount was adjusted to *${actualAmount} SOL* to account for transaction fees.\n\n` +
+        `Successfully sent to:\n` +
+        `\`${recipientAddress}\`\n\n` +
+        `Transaction signature:\n` +
+        `\`${signature}\`\n\n` +
+        `View on Solscan: https://solscan.io/tx/${signature}`;
+    }
 
     /**
      * Generate transfer SOL error message

@@ -147,9 +147,9 @@ export class SolanaService {
   /**
    * Transfer SOL using Privy wallet API
    * @param params - Transfer parameters
-   * @returns Transaction signature
+   * @returns Object containing transaction signature and actual amount sent
    */
-  async transferSol(params: TransferSolParams): Promise<string> {
+  async transferSol(params: TransferSolParams): Promise<{ signature: string; actualAmount: number }> {
     try {
       const { walletId, walletAddress, recipientAddress, amount } = params;
       
@@ -162,27 +162,36 @@ export class SolanaService {
         throw new Error("Amount must be greater than 0");
       }
       
-      // Step 1: Convert SOL to lamports
-      // Reserve 0.001 SOL for transaction fee to avoid insufficient funds error
-      const FEE_RESERVE = 0.001 * LAMPORTS_PER_SOL;
-      const lamports = Math.floor(amount * LAMPORTS_PER_SOL);
+      // Step 1: Get current balance and reserve some for transaction fee
+      const FEE_RESERVE = 0.001 * LAMPORTS_PER_SOL; // Reserve 0.001 SOL for transaction fee
+      let adjustedAmount = amount;
+      let lamports;
       
-      // Check if the amount is too close to the balance
       try {
+        // Get current balance
         const balance = await this.getBalance(walletAddress);
         const balanceLamports = Math.floor(balance * LAMPORTS_PER_SOL);
         
-        if (balanceLamports <= lamports + FEE_RESERVE) {
-          // Not enough funds for transfer + fee, adjust the amount
-          const maxAmount = Math.max(0, balanceLamports - FEE_RESERVE) / LAMPORTS_PER_SOL;
-          throw new Error(`Insufficient funds. Maximum transferable amount is approximately ${maxAmount.toFixed(5)} SOL after accounting for fees.`);
+        const isTransferAll = Math.abs(balance - amount) < 0.0001;
+        
+        if (isTransferAll || balanceLamports <= Math.floor(amount * LAMPORTS_PER_SOL) + FEE_RESERVE) {
+          adjustedAmount = Math.max(0, (balanceLamports - FEE_RESERVE) / LAMPORTS_PER_SOL);
+          
+          if (adjustedAmount < 0.00001) {
+            throw new Error("Insufficient funds to cover both transfer amount and transaction fees.");
+          }
         }
+        
+        // Convert adjusted amount to lamports
+        lamports = Math.floor(adjustedAmount * LAMPORTS_PER_SOL);
+        
       } catch (error) {
-        if (error instanceof Error && error.message.includes("Maximum transferable")) {
+        if (error instanceof Error && error.message.includes("Insufficient funds")) {
           throw error;
         }
-        // If balance check fails, continue with the original amount
-        console.warn("Failed to check balance before transfer, proceeding anyway");
+        // If balance check fails, use the original amount
+        console.warn("Failed to check balance before transfer, proceeding with original amount");
+        lamports = Math.floor(amount * LAMPORTS_PER_SOL);
       }
       
       // Step 2: Create connection to Solana network
@@ -231,10 +240,12 @@ export class SolanaService {
         await connection.confirmTransaction(signature, 'confirmed');
       } catch (confirmError) {
         console.warn("Transaction confirmation error, but transaction was sent:", confirmError);
-        // Don't throw here - the transaction might still succeed even if confirmation times out
       }
       
-      return signature;
+      return {
+        signature,
+        actualAmount: adjustedAmount
+      };
     } catch (error) {
       console.error("Error transferring SOL via Privy:", error);
       throw new Error(
@@ -244,5 +255,4 @@ export class SolanaService {
   }
 }
 
-// Export singleton instance
 export const solanaService = new SolanaService();
