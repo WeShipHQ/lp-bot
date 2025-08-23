@@ -22,15 +22,15 @@ export class MeteoraService {
 
   /**
    * Fetch DLMM pool information
-   * @param poolId - Pool address
+   * @param poolAddress - Pool address
    * @returns Promise<MeteoraPoolData | null>
    */
-  async getDlmmPoolInfo(poolId: string): Promise<MeteoraPoolData | null> {
+  async getDlmmPoolInfo(poolAddress: string): Promise<MeteoraPoolData | null> {
     try {
-      console.log(`[Meteora] Fetching DLMM pool: ${poolId}`);
+      console.log(`[Meteora] Fetching DLMM pool: ${poolAddress}`);
 
       const response = await this.fetchWithRetry(
-        `${this.dlmmApiUrl}/pair/${poolId}`
+        `${this.dlmmApiUrl}/pair/${poolAddress}`
       );
 
       if (!response.ok) {
@@ -44,7 +44,7 @@ export class MeteoraService {
 
       return this.mapDlmmToMeteoraPoolData(data);
     } catch (error) {
-      console.error(`[Meteora] Error fetching DLMM pool ${poolId}:`, error);
+      console.error(`[Meteora] Error fetching DLMM pool ${poolAddress}:`, error);
       return null;
     }
   }

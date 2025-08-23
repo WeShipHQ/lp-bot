@@ -1,15 +1,18 @@
-import { Telegraf } from "telegraf";
+import { Telegraf, session } from "telegraf";
 import { message } from "telegraf/filters";
 import { FastifyInstance } from "fastify";
 import { setupMiddleware } from "./middleware";
 import { registerCommands } from "./commands";
-import { handleTokenInput } from "./handlers";
+import { messageHandler, createTradingStage } from "./handlers";
 import { BotContext } from "@/types/bot.types";
 import {
   handlePositionCallback,
   handlePoolSelection,
   handlePositionCreation,
 } from "./handlers";
+import { logger } from "@/utils/logger";
+
+// import { createTradingStage, handleDirectMessage } from "./screne";
 
 export async function setupBotCommands(
   bot: Telegraf<BotContext>,
@@ -25,11 +28,17 @@ export async function setupBotCommands(
     console.log("inline_query", ctx);
   });
 
+  const stage = createTradingStage();
+  bot.use(session());
+  bot.use(stage.middleware());
+
   bot.on(message("text"), async (ctx) => {
     try {
-      await handleTokenInput(ctx, server);
+      await messageHandler(ctx, server);
+      // implement this
+      // await handleDirectMessage(ctx, server);
     } catch (error) {
-      server.log.error("Error in text handler:", error);
+      logger.error(error, "Error in text handler:");
     }
   });
 
@@ -57,7 +66,7 @@ export async function setupBotCommands(
 
   // Global error handler
   bot.catch((err, ctx) => {
-    server.log.error(`Bot error for ${ctx.updateType}:`, err);
+    logger.error(err, `Bot error for ${ctx.updateType}:`);
     ctx.reply("Sorry, something went wrong. Please try again later.");
   });
 }

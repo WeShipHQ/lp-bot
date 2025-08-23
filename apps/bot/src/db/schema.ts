@@ -6,15 +6,18 @@ export const strategyTypeEnum = pgEnum('StrategyType', ['DLMM', 'DAMM', 'CONCENT
 export const positionStatusEnum = pgEnum('PositionStatus', ['ACTIVE', 'CLOSED', 'REBALANCING']);
 export const transactionTypeEnum = pgEnum('TransactionType', ['DEPOSIT', 'WITHDRAW', 'REBALANCE', 'FEE_COLLECTION']);
 export const transactionStatusEnum = pgEnum('TransactionStatus', ['PENDING', 'CONFIRMED', 'FAILED']);
+export const rebalanceStrategyEnum = pgEnum('RebalanceStrategy', ['STANDARD', 'DIP_PROTECTION']);
 
 // Tables
 export const users = pgTable('User', {
   id: uuid('id').primaryKey().defaultRandom(),
   telegramId: text('telegramId').notNull().unique(),
+  walletId: text('walletId').unique().notNull(),
   username: text('username'),
   walletAddress: text('walletAddress'),
   autoRebalanceEnabled: boolean('autoRebalanceEnabled').notNull().default(true),
   rebalanceThreshold: decimal('rebalanceThreshold', { precision: 5, scale: 2 }).notNull().default('5.00'),
+  rebalanceStrategy: rebalanceStrategyEnum('rebalanceStrategy').notNull().default('STANDARD'),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
   updatedAt: timestamp('updatedAt').notNull().defaultNow(),
 });
@@ -40,6 +43,8 @@ export const positions = pgTable('Position', {
   feesEarned: decimal('feesEarned', { precision: 20, scale: 8 }).notNull().default('0'),
   status: positionStatusEnum('status').notNull().default('ACTIVE'),
   lastRebalanceAt: timestamp('lastRebalanceAt'),
+  priceRangeMin: decimal('priceRangeMin', { precision: 20, scale: 8 }),
+  priceRangeMax: decimal('priceRangeMax', { precision: 20, scale: 8 }),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
   updatedAt: timestamp('updatedAt').notNull().defaultNow(),
 });
@@ -121,3 +126,4 @@ export type StrategyType = typeof strategyTypeEnum.enumValues[number];
 export type PositionStatus = typeof positionStatusEnum.enumValues[number];
 export type TransactionType = typeof transactionTypeEnum.enumValues[number];
 export type TransactionStatus = typeof transactionStatusEnum.enumValues[number];
+export type RebalanceStrategy = typeof rebalanceStrategyEnum.enumValues[number];

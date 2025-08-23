@@ -11,7 +11,11 @@ import { twoFactorAuthService } from "../../services/two-factor-auth.service";
 export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
   try {
     if (!ctx.user) {
-      await ctx.reply(MessageService.getErrorMessage("Unable to authenticate user. Please try again."));
+      await ctx.reply(
+        MessageService.getErrorMessage(
+          "Unable to authenticate user. Please try again."
+        )
+      );
       return;
     }
 
@@ -19,29 +23,40 @@ export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
 
     if (!user.walletAddress || user.walletAddress.trim() === "") {
       try {
-        await ctx.reply("⏳ **Wallet Still Creating**\n\nYour wallet is being set up. Please wait a moment and try again.\n\nIf this persists, please contact support.", {
-          parse_mode: "Markdown"
-        });
+        await ctx.reply(
+          "⏳ **Wallet Still Creating**\n\nYour wallet is being set up. Please wait a moment and try again.\n\nIf this persists, please contact support.",
+          {
+            parse_mode: "Markdown",
+          }
+        );
       } catch (error) {
-        await ctx.reply(MessageService.getErrorMessage("No wallet found. Please contact support."));
+        await ctx.reply(
+          MessageService.getErrorMessage(
+            "No wallet found. Please contact support."
+          )
+        );
       }
       return;
     }
 
     let solBalance = 0;
     let solPrice = 0;
-    
+
     try {
       [solBalance, solPrice] = await Promise.all([
         solanaService.getBalance(user.walletAddress),
-        solanaService.getSolPrice()
+        solanaService.getSolPrice(),
       ]);
     } catch (error) {
       // Continue with 0 balance if fetch fails
     }
 
     const usdValue = solBalance * solPrice;
-    const message = MessageService.getWalletMessage(user.walletAddress, solBalance, usdValue);
+    const message = MessageService.getWalletMessage(
+      user.walletAddress,
+      solBalance,
+      usdValue
+    );
 
     const dynamicKeyboard = getWalletKeyboard(user.walletAddress);
 
@@ -52,7 +67,11 @@ export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
       },
     });
   } catch (error) {
-    await ctx.reply(MessageService.getErrorMessage("Error loading wallet information. Please try again."));
+    await ctx.reply(
+      MessageService.getErrorMessage(
+        "Error loading wallet information. Please try again."
+      )
+    );
   }
 }
 
@@ -329,7 +348,7 @@ async function verifyTwoFactorCode(ctx: BotContext, code: string): Promise<boole
   if (!verificationState) return false;
 
   // Get user's 2FA secret
-  const userInfo = await userService.getUserByTelegramId(ctx.user?.telegramUserId as string);
+  const userInfo = await userService.getUserByTelegramId(ctx.user.telegramId as string);
   if (!userInfo?.twoFactorSecret) {
     await ctx.reply(MessageService.getErrorMessage("2FA not properly configured. Please contact support."));
     delete ctx.session?.twoFactorVerification;
@@ -569,7 +588,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
           }
 
           // Get user info
-          const userInfo = await userService.getUserByTelegramId(ctx.user.telegramUserId);
+          const userInfo = await userService.getUserByTelegramId(ctx.user.telegramId);
           
           // If user has never exported private key before, show warning and ask for confirmation
           if (!userInfo?.hasExportedPrivateKey) {

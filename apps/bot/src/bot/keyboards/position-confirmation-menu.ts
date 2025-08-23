@@ -1,5 +1,4 @@
-// @ts-expect-error
-import { InlineKeyboardMarkup } from "telegraf/typings/core/types/typegram";
+import { InlineKeyboardMarkup } from "@telegraf/types";
 
 export function getPositionConfirmationKeyboard(
   poolAddress: string
@@ -11,11 +10,23 @@ export function getPositionConfirmationKeyboard(
           text: "⚖️ Spot (Balanced)",
           callback_data: `create-position_spot_${poolAddress}`,
         },
+        {
+          text: "📈 Curve (Concentrated)",
+          callback_data: `curve_${poolAddress}`,
+        },
+        {
+          text: "🎯 Single-sided",
+          callback_data: `single_${poolAddress}`,
+        },
       ],
       // [
       //   {
       //     text: "📈 Curve (Concentrated)",
-      //     callback_data: `create-position_curve_${poolAddress}`,
+      //     callback_data: `curve_${poolAddress}`,
+      //   },
+      //   {
+      //     text: "🎯 Single-sided",
+      //     callback_data: `single_${poolAddress}`,
       //   },
       // ],
       // [

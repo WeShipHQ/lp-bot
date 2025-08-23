@@ -1,4 +1,12 @@
 import { JupiterToken, TokenInfo } from "../types/token.types";
+import {
+  JupiterOrderRequest,
+  JupiterOrderResponse,
+  JupiterExecuteRequest,
+  JupiterExecuteResponse,
+  SwapParams,
+  SwapResult,
+} from "../types/jupiter.types";
 
 export class JupiterService {
   private readonly baseUrl = "https://lite-api.jup.ag";
@@ -8,11 +16,6 @@ export class JupiterService {
   private tokenInfoCache = new Map<string, { data: any; timestamp: number }>();
   private readonly CACHE_TTL = 1 * 60 * 1000; 
 
-  /**
-   * Fetch token information by address
-   * @param tokenAddress - Solana token address
-   * @returns Promise<TokenInfo | null>
-   */
   async getTokenInfo(tokenAddress: string): Promise<TokenInfo | null> {
     // Check cache first
     const cachedToken = this.tokenInfoCache.get(tokenAddress);
@@ -67,11 +70,6 @@ export class JupiterService {
     throw new Error(`Failed to fetch token information: ${lastError?.message}`);
   }
 
-  /**
-   * Search for tokens by symbol or name
-   * @param query - Search query
-   * @returns Promise<TokenInfo[]>
-   */
   async searchTokens(query: string): Promise<TokenInfo[]> {
     try {
       console.log(`[Jupiter] Searching tokens for: ${query}`);
@@ -93,11 +91,6 @@ export class JupiterService {
     }
   }
 
-  /**
-   * Get token price by address
-   * @param tokenAddress - Solana token address
-   * @returns Promise<number | null>
-   */
   async getTokenPrice(tokenAddress: string): Promise<number | null> {
     try {
       const tokenInfo = await this.getTokenInfo(tokenAddress);
@@ -111,11 +104,6 @@ export class JupiterService {
     }
   }
 
-  /**
-   * Get multiple token prices
-   * @param tokenAddresses - Array of token addresses
-   * @returns Promise<Record<string, number>>
-   */
   async getTokenPrices(
     tokenAddresses: string[]
   ): Promise<Record<string, number>> {
@@ -155,11 +143,6 @@ export class JupiterService {
     return prices;
   }
 
-  /**
-   * Validate token address and check if it exists
-   * @param tokenAddress - Token address to validate
-   * @returns Promise<boolean>
-   */
   async validateToken(tokenAddress: string): Promise<boolean> {
     try {
       console.log(`[Jupiter] Validating token: ${tokenAddress}`);
@@ -172,11 +155,6 @@ export class JupiterService {
     }
   }
 
-  /**
-   * Map Jupiter API token response to our TokenInfo interface
-   * @param jupiterToken - Token data from Jupiter API
-   * @returns TokenInfo
-   */
   private mapJupiterTokenToTokenInfo(jupiterToken: JupiterToken): TokenInfo {
     return {
       address: jupiterToken.id,
@@ -196,12 +174,137 @@ export class JupiterService {
     };
   }
 
-  /**
-   * Utility method to add delay
-   * @param ms - Milliseconds to delay
-   */
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  async getOrder(params: JupiterOrderRequest): Promise<JupiterOrderResponse> {
+    try {
+      console.log(
+        `[Jupiter] Creating order for ${params.amount} ${params.inputMint} -> ${params.outputMint}`
+      );
+
+      const queryParams = new URLSearchParams({
+        inputMint: params.inputMint,
+        outputMint: params.outputMint,
+        amount: params.amount,
+        ...(params.taker && { taker: params.taker }),
+        ...(params.referralAccount && {
+          referralAccount: params.referralAccount,
+        }),
+        ...(params.referralFee && {
+          referralFee: params.referralFee.toString(),
+        }),
+      });
+
+      const response = await fetch(
+        `${this.baseUrl}/ultra/v1/order?${queryParams}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const orderResponse: JupiterOrderResponse = await response.json();
+      console.log(
+        `[Jupiter] Order created successfully with requestId: ${orderResponse.requestId}`
+      );
+
+      return orderResponse;
+    } catch (error) {
+      console.error(`[Jupiter] Error creating order:`, error);
+      throw new Error(
+        `Failed to create swap order: ${(error as Error).message}`
+      );
+    }
+  }
+
+  async executeOrder(
+    executeRequest: JupiterExecuteRequest
+  ): Promise<JupiterExecuteResponse> {
+    try {
+      console.log(
+        `[Jupiter] Executing order with requestId: ${executeRequest.requestId}`
+      );
+
+      const response = await fetch(`${this.baseUrl}/ultra/v1/execute`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(executeRequest),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const executeResponse: JupiterExecuteResponse = await response.json();
+
+      if (executeResponse.status === "Success") {
+        console.log(
+          `[Jupiter] Swap executed successfully: ${executeResponse.signature}`
+        );
+      } else {
+        console.error(
+          `[Jupiter] Swap execution failed:`,
+          executeResponse.error
+        );
+      }
+
+      return executeResponse;
+    } catch (error) {
+      console.error(`[Jupiter] Error executing order:`, error);
+      throw new Error(
+        `Failed to execute swap order: ${(error as Error).message}`
+      );
+    }
+  }
+
+  async createSwap(params: SwapParams) {
+    try {
+      console.log(
+        `[Jupiter] Starting swap process: ${params.amount} ${params.inputMint} -> ${params.outputMint}`
+      );
+
+      const orderResponse = await this.getOrder({
+        inputMint: params.inputMint,
+        outputMint: params.outputMint,
+        amount: params.amount,
+        taker: params.taker,
+        referralAccount: params.referralAccount,
+        referralFee: params.referralFee,
+      });
+
+      return {
+        orderResponse,
+        execute: async (signedTransaction: string): Promise<SwapResult> => {
+          try {
+            const executeResponse = await this.executeOrder({
+              signedTransaction,
+              requestId: orderResponse.requestId,
+            });
+
+            return {
+              success: executeResponse.status === "Success",
+              signature: executeResponse.signature,
+              error: executeResponse.error,
+              inputAmount: executeResponse.inputAmountResult,
+              outputAmount: executeResponse.outputAmountResult,
+              swapEvents: executeResponse.swapEvents,
+            };
+          } catch (error) {
+            return {
+              success: false,
+              error: (error as Error).message,
+            };
+          }
+        },
+      };
+    } catch (error) {
+      console.error(`[Jupiter] Error in swap process:`, error);
+      throw error;
+    }
   }
 }
 
