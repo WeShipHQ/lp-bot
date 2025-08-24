@@ -79,9 +79,7 @@ export async function handleTransferInput(ctx: BotContext, _server: FastifyInsta
           if (transferState.step === "token_input") {
         const parts = messageText.trim().split(/\s+/);
         
-        // Different handling based on transfer type
         if (transferState.type === "all_tokens") {
-          // For transfer all tokens, we expect just token address and recipient address
           if (parts.length !== 2) {
             await ctx.reply(MessageService.getErrorMessage("Please enter the token address and recipient address in the format: tokenAddress recipientAddress"));
             return true;
@@ -165,9 +163,7 @@ export async function handleTransferInput(ctx: BotContext, _server: FastifyInsta
           throw new Error("Could not get token information");
         }
 
-        // Update state based on transfer type
         if (transferState.type === "all_tokens") {
-          // For transfer all tokens, use the current balance as amount
           if (balance <= 0) {
             await ctx.reply(MessageService.getErrorMessage(`You don't have any ${tokenInfo.symbol} tokens to transfer.`));
             return true;
@@ -177,7 +173,7 @@ export async function handleTransferInput(ctx: BotContext, _server: FastifyInsta
             ...transferState,
             tokenSymbol: tokenInfo.symbol,
             tokenName: tokenInfo.name,
-            amount: balance, // Use full balance
+            amount: balance,
             decimals,
             step: "token_confirmation"
           };
@@ -558,7 +554,6 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
             
             let message;
             if (actualAmount !== undefined && Math.abs(actualAmount - requestedAmount) > 0.00001) {
-              // Amount was adjusted
               message = MessageService.getTransferSuccessWithAdjustmentMessage(
                 transferState.recipientAddress,
                 requestedAmount,
@@ -566,7 +561,6 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
                 signature
               );
             } else {
-              // Amount was not adjusted
               message = MessageService.getTransferSuccessMessage(
                 transferState.recipientAddress,
                 requestedAmount,

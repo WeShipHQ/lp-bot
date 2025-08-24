@@ -10,7 +10,7 @@ import {
   AccountMeta
 } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { privy } from "./privy.service";
+import { privy, PrivyService } from "./privy.service";
 import { CONFIG } from "../config";
 
 export interface WalletInfo {
@@ -331,20 +331,13 @@ export class SolanaService {
       // Step 3: Create a valid placeholder wallet public key
       const walletPublicKey = new PublicKey(walletAddress);
       const sourceTokenAccountPubkey = new PublicKey(sourceTokenAccount);
-      const tokenMintPubkey = new PublicKey(tokenAddress); // Used for reference
       
       // Step 4: For recipient token account, we need to make sure it exists
-      // In Solana, token accounts need to be created before tokens can be transferred
-      const recipientPubkey = new PublicKey(recipientAddress);
-      
-      // Check if the recipient already has a token account
       let destinationTokenAccount;
       try {
-        // Try to find existing token account
         destinationTokenAccount = await this.getTokenAccountAddress(recipientAddress, tokenAddress);
 
       } catch (error) {
-        // If not found, we need to inform the user that they need to create a token account first
 
         throw new Error(
           "Recipient doesn't have a token account for this token yet. " +
@@ -359,7 +352,6 @@ export class SolanaService {
       const rawAmount = Math.floor(amount * (10 ** decimals));
       
       // Step 6: Create transfer instruction (SPL token transfer)
-      // We're manually creating the instruction since we're not using @solana/spl-token directly
       const keys: AccountMeta[] = [
         { pubkey: sourceTokenAccountPubkey, isSigner: false, isWritable: true },
         { pubkey: destinationTokenAccountPubkey, isSigner: false, isWritable: true },
@@ -368,8 +360,7 @@ export class SolanaService {
       
       // SPL Token Transfer instruction (3 is the instruction index for transfer)
       const dataLayout = Buffer.alloc(9);
-      dataLayout.writeUInt8(3, 0); // Transfer instruction
-      // Write amount as a 64-bit integer
+      dataLayout.writeUInt8(3, 0); 
       const amountBuffer = Buffer.alloc(8);
       amountBuffer.writeBigUInt64LE(BigInt(rawAmount));
       amountBuffer.copy(dataLayout, 1);
@@ -393,25 +384,12 @@ export class SolanaService {
       // Step 9: Create versioned transaction
       const transaction = new VersionedTransaction(message.compileToV0Message());
       
-      // Step 10: Sign the transaction using Privy SDK
-      const { signedTransaction } = await privy.walletApi.solana.signTransaction({
+      // Step 10: Send and confirm the transaction using PrivyService
+      const signature = await PrivyService.sendAndConfirmTransaction(
         walletId,
-        transaction
-      });
-      
-      if (!signedTransaction) {
-        throw new Error("Failed to get signed transaction from Privy");
-      }
-      
-      // Step 11: Send the signed transaction
-      const signature = await connection.sendRawTransaction(signedTransaction.serialize());
-      
-      // Step 12: Wait for confirmation but don't throw if it times out
-      try {
-        await connection.confirmTransaction(signature, 'confirmed');
-      } catch (confirmError) {
-        // Transaction was sent but confirmation timed out - this is usually fine
-      }
+        transaction,
+        connection
+      );
       
       return { signature };
     } catch (error) {
@@ -513,25 +491,12 @@ export class SolanaService {
       // Step 8: Create versioned transaction
       const transaction = new VersionedTransaction(message.compileToV0Message());
       
-      // Step 9: Sign the transaction using Privy SDK
-      const { signedTransaction } = await privy.walletApi.solana.signTransaction({
+      // Step 9: Send and confirm the transaction using PrivyService
+      const signature = await PrivyService.sendAndConfirmTransaction(
         walletId,
-        transaction
-      });
-      
-      if (!signedTransaction) {
-        throw new Error("Failed to get signed transaction from Privy");
-      }
-      
-      // Step 10: Send the signed transaction
-      const signature = await connection.sendRawTransaction(signedTransaction.serialize());
-      
-      // Step 11: Wait for confirmation but don't throw if it times out
-      try {
-        await connection.confirmTransaction(signature, 'confirmed');
-      } catch (confirmError) {
-        // Transaction was sent but confirmation timed out - this is usually fine
-      }
+        transaction,
+        connection
+      );
       
       return {
         signature,
