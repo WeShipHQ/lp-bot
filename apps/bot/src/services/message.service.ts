@@ -65,6 +65,15 @@ export class MessageService {
     const t = data.totals;
 
     let msg = `\u{1F4BC} Wallet: \`${data.walletAddress}\`\n`;
+
+    if (list.length === 0) {
+      msg += `\n❌ No active positions found.\n\n`;
+      msg += `Get started by:\n`;
+      msg += `1. Use /trending to see hot pools\n`;
+      msg += `2. Or paste a token address to create new positions`;
+      return msg;
+    }
+
     msg += `Total Positions: ${t.total_positions} | Total Deposit: ${b(formatCurrency(t.total_current_value_usd))}\n\n`;
 
     msg += list
