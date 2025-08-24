@@ -181,8 +181,15 @@ export class PortfolioService {
           meteoraService.getPositionWithdraws(addr),
           meteoraService.getPositionClaimRewards(addr),
         ]);
-        const total_claimed_fees_usd =
+        const claimed_usd_api =
           sumClaimFeesUsd(claimedFees) + sumRewardsUsd(rewards);
+
+        const claimed_usd_fallback =
+          claimed_fees_x * xPrice + claimed_fees_y * yPrice;
+
+        const total_claimed_fees_usd =
+          claimed_usd_api > 0 ? claimed_usd_api : claimed_usd_fallback;
+
         const total_deposits_usd = sumDepWdrUsd(deposits);
         const total_withdrawals_usd = sumDepWdrUsd(withdraws);
 

@@ -3,6 +3,7 @@ import { PortfolioData, PortfolioPosition } from "@/types/portfolio.types";
 
 const pct = (x?: number) =>
   x == null ? "—" : `${(x > 1 ? x : x * 100).toFixed(2)}%`;
+
 const fmtAmt = (n?: number) =>
   n == null
     ? "—"
@@ -10,8 +11,14 @@ const fmtAmt = (n?: number) =>
       ? n.toLocaleString(undefined, { maximumFractionDigits: 4 })
       : n.toLocaleString(undefined, { maximumFractionDigits: 6 });
 
+const shortAddr = (a: string, head = 6, tail = 6) =>
+  a.length > head + tail ? `${a.slice(0, head)}…${a.slice(-tail)}` : a;
+
+const b = (s: string) => `**${s}**`;
+
 const pair = (p: PortfolioPosition) =>
   `${p.token_x_info.symbol}-${p.token_y_info.symbol}`;
+
 const dexUrl = (pool: string) => `https://dexscreener.com/solana/${pool}`;
 export class MessageService {
   /**
@@ -58,32 +65,32 @@ export class MessageService {
     const t = data.totals;
 
     let msg = `\u{1F4BC} Wallet: \`${data.walletAddress}\`\n`;
-    msg += `Total Positions: ${t.total_positions} | Total Deposit: ${formatCurrency(t.total_current_value_usd)}\n\n`;
+    msg += `Total Positions: ${t.total_positions} | Total Deposit: ${b(formatCurrency(t.total_current_value_usd))}\n\n`;
 
     msg += list
       .map((p, i) => {
         const line1 = `/${i + 1} \`${pair(p)}\``;
+
         const balance =
           p.current_x_amount != null && p.current_y_amount != null
-            ? `• Position Balance: ${fmtAmt(p.current_x_amount)} ${p.token_x_info.symbol} / ${fmtAmt(p.current_y_amount)} ${p.token_y_info.symbol} (${formatCurrency(p.current_value_usd)})`
-            : `• Position Balance: ${formatCurrency(p.current_value_usd)}`;
+            ? `• Position Balance: ${b(fmtAmt(p.current_x_amount))} ${p.token_x_info.symbol} / ${b(fmtAmt(p.current_y_amount))} ${p.token_y_info.symbol} (${b(formatCurrency(p.current_value_usd))})`
+            : `• Position Balance: ${b(formatCurrency(p.current_value_usd))}`;
 
         const unclaimed =
           p.unclaimed_fees_x != null && p.unclaimed_fees_y != null
-            ? `• Unclaimed Fees: ${fmtAmt(p.unclaimed_fees_x)} ${p.token_x_info.symbol} / ${fmtAmt(p.unclaimed_fees_y)} ${p.token_y_info.symbol} (${formatCurrency(p.total_unclaimed_fees_usd)})`
-            : `• Unclaimed Fees: ${formatCurrency(p.total_unclaimed_fees_usd)}`;
+            ? `• Unclaimed Fees: ${b(fmtAmt(p.unclaimed_fees_x))} ${p.token_x_info.symbol} / ${b(fmtAmt(p.unclaimed_fees_y))} ${p.token_y_info.symbol} (${b(formatCurrency(p.total_unclaimed_fees_usd))})`
+            : `• Unclaimed Fees: ${b(formatCurrency(p.total_unclaimed_fees_usd))}`;
 
         const claimed =
-          p.total_claimed_fees_usd > 0
-            ? p.claimed_fees_x != null && p.claimed_fees_y != null
-              ? `• Claimed Fees: ${fmtAmt(p.claimed_fees_x)} ${p.token_x_info.symbol} / ${fmtAmt(p.claimed_fees_y)} ${p.token_y_info.symbol} (${formatCurrency(p.total_claimed_fees_usd)})`
-              : `• Claimed Fees: ${formatCurrency(p.total_claimed_fees_usd)}`
-            : undefined;
+          p.claimed_fees_x != null && p.claimed_fees_y != null
+            ? `• Claimed Fees: ${b(fmtAmt(p.claimed_fees_x))} ${p.token_x_info.symbol} / ${b(fmtAmt(p.claimed_fees_y))} ${p.token_y_info.symbol} (${b(formatCurrency(p.total_claimed_fees_usd))})`
+            : `• Claimed Fees: ${b(formatCurrency(p.total_claimed_fees_usd))}`;
 
         const feeTvl =
           p.pool_fee_tvl_24h != null
-            ? `• 24h Fee / TVL: ${pct(p.pool_fee_tvl_24h)}`
+            ? `• 24h Fee / TVL: ${b(pct(p.pool_fee_tvl_24h))}`
             : undefined;
+
         const range = `• In Range: ${p.in_range ? "✅" : "❌"}`;
         const updated = `• Updated: ${p.created_at}`;
 
@@ -107,49 +114,38 @@ export class MessageService {
   }
 
   static getPositionDetailMessage(p: PortfolioPosition, index: number): string {
-    const title = `#${index + 1} ${pair(p)}\n`;
-    const lines: string[] = [];
-    lines.push(`Pool: \`${p.pool_address}\``);
-    lines.push(`Address: \`${p.position_address}\``);
+    const name = pair(p);
+    const sx = p.token_x_info.symbol;
+    const sy = p.token_y_info.symbol;
+
+    let msg = `**${name}** · [Dexscreener](${dexUrl(p.pool_address)})\n\n`;
+    msg += `**Pool:** \`${shortAddr(p.pool_address)}\`  ·  **Address:** \`${shortAddr(p.position_address)}\`\n\n`;
 
     if (p.current_x_amount != null && p.current_y_amount != null) {
-      lines.push(
-        `Position Balance: ${fmtAmt(p.current_x_amount)} ${p.token_x_info.symbol} / ` +
-          `${fmtAmt(p.current_y_amount)} ${p.token_y_info.symbol} (${formatCurrency(p.current_value_usd)})`
-      );
+      msg += `**Position:** ${b(fmtAmt(p.current_x_amount))} ${sx} / ${b(fmtAmt(p.current_y_amount))} ${sy} (${b(formatCurrency(p.current_value_usd))})\n`;
     } else {
-      lines.push(`Position Balance: ${formatCurrency(p.current_value_usd)}`);
+      msg += `**Position:** ${b(formatCurrency(p.current_value_usd))}\n`;
     }
 
     if (p.unclaimed_fees_x != null && p.unclaimed_fees_y != null) {
-      lines.push(
-        `Unclaimed Fees: ${fmtAmt(p.unclaimed_fees_x)} ${p.token_x_info.symbol} / ` +
-          `${fmtAmt(p.unclaimed_fees_y)} ${p.token_y_info.symbol} (${formatCurrency(p.total_unclaimed_fees_usd)})`
-      );
+      msg += `**Unclaimed:** ${b(fmtAmt(p.unclaimed_fees_x))} ${sx} / ${b(fmtAmt(p.unclaimed_fees_y))} ${sy} (${b(formatCurrency(p.total_unclaimed_fees_usd))})\n`;
     } else {
-      lines.push(
-        `Unclaimed Fees: ${formatCurrency(p.total_unclaimed_fees_usd)}`
-      );
+      msg += `**Unclaimed:** ${b(formatCurrency(p.total_unclaimed_fees_usd))}\n`;
     }
 
-    if (p.total_claimed_fees_usd > 0) {
-      if (p.claimed_fees_x != null && p.claimed_fees_y != null) {
-        lines.push(
-          `Claimed Fees: ${fmtAmt(p.claimed_fees_x)} ${p.token_x_info.symbol} / ` +
-            `${fmtAmt(p.claimed_fees_y)} ${p.token_y_info.symbol} (${formatCurrency(p.total_claimed_fees_usd)})`
-        );
-      } else {
-        lines.push(`Claimed Fees: ${formatCurrency(p.total_claimed_fees_usd)}`);
-      }
+    if (p.claimed_fees_x != null && p.claimed_fees_y != null) {
+      msg += `**Claimed:** ${b(fmtAmt(p.claimed_fees_x))} ${sx} / ${b(fmtAmt(p.claimed_fees_y))} ${sy} (${b(formatCurrency(p.total_claimed_fees_usd))})\n`;
+    } else {
+      msg += `**Claimed:** ${b(formatCurrency(p.total_claimed_fees_usd))}\n`;
     }
 
-    if (p.pool_fee_tvl_24h != null)
-      lines.push(`24h Fee / TVL: ${pct(p.pool_fee_tvl_24h)}`);
-    lines.push(`In Range: ${p.in_range ? "✅" : "❌"}`);
-    lines.push(`Updated: ${p.created_at}`);
-    lines.push(`Dexscreener: ${dexUrl(p.pool_address)}`);
+    msg += `\n`;
+    msg += `${p.pool_fee_tvl_24h != null ? `**24h Fee/TVL:** ${b(pct(p.pool_fee_tvl_24h))}  ·  ` : ""}**In Range:** ${p.in_range ? "✅" : "❌"}\n`;
+    if (p.created_at)
+      msg += `**Updated:** ${new Date(p.created_at).toLocaleString()}\n\n`;
 
-    return title + "\n" + lines.join("\n");
+    msg += `Net Profit: View on [Instafin](https://instafin.com)`;
+    return msg;
   }
 
   /**
