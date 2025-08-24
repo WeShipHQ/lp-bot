@@ -95,4 +95,33 @@ export class MessageService {
     static getTransferErrorMessage(error: string): string {
       return `❌ *Transfer Failed*\n\n${error}`;
     }
+
+    /**
+     * Generate transfer token request message
+     */
+    static getTransferTokenRequestMessage(): string {
+      return "💸 *Transfer SPL Token*\n\nPlease enter the token address, recipient address, and amount to transfer in the format:\n\n`tokenAddress recipientAddress amount`\n\nExample: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v GgS64xkW9JqR3VkBn4fpPi7sMqcnAzqRWTUXbBZhHpLT 10`\n\nNote: The recipient must have already interacted with this token before. They need to have a token account for this specific token.\n\nOr type /cancel to cancel the transfer.";
+    }
+
+    /**
+     * Generate transfer token confirmation message
+     */
+    static getTransferTokenConfirmationMessage(tokenSymbol: string, tokenName: string, recipientAddress: string, amount: number): string {
+      return `🔍 *Confirm Token Transfer*\n\n` +
+        `You are about to send *${amount} ${tokenSymbol}* (${tokenName}) to:\n` +
+        `\`${recipientAddress}\`\n\n` +
+        `Please confirm this transaction by clicking the button below.`;
+    }
+
+    /**
+     * Generate transfer token success message
+     */
+    static getTransferTokenSuccessMessage(tokenSymbol: string, recipientAddress: string, amount: number, signature: string): string {
+      return `✅ *Token Transfer Successful*\n\n` +
+        `Successfully sent *${amount} ${tokenSymbol}* to:\n` +
+        `\`${recipientAddress}\`\n\n` +
+        `Transaction signature:\n` +
+        `\`${signature}\`\n\n` +
+        `View on Solscan: https://solscan.io/tx/${signature}`;
+    }
 }

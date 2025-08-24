@@ -4,6 +4,7 @@ import { solanaService } from "../../services/solana.service";
 import { MessageService } from "../../services/message.service";
 import { WalletService } from "../../services/wallet.service";
 import { BotContext } from "@/types/bot.types";
+import { jupiterService } from "../../services/jupiter.service";
 
 export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
   try {
@@ -56,13 +57,9 @@ export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
 // Handle text input for transfers
 export async function handleTransferInput(ctx: BotContext, _server: FastifyInstance) {
   try {
-    // Debug logging to see what's happening
-    console.log("handleTransferInput called with message:", ctx.message);
-    console.log("Current session state:", ctx.session);
-    
+
     // Check if we're in a transfer state
     if (!ctx.session?.transferState) {
-      console.log("No transfer state found in session");
       return false; // Not in transfer mode
     }
 
@@ -81,7 +78,92 @@ export async function handleTransferInput(ctx: BotContext, _server: FastifyInsta
       return true;
     }
 
-    if (transferState.step === "address_input") {
+    // Handle token transfer input
+    if (transferState.step === "token_input") {
+      // Parse input: "tokenAddress recipientAddress amount"
+      const parts = messageText.trim().split(/\s+/);
+
+      if (parts.length !== 3) {
+        await ctx.reply(MessageService.getErrorMessage("Please enter the token address, recipient address, and amount in the format: tokenAddress recipientAddress amount"));
+        return true;
+      }
+
+      const [tokenAddress, recipientAddress, amountStr] = parts;
+      const amount = parseFloat(amountStr);
+
+      // Validate addresses and amount
+      if (!solanaService.validateAddress(tokenAddress)) {
+        await ctx.reply(MessageService.getErrorMessage("Invalid token address. Please check and try again."));
+        return true;
+      }
+
+      if (!solanaService.validateAddress(recipientAddress)) {
+        await ctx.reply(MessageService.getErrorMessage("Invalid recipient address. Please check and try again."));
+        return true;
+      }
+
+      if (isNaN(amount) || amount <= 0) {
+        await ctx.reply(MessageService.getErrorMessage("Please enter a valid amount greater than 0."));
+        return true;
+      }
+
+      // Get token info
+      await ctx.reply("⏳ Looking up token information...");
+
+      try {
+        // Get token balance and info
+        const { balance, decimals } = await solanaService.getTokenBalance(ctx.user?.walletAddress as string, tokenAddress);
+
+        if (balance < amount) {
+          await ctx.reply(MessageService.getErrorMessage(`Insufficient token balance. You have ${balance} tokens available.`));
+          return true;
+        }
+
+        // Get token symbol and name from Jupiter API
+        // Get token info using jupiterService
+        const tokenInfo = await jupiterService.getTokenInfo(tokenAddress);
+
+        if (!tokenInfo) {
+          throw new Error("Could not get token information");
+        }
+
+        // Update state
+        ctx.session.transferState = {
+          ...transferState,
+          tokenAddress,
+          tokenSymbol: tokenInfo.symbol,
+          tokenName: tokenInfo.name,
+          recipientAddress,
+          amount,
+          decimals,
+          step: "token_confirmation"
+        };
+
+        // Send confirmation message
+        await ctx.reply(
+          MessageService.getTransferTokenConfirmationMessage(
+            tokenInfo.symbol,
+            tokenInfo.name,
+            recipientAddress,
+            amount
+          ),
+          {
+            parse_mode: "Markdown",
+            reply_markup: getTransferConfirmKeyboard()
+          }
+        );
+
+      } catch (error) {
+        console.error("Error getting token info:", error);
+        await ctx.reply(MessageService.getErrorMessage(
+          `Failed to get token information: ${error instanceof Error ? error.message : "Unknown error"}`
+        ));
+        delete ctx.session.transferState;
+      }
+
+      return true;
+    }
+    else if (transferState.step === "address_input") {
       // Parse input: "address amount" or just "address" for transfer_all
       const parts = messageText.trim().split(/\s+/);
       let recipientAddress, amount;
@@ -198,7 +280,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
                 reply_markup: keyboard,
               }
             );
-            console.log("Message edited successfully");
+
             await ctx.answerCbQuery("🔄 Wallet refreshed!");
           } catch (err: any) {
             if (err.description?.includes("message is not modified")) {
@@ -257,7 +339,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
         } catch (error) {
           console.error("Transfer all SOL error:", error);
           await ctx.reply(MessageService.getErrorMessage("Failed to prepare transfer. Please try again."));
-        }
+          }
         break;
 
       case "transfer_x_sol":
@@ -279,7 +361,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
         } catch (error) {
           console.error("Transfer X SOL error:", error);
           await ctx.reply(MessageService.getErrorMessage("Failed to prepare transfer. Please try again."));
-        }
+          }
         break;
 
       case "transfer_all_tokens":
@@ -292,12 +374,25 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
         break;
 
       case "transfer_x_tokens":
-        await ctx.reply(
-          "🚧 *Transfer X Tokens*\n\nThis feature is coming soon! You'll be able to transfer a specific amount of tokens to another wallet.",
-          {
+        try {
+          await ctx.answerCbQuery("⏳ Preparing to transfer tokens");
+          
+          ctx.session = {
+            ...ctx.session,
+            transferState: {
+              type: "token",
+              step: "token_input"
+            }
+          };
+          
+          await ctx.reply(MessageService.getTransferTokenRequestMessage(), {
             parse_mode: "Markdown",
+            reply_markup: { force_reply: true }
+          });
+        } catch (error) {
+          console.error("Transfer X tokens error:", error);
+          await ctx.reply(MessageService.getErrorMessage("Failed to prepare token transfer. Please try again."));
           }
-        );
         break;
 
       case "export_private_key":
@@ -308,7 +403,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
             
             await ctx.answerCbQuery("🔐 Exporting wallet...");
             
-            console.log("🔍 Exporting wallet for user:", ctx.user.telegramUserId, "Wallet ID:", walletId);
+
             
             const walletData = await WalletService.exportAndDecryptWallet(walletId);
             
@@ -356,48 +451,83 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
             return;
           }
           
-          // Execute transfer using Privy
-          console.log("Executing transfer via Privy:", {
-            walletId: ctx.user.walletId,
-            recipientAddress: transferState.recipientAddress,
-            amount: transferState.amount
-          });
-          
-          // Track the original requested amount
-          const requestedAmount = transferState.amount;
-          
-          // Call transferSol which may adjust the amount for fees
-          const result = await solanaService.transferSol({
-            walletId: ctx.user.walletId,
-            walletAddress: ctx.user.walletAddress as string,
-            recipientAddress: transferState.recipientAddress,
-            amount: transferState.amount
-          });
-          
-          // Get the signature and actual amount sent
-          const { signature, actualAmount } = result;
-          
-          // Create appropriate message based on whether amount was adjusted
-          let message;
-          if (actualAmount !== undefined && Math.abs(actualAmount - requestedAmount) > 0.00001) {
-            // Amount was adjusted
-            message = MessageService.getTransferSuccessWithAdjustmentMessage(
+          // Check if this is a token transfer or SOL transfer
+          if (transferState.type === "token" && transferState.tokenAddress && transferState.step === "token_confirmation") {
+            // Token transfer
+            console.log("Executing token transfer via Privy:", {
+              walletId: ctx.user.walletId,
+              tokenAddress: transferState.tokenAddress,
+              recipientAddress: transferState.recipientAddress,
+              amount: transferState.amount,
+              decimals: transferState.decimals || 0
+            });
+            
+            // Call transferToken
+            const result = await solanaService.transferToken({
+              walletId: ctx.user.walletId,
+              walletAddress: ctx.user.walletAddress as string,
+              recipientAddress: transferState.recipientAddress,
+              tokenAddress: transferState.tokenAddress,
+              amount: transferState.amount,
+              decimals: transferState.decimals || 0
+            });
+            
+            // Get the signature
+            const { signature } = result;
+            
+            // Send success message
+            const message = MessageService.getTransferTokenSuccessMessage(
+              transferState.tokenSymbol || 'Unknown',
               transferState.recipientAddress,
-              requestedAmount,
-              actualAmount,
+              transferState.amount,
               signature
             );
+            
+            await ctx.reply(message, { parse_mode: "Markdown" });
           } else {
-            // Amount was not adjusted
-            message = MessageService.getTransferSuccessMessage(
-              transferState.recipientAddress,
-              requestedAmount,
-              signature
-            );
+            // SOL transfer
+            console.log("Executing SOL transfer via Privy:", {
+              walletId: ctx.user.walletId,
+              recipientAddress: transferState.recipientAddress,
+              amount: transferState.amount
+            });
+            
+            // Track the original requested amount
+            const requestedAmount = transferState.amount;
+            
+            // Call transferSol which may adjust the amount for fees
+            const result = await solanaService.transferSol({
+              walletId: ctx.user.walletId,
+              walletAddress: ctx.user.walletAddress as string,
+              recipientAddress: transferState.recipientAddress,
+              amount: transferState.amount
+            });
+            
+            // Get the signature and actual amount sent
+            const { signature, actualAmount } = result;
+            
+            // Create appropriate message based on whether amount was adjusted
+            let message;
+            if (actualAmount !== undefined && Math.abs(actualAmount - requestedAmount) > 0.00001) {
+              // Amount was adjusted
+              message = MessageService.getTransferSuccessWithAdjustmentMessage(
+                transferState.recipientAddress,
+                requestedAmount,
+                actualAmount,
+                signature
+              );
+            } else {
+              // Amount was not adjusted
+              message = MessageService.getTransferSuccessMessage(
+                transferState.recipientAddress,
+                requestedAmount,
+                signature
+              );
+            }
+            
+            // Send success message
+            await ctx.reply(message, { parse_mode: "Markdown" });
           }
-          
-          // Send success message
-          await ctx.reply(message, { parse_mode: "Markdown" });
           
           // Clear transfer state
           delete ctx.session.transferState;
@@ -420,7 +550,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
           await ctx.reply(MessageService.getErrorMessage("Error cancelling transfer."));
         }
         break;
-        
+
       default:
         await ctx.answerCbQuery("❌ Unknown action");
         break;
