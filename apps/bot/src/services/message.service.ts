@@ -114,6 +114,26 @@ export class MessageService {
     }
 
     /**
+     * Generate processing transaction message
+     */
+    static getProcessingTransactionMessage(): string {
+      return "⏳ *Processing Transaction*\n\nYour transaction is being processed. Please wait a moment...\n\n_Please do not click the confirm button again to avoid duplicate transactions._";
+    }
+    
+    /**
+     * Generate wallet export message
+     */
+    static getWalletExportMessage(walletAddress: string, privateKey: string): string {
+      return `🔐 *Wallet Export Successful*\n\n` +
+        `*Address:* \`${walletAddress}\`\n` +
+        `*Private Key:* \`${privateKey}\`\n\n` +
+        `⚠️ **SECURITY WARNING:**\n` +
+        `• Never share your private key with anyone\n` +
+        `• Store it securely offline\n` +
+        `• Anyone with this key can access your wallet\n\n`;
+    }
+
+    /**
      * Generate transfer token success message
      */
     static getTransferTokenSuccessMessage(tokenSymbol: string, recipientAddress: string, amount: number, signature: string): string {
