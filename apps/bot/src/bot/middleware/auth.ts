@@ -4,15 +4,17 @@ import { privy } from "../../services/privy.service";
 import { CONFIG } from "../../config";
 import { BotContext } from "@/types/bot.types";
 
-// Simple in-memory cache for user data to reduce API calls
-interface CachedUserData {
-  user: {
-    id: string;
-    customMetadata?: {
-      walletAddress?: string;
-      walletId?: string;
-    };
+interface PrivyUser {
+  id: string;
+  customMetadata?: {
+    walletAddress?: string;
+    walletId?: string;
+    [key: string]: unknown;
   };
+}
+
+interface CachedUserData {
+  user: PrivyUser;
   walletAddress: string;
   walletId: string;
   timestamp: number;
@@ -20,7 +22,7 @@ interface CachedUserData {
 
 const userCache = new Map<string, CachedUserData>();
 
-// Cache expiration time (5 minutes)
+// 5 minutes
 const CACHE_TTL = 5 * 60 * 1000;
 
 export function authMiddleware(
@@ -32,12 +34,10 @@ export function authMiddleware(
     const telegramUserId = ctx.from.id.toString();
 
     try {
-      // Check cache first
       const cachedUser = userCache.get(telegramUserId);
       const now = Date.now();
-      
-      if (cachedUser && (now - cachedUser.timestamp) < CACHE_TTL) {
-        // Use cached data if not expired
+
+      if (cachedUser && now - cachedUser.timestamp < CACHE_TTL) {
         ctx.user = {
           id: cachedUser.user.id,
           walletAddress: cachedUser.walletAddress,
@@ -46,23 +46,22 @@ export function authMiddleware(
         };
         return next();
       }
-      
-      // Set timeout for Privy API call
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Privy API timeout')), 5000);
+
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error("Privy API timeout")), 5000);
       });
-      
-      // Race between API call and timeout
-      let user;
+
+      let user: PrivyUser | null = null;
       try {
         user = await Promise.race([
           privy.getUserByTelegramUserId(telegramUserId),
-          timeoutPromise
+          timeoutPromise,
         ]);
       } catch (timeoutError) {
-        // If timeout occurred and we have cached data (even if expired), use it
         if (cachedUser) {
-          server.log.warn(`Using expired cache for user ${telegramUserId} due to API timeout`);
+          server.log.warn(
+            `Using expired cache for user ${telegramUserId} due to API timeout`
+          );
           ctx.user = {
             id: cachedUser.user.id,
             walletAddress: cachedUser.walletAddress,
@@ -71,12 +70,14 @@ export function authMiddleware(
           };
           return next();
         } else {
-          // No cache available, log error and continue
-          server.log.error({ err: timeoutError }, "Privy API timeout and no cache available");
+          server.log.error(
+            { err: timeoutError },
+            "Privy API timeout and no cache available"
+          );
           return next();
         }
       }
-      
+
       let walletAddress: string;
       let walletId: string;
 
@@ -100,24 +101,23 @@ export function authMiddleware(
 
         server.log.info(`New user registered: ${telegramUserId}`);
       } else {
-        walletAddress = (user.customMetadata?.walletAddress as string) || '';
-        walletId = (user.customMetadata?.walletId as string) || '';
+        const customMetadata = user.customMetadata ?? {};
+        walletAddress = customMetadata.walletAddress ?? "";
+        walletId = customMetadata.walletId ?? "";
       }
 
-      // Update user context
       ctx.user = {
         id: user.id,
         walletAddress,
         walletId,
         telegramUserId,
       };
-      
-      // Update cache
+
       userCache.set(telegramUserId, {
         user,
         walletAddress,
         walletId,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       });
 
       server.log.info(`User authenticated: ${telegramUserId}`);
