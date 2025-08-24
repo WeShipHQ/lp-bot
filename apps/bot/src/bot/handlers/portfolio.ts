@@ -31,9 +31,7 @@ export async function portfolioHandler(
     parse_mode: "Markdown",
   });
 
-  const res = await PortfolioService.getUserPortfolio(
-    "FL4j8EEMAPUjrvASnqX7VdpWZJji1LFsAxwojhpueUYt"
-  );
+  const res = await PortfolioService.getUserPortfolio(ctx.user.walletAddress);
 
   if (!res.success || !res.data) {
     await ctx.reply(`❌ ${res.message}`);
