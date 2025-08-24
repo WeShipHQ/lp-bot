@@ -1,83 +1,58 @@
-import { Context } from "telegraf";
 import { FastifyInstance } from "fastify";
-import { formatCurrency, formatPercentage } from "../utils/formatters";
-import { getPortfolioKeyboard } from "../keyboards/portfolio-menu";
+import { MessageService } from "@/services/message.service";
+import { PortfolioService } from "@/services/portfolio.service";
+import { BotContext } from "@/types/bot.types";
+import { getPortfolioOverviewKeyboard } from "../keyboards";
 
-// Fake portfolio data for demo
-const FAKE_PORTFOLIO = {
-  totalValue: 15420.5,
-  totalPnL: 1240.3,
-  totalPnLPercentage: 8.75,
-  positions: [
-    {
-      id: "1",
-      pair: "SOL/USDC",
-      strategy: "DLMM",
-      value: 8500.25,
-      pnl: 850.15,
-      pnlPercentage: 11.1,
-      feesEarned: 45.2,
-      status: "ACTIVE",
-    },
-    {
-      id: "2",
-      pair: "RAY/SOL",
-      strategy: "CONCENTRATED",
-      value: 4200.75,
-      pnl: 320.45,
-      pnlPercentage: 8.3,
-      feesEarned: 28.9,
-      status: "ACTIVE",
-    },
-    {
-      id: "3",
-      pair: "ORCA/USDC",
-      strategy: "DLMM",
-      value: 2719.5,
-      pnl: 69.7,
-      pnlPercentage: 2.6,
-      feesEarned: 15.3,
-      status: "REBALANCING",
-    },
-  ],
-};
+export async function portfolioHandler(
+  ctx: BotContext,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _server: FastifyInstance
+) {
+  if (!ctx.user) {
+    await ctx.reply(
+      MessageService.getErrorMessage(
+        "Unable to authenticate user. Please try again."
+      )
+    );
+    return;
+  }
 
-export async function portfolioHandler(ctx: Context, _server: FastifyInstance) {
-  const portfolio = FAKE_PORTFOLIO;
-
-  let message = `
-💼 *Your Portfolio Overview*
-
-`;
-
-  // Portfolio summary
-  message += `📊 *Total Portfolio Value:* ${formatCurrency(portfolio.totalValue)}\n`;
-  message += `📈 *Total P&L:* ${portfolio.totalPnL >= 0 ? "🟢" : "🔴"} ${formatCurrency(portfolio.totalPnL)} (${formatPercentage(portfolio.totalPnLPercentage)})\n\n`;
-
-  // Individual positions
-  message += `*Active Positions:*\n\n`;
-
-  portfolio.positions.forEach((position, index) => {
-    const statusEmoji =
-      position.status === "ACTIVE"
-        ? "🟢"
-        : position.status === "REBALANCING"
-          ? "🟡"
-          : "🔴";
-
-    message += `${index + 1}. *${position.pair}* ${statusEmoji}\n`;
-    message += `   Strategy: ${position.strategy}\n`;
-    message += `   Value: ${formatCurrency(position.value)}\n`;
-    message += `   P&L: ${position.pnl >= 0 ? "🟢" : "🔴"} ${formatCurrency(position.pnl)} (${formatPercentage(position.pnlPercentage)})\n`;
-    message += `   Fees: ${formatCurrency(position.feesEarned)}\n\n`;
+  await ctx.reply("Loading Portfolio...", {
+    parse_mode: "Markdown",
   });
 
-  message += `_💡 This is demo data. Connect your wallet to see real positions._`;
+  const user = ctx.user;
 
-  await ctx.reply(message, {
+  if (!user.walletAddress) {
+    await ctx.reply(
+      MessageService.getErrorMessage(
+        "Wallet address not found. Please connect your wallet first."
+      )
+    );
+    return;
+  }
+
+  const portfolioResult = await PortfolioService.getUserPortfolio(
+    "FL4j8EEMAPUjrvASnqX7VdpWZJji1LFsAxwojhpueUYt"
+  );
+
+  if (!portfolioResult.success || !portfolioResult.data) {
+    await ctx.reply(MessageService.getErrorMessage(portfolioResult.message));
+    return;
+  }
+
+  const responseMessage = MessageService.getPortfolioMessage(
+    portfolioResult.data
+  );
+
+  await ctx.reply(responseMessage, {
     parse_mode: "Markdown",
     reply_markup: {
-      inline_keyboard: getPortfolioKeyboard().inline_keyboard,
+      inline_keyboard: getPortfolioOverviewKeyboard(portfolioResult.data)
+        .inline_keyboard,
     },
   });
 }
+
+export async function portfolioHandlerCallback() {}
