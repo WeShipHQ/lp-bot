@@ -1,83 +1,146 @@
-import { Context } from "telegraf";
 import { FastifyInstance } from "fastify";
-import { formatCurrency, formatPercentage } from "../utils/formatters";
-import { getPortfolioKeyboard } from "../keyboards/portfolio-menu";
+import { MessageService } from "@/services/message.service";
+import { PortfolioService } from "@/services/portfolio.service";
+import { BotContext } from "@/types/bot.types";
+import {
+  getOverviewKeyboard,
+  getPositionDetailKeyboard,
+} from "../keyboards/portfolio-menu";
+import { PortfolioData } from "@/types/portfolio.types";
 
-// Fake portfolio data for demo
-const FAKE_PORTFOLIO = {
-  totalValue: 15420.5,
-  totalPnL: 1240.3,
-  totalPnLPercentage: 8.75,
-  positions: [
-    {
-      id: "1",
-      pair: "SOL/USDC",
-      strategy: "DLMM",
-      value: 8500.25,
-      pnl: 850.15,
-      pnlPercentage: 11.1,
-      feesEarned: 45.2,
-      status: "ACTIVE",
-    },
-    {
-      id: "2",
-      pair: "RAY/SOL",
-      strategy: "CONCENTRATED",
-      value: 4200.75,
-      pnl: 320.45,
-      pnlPercentage: 8.3,
-      feesEarned: 28.9,
-      status: "ACTIVE",
-    },
-    {
-      id: "3",
-      pair: "ORCA/USDC",
-      strategy: "DLMM",
-      value: 2719.5,
-      pnl: 69.7,
-      pnlPercentage: 2.6,
-      feesEarned: 15.3,
-      status: "REBALANCING",
-    },
-  ],
-};
+const session = new Map<number, PortfolioData>();
+const noPreview = () => ({
+  link_preview_options: { is_disabled: true as const },
+});
 
-export async function portfolioHandler(ctx: Context, _server: FastifyInstance) {
-  const portfolio = FAKE_PORTFOLIO;
+export async function portfolioHandler(
+  ctx: BotContext,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _server: FastifyInstance
+) {
+  if (!ctx.user?.walletAddress) {
+    await ctx.reply(
+      MessageService.getErrorMessage(
+        "Wallet address not found. Please connect your wallet first."
+      )
+    );
+    return;
+  }
 
-  let message = `
-💼 *Your Portfolio Overview*
-
-`;
-
-  // Portfolio summary
-  message += `📊 *Total Portfolio Value:* ${formatCurrency(portfolio.totalValue)}\n`;
-  message += `📈 *Total P&L:* ${portfolio.totalPnL >= 0 ? "🟢" : "🔴"} ${formatCurrency(portfolio.totalPnL)} (${formatPercentage(portfolio.totalPnLPercentage)})\n\n`;
-
-  // Individual positions
-  message += `*Active Positions:*\n\n`;
-
-  portfolio.positions.forEach((position, index) => {
-    const statusEmoji =
-      position.status === "ACTIVE"
-        ? "🟢"
-        : position.status === "REBALANCING"
-          ? "🟡"
-          : "🔴";
-
-    message += `${index + 1}. *${position.pair}* ${statusEmoji}\n`;
-    message += `   Strategy: ${position.strategy}\n`;
-    message += `   Value: ${formatCurrency(position.value)}\n`;
-    message += `   P&L: ${position.pnl >= 0 ? "🟢" : "🔴"} ${formatCurrency(position.pnl)} (${formatPercentage(position.pnlPercentage)})\n`;
-    message += `   Fees: ${formatCurrency(position.feesEarned)}\n\n`;
+  await ctx.reply("Loading Portfolio...", {
+    parse_mode: "Markdown",
   });
 
-  message += `_💡 This is demo data. Connect your wallet to see real positions._`;
+  const res = await PortfolioService.getUserPortfolio(ctx.user.walletAddress);
 
-  await ctx.reply(message, {
+  if (!res.success || !res.data) {
+    await ctx.reply(`❌ ${res.message}`);
+    return;
+  }
+
+  const data = res.data;
+  session.set(ctx.chat!.id, data);
+
+  const responseMessage = MessageService.getPortfolioOverviewMessage(data);
+
+  await ctx.reply(responseMessage, {
     parse_mode: "Markdown",
-    reply_markup: {
-      inline_keyboard: getPortfolioKeyboard().inline_keyboard,
-    },
+    ...noPreview(),
+    reply_markup: getOverviewKeyboard(data),
+  });
+}
+
+export function registerPortfolioCallbacks(
+  bot: import("telegraf").Telegraf<BotContext>,
+  _server: FastifyInstance
+) {
+  bot.hears(/^\/(\d+)\b/, async (ctx) => {
+    const chatId = ctx.chat!.id;
+    const data = session.get(chatId);
+    if (!data) return;
+
+    const idx = Math.max(0, Number(ctx.match[1]) - 1);
+    const p = data.positions[idx];
+    if (!p) {
+      await ctx.reply("Position not found.");
+      return;
+    }
+
+    await ctx.reply(MessageService.getPositionDetailMessage(p, idx), {
+      parse_mode: "Markdown",
+      ...noPreview(),
+      reply_markup: getPositionDetailKeyboard(p, idx),
+    });
+  });
+
+  bot.action("portfolio:back", async (ctx) => {
+    const chatId = ctx.chat!.id;
+    const data = session.get(chatId);
+    if (!data) return;
+
+    await ctx.editMessageText(
+      MessageService.getPortfolioOverviewMessage(data),
+      {
+        parse_mode: "Markdown",
+        ...noPreview(),
+        reply_markup: getOverviewKeyboard(data),
+      }
+    );
+  });
+
+  bot.action("portfolio:refresh", async (ctx) => {
+    const wallet = ctx.user?.walletAddress;
+    if (!wallet) return;
+
+    const res = await PortfolioService.getUserPortfolio(wallet);
+    if (!res.success) {
+      await ctx.answerCbQuery("Refresh failed");
+      return;
+    }
+
+    session.set(ctx.chat!.id, res.data);
+    await ctx.editMessageText(
+      MessageService.getPortfolioOverviewMessage(res.data),
+      {
+        parse_mode: "Markdown",
+        ...noPreview(),
+        reply_markup: getOverviewKeyboard(res.data),
+      }
+    );
+    await ctx.answerCbQuery("Refreshed");
+  });
+
+  bot.action(/^pos:claim:\d+$/, async (ctx) => {
+    await ctx.answerCbQuery("Claim flow not implemented.");
+  });
+
+  bot.action(/^pos:toggle_ar:\d+$/, async (ctx) => {
+    const chatId = ctx.chat!.id;
+    const data = session.get(chatId);
+    if (!data) return;
+
+    const idx = Number((ctx.match as RegExpMatchArray)[0].split(":")[2]);
+    const p = data.positions[idx];
+    if (!p) return;
+
+    p.auto_rebalancing_enabled = !p.auto_rebalancing_enabled;
+    await ctx.editMessageText(MessageService.getPositionDetailMessage(p, idx), {
+      parse_mode: "Markdown",
+      ...noPreview(),
+      reply_markup: getPositionDetailKeyboard(p, idx),
+    });
+    await ctx.answerCbQuery(
+      p.auto_rebalancing_enabled
+        ? "Auto-rebalancing enabled"
+        : "Auto-rebalancing disabled"
+    );
+  });
+
+  bot.action(/^pos:rebalance:\d+$/, async (ctx) => {
+    await ctx.answerCbQuery("Rebalance not implemented.");
+  });
+
+  bot.action("ui:close", async (ctx) => {
+    await ctx.deleteMessage().catch(() => null);
   });
 }
