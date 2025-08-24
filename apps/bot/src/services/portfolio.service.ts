@@ -52,6 +52,7 @@ export class PortfolioService {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const dlmm = (DLMM as any).default || DLMM;
       const owner = new PublicKey(walletAddress);
+
       const map: Map<string, PositionInfo> =
         await dlmm.getAllLbPairPositionsByUser(this.connection, owner);
 
@@ -160,15 +161,19 @@ export class PortfolioService {
 
         const totalXRaw = p.totalXAmountExcludeTransferFee ?? p.totalXAmount;
         const totalYRaw = p.totalYAmountExcludeTransferFee ?? p.totalYAmount;
+        const current_x_amount = toNum(totalXRaw, xDecimals);
+        const current_y_amount = toNum(totalYRaw, yDecimals);
 
-        const amountX = toNum(totalXRaw, xDecimals);
-        const amountY = toNum(totalYRaw, yDecimals);
-        const current_value_usd = amountX * xPrice + amountY * yPrice;
+        const current_value_usd =
+          current_x_amount * xPrice + current_y_amount * yPrice;
 
-        const unclaimedX = toNum(p.feeX, xDecimals);
-        const unclaimedY = toNum(p.feeY, yDecimals);
+        const unclaimed_fees_x = toNum(p.feeX, xDecimals);
+        const unclaimed_fees_y = toNum(p.feeY, yDecimals);
+        const claimed_fees_x = toNum(p.totalClaimedFeeXAmount, xDecimals);
+        const claimed_fees_y = toNum(p.totalClaimedFeeYAmount, yDecimals);
+
         const total_unclaimed_fees_usd =
-          unclaimedX * xPrice + unclaimedY * yPrice;
+          unclaimed_fees_x * xPrice + unclaimed_fees_y * yPrice;
 
         const [claimedFees, deposits, withdraws, rewards] = await Promise.all([
           meteoraService.getPositionClaimFees(addr),
@@ -176,7 +181,6 @@ export class PortfolioService {
           meteoraService.getPositionWithdraws(addr),
           meteoraService.getPositionClaimRewards(addr),
         ]);
-
         const total_claimed_fees_usd =
           sumClaimFeesUsd(claimedFees) + sumRewardsUsd(rewards);
         const total_deposits_usd = sumDepWdrUsd(deposits);
@@ -202,14 +206,20 @@ export class PortfolioService {
             mint: xMint,
             symbol: xInfo?.symbol ?? xMint.slice(0, 4),
             decimals: xDecimals,
-            image: xInfo?.icon,
+            image: xInfo?.icon || "",
           },
           token_y_info: {
             mint: yMint,
             symbol: yInfo?.symbol ?? yMint.slice(0, 4),
             decimals: yDecimals,
-            image: yInfo?.icon,
+            image: yInfo?.icon || "",
           },
+          current_x_amount,
+          current_y_amount,
+          unclaimed_fees_x,
+          unclaimed_fees_y,
+          claimed_fees_x,
+          claimed_fees_y,
           current_value_usd,
           total_deposits_usd,
           total_withdrawals_usd,

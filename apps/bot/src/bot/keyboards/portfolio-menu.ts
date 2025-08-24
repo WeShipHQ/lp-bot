@@ -1,26 +1,17 @@
 import { PortfolioData, PortfolioPosition } from "@/types/portfolio.types";
 import { InlineKeyboardMarkup } from "node_modules/telegraf/typings/core/types/typegram";
 
-export function getPortfolioOverviewKeyboard(
-  data: PortfolioData
+export function getOverviewKeyboard(
+  _data: PortfolioData
 ): InlineKeyboardMarkup {
-  const rows: { text: string; callback_data: string }[][] = [];
-
-  data.positions.forEach((p, i) => {
-    rows.push([
-      {
-        text: `/${i + 1} ${p.token_x_info.symbol}-${p.token_y_info.symbol}`,
-        callback_data: `pos:${i}`,
-      },
-    ]);
-  });
-
-  rows.push([
-    { text: "Refresh", callback_data: "portfolio:refresh" },
-    { text: "Close", callback_data: "ui:close" },
-  ]);
-
-  return { inline_keyboard: rows };
+  return {
+    inline_keyboard: [
+      [
+        { text: "Refresh", callback_data: "portfolio:refresh" },
+        { text: "Close", callback_data: "ui:close" },
+      ],
+    ],
+  };
 }
 
 export function getPositionDetailKeyboard(
