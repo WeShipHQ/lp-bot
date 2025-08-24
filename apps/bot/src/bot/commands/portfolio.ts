@@ -1,6 +1,9 @@
 import { Telegraf } from "telegraf";
 import { FastifyInstance } from "fastify";
-import { portfolioHandler } from "../handlers/portfolio";
+import {
+  portfolioHandler,
+  registerPortfolioCallbacks,
+} from "../handlers/portfolio";
 import { BotContext } from "@/types/bot.types";
 
 export function portfolioCommand(
@@ -8,4 +11,5 @@ export function portfolioCommand(
   server: FastifyInstance
 ) {
   bot.command("portfolio", (ctx) => portfolioHandler(ctx, server));
+  registerPortfolioCallbacks(bot, server);
 }
