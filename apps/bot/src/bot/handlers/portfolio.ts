@@ -7,9 +7,11 @@ import {
   getPositionDetailKeyboard,
 } from "../keyboards/portfolio-menu";
 import { PortfolioData } from "@/types/portfolio.types";
-import { Telegraf } from "node_modules/telegraf/typings/telegraf";
 
 const session = new Map<number, PortfolioData>();
+const noPreview = () => ({
+  link_preview_options: { is_disabled: true as const },
+});
 
 export async function portfolioHandler(
   ctx: BotContext,
@@ -45,6 +47,7 @@ export async function portfolioHandler(
 
   await ctx.reply(responseMessage, {
     parse_mode: "Markdown",
+    ...noPreview(),
     reply_markup: getOverviewKeyboard(data),
   });
 }
@@ -53,7 +56,6 @@ export function registerPortfolioCallbacks(
   bot: import("telegraf").Telegraf<BotContext>,
   _server: FastifyInstance
 ) {
-  // khi user bấm vào /<index>
   bot.hears(/^\/(\d+)\b/, async (ctx) => {
     const chatId = ctx.chat!.id;
     const data = session.get(chatId);
@@ -68,11 +70,11 @@ export function registerPortfolioCallbacks(
 
     await ctx.reply(MessageService.getPositionDetailMessage(p, idx), {
       parse_mode: "Markdown",
+      ...noPreview(),
       reply_markup: getPositionDetailKeyboard(p, idx),
     });
   });
 
-  // back về overview (edit message đang mở chi tiết)
   bot.action("portfolio:back", async (ctx) => {
     const chatId = ctx.chat!.id;
     const data = session.get(chatId);
@@ -82,12 +84,12 @@ export function registerPortfolioCallbacks(
       MessageService.getPortfolioOverviewMessage(data),
       {
         parse_mode: "Markdown",
+        ...noPreview(),
         reply_markup: getOverviewKeyboard(data),
       }
     );
   });
 
-  // refresh overview
   bot.action("portfolio:refresh", async (ctx) => {
     const wallet = ctx.user?.walletAddress;
     if (!wallet) return;
@@ -103,13 +105,13 @@ export function registerPortfolioCallbacks(
       MessageService.getPortfolioOverviewMessage(res.data),
       {
         parse_mode: "Markdown",
+        ...noPreview(),
         reply_markup: getOverviewKeyboard(res.data),
       }
     );
     await ctx.answerCbQuery("Refreshed");
   });
 
-  // các action ở detail (placeholder)
   bot.action(/^pos:claim:\d+$/, async (ctx) => {
     await ctx.answerCbQuery("Claim flow not implemented.");
   });
@@ -126,6 +128,7 @@ export function registerPortfolioCallbacks(
     p.auto_rebalancing_enabled = !p.auto_rebalancing_enabled;
     await ctx.editMessageText(MessageService.getPositionDetailMessage(p, idx), {
       parse_mode: "Markdown",
+      ...noPreview(),
       reply_markup: getPositionDetailKeyboard(p, idx),
     });
     await ctx.answerCbQuery(
