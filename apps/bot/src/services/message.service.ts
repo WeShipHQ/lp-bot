@@ -1,11 +1,6 @@
 import { formatCurrency } from "@/bot/utils/formatters";
 import { PortfolioData, PortfolioPosition } from "@/types/portfolio.types";
 
-const fmtPct = (x?: number) => {
-  if (x === undefined || x === null) return "—";
-  const v = x > 1 ? x : x * 100;
-  return `${v.toFixed(2)}%`;
-};
 const pct = (x?: number) =>
   x == null ? "—" : `${(x > 1 ? x : x * 100).toFixed(2)}%`;
 const fmtAmt = (n?: number) =>
@@ -61,39 +56,27 @@ export class MessageService {
   static getPortfolioOverviewMessage(data: PortfolioData): string {
     const list = data.positions ?? [];
     const t = data.totals;
-    const header =
-      `💼 Wallet: \`${data.walletAddress}\`\n` +
-      `Total Positions: ${t.total_positions} | Total Deposit: ${formatCurrency(t.total_current_value_usd)}\n\n`;
 
-    const body = list
+    let msg = `\u{1F4BC} Wallet: \`${data.walletAddress}\`\n`;
+    msg += `Total Positions: ${t.total_positions} | Total Deposit: ${formatCurrency(t.total_current_value_usd)}\n\n`;
+
+    msg += list
       .map((p, i) => {
-        const line1 = `/${i + 1} ${pair(p)}`;
-        const line2 = `• Pool: \`${p.pool_address}\``;
-        const line3 = `• Address: \`${p.position_address}\``;
-
+        const line1 = `/${i + 1} \`${pair(p)}\``;
         const balance =
-          (p as any).current_x_amount != null &&
-          (p as any).current_y_amount != null
-            ? `• Position Balance: ${fmtAmt((p as any).current_x_amount)} ${p.token_x_info.symbol} / ${fmtAmt(
-                (p as any).current_y_amount
-              )} ${p.token_y_info.symbol} (${formatCurrency(p.current_value_usd)})`
+          p.current_x_amount != null && p.current_y_amount != null
+            ? `• Position Balance: ${fmtAmt(p.current_x_amount)} ${p.token_x_info.symbol} / ${fmtAmt(p.current_y_amount)} ${p.token_y_info.symbol} (${formatCurrency(p.current_value_usd)})`
             : `• Position Balance: ${formatCurrency(p.current_value_usd)}`;
 
         const unclaimed =
-          (p as any).unclaimed_fees_x != null &&
-          (p as any).unclaimed_fees_y != null
-            ? `• Unclaimed Fees: ${fmtAmt((p as any).unclaimed_fees_x)} ${p.token_x_info.symbol} / ${fmtAmt(
-                (p as any).unclaimed_fees_y
-              )} ${p.token_y_info.symbol} (${formatCurrency(p.total_unclaimed_fees_usd)})`
+          p.unclaimed_fees_x != null && p.unclaimed_fees_y != null
+            ? `• Unclaimed Fees: ${fmtAmt(p.unclaimed_fees_x)} ${p.token_x_info.symbol} / ${fmtAmt(p.unclaimed_fees_y)} ${p.token_y_info.symbol} (${formatCurrency(p.total_unclaimed_fees_usd)})`
             : `• Unclaimed Fees: ${formatCurrency(p.total_unclaimed_fees_usd)}`;
 
         const claimed =
           p.total_claimed_fees_usd > 0
-            ? (p as any).claimed_fees_x != null &&
-              (p as any).claimed_fees_y != null
-              ? `• Claimed Fees: ${fmtAmt((p as any).claimed_fees_x)} ${p.token_x_info.symbol} / ${fmtAmt(
-                  (p as any).claimed_fees_y
-                )} ${p.token_y_info.symbol} (${formatCurrency(p.total_claimed_fees_usd)})`
+            ? p.claimed_fees_x != null && p.claimed_fees_y != null
+              ? `• Claimed Fees: ${fmtAmt(p.claimed_fees_x)} ${p.token_x_info.symbol} / ${fmtAmt(p.claimed_fees_y)} ${p.token_y_info.symbol} (${formatCurrency(p.total_claimed_fees_usd)})`
               : `• Claimed Fees: ${formatCurrency(p.total_claimed_fees_usd)}`
             : undefined;
 
@@ -101,13 +84,13 @@ export class MessageService {
           p.pool_fee_tvl_24h != null
             ? `• 24h Fee / TVL: ${pct(p.pool_fee_tvl_24h)}`
             : undefined;
-        const range = `• In Range: ${p.in_range ? "Yes" : "No"}`;
+        const range = `• In Range: ${p.in_range ? "✅" : "❌"}`;
         const updated = `• Updated: ${p.created_at}`;
 
         return [
           line1,
-          line2,
-          line3,
+          `• Pool: \`${p.pool_address}\``,
+          `• Address: \`${p.position_address}\``,
           balance,
           unclaimed,
           claimed,
@@ -120,7 +103,7 @@ export class MessageService {
       })
       .join("\n\n");
 
-    return header + body;
+    return msg;
   }
 
   static getPositionDetailMessage(p: PortfolioPosition, index: number): string {
@@ -129,25 +112,19 @@ export class MessageService {
     lines.push(`Pool: \`${p.pool_address}\``);
     lines.push(`Address: \`${p.position_address}\``);
 
-    if (
-      (p as any).current_x_amount != null &&
-      (p as any).current_y_amount != null
-    ) {
+    if (p.current_x_amount != null && p.current_y_amount != null) {
       lines.push(
-        `Position Balance: ${fmtAmt((p as any).current_x_amount)} ${p.token_x_info.symbol} / ` +
-          `${fmtAmt((p as any).current_y_amount)} ${p.token_y_info.symbol} (${formatCurrency(p.current_value_usd)})`
+        `Position Balance: ${fmtAmt(p.current_x_amount)} ${p.token_x_info.symbol} / ` +
+          `${fmtAmt(p.current_y_amount)} ${p.token_y_info.symbol} (${formatCurrency(p.current_value_usd)})`
       );
     } else {
       lines.push(`Position Balance: ${formatCurrency(p.current_value_usd)}`);
     }
 
-    if (
-      (p as any).unclaimed_fees_x != null &&
-      (p as any).unclaimed_fees_y != null
-    ) {
+    if (p.unclaimed_fees_x != null && p.unclaimed_fees_y != null) {
       lines.push(
-        `Unclaimed Fees: ${fmtAmt((p as any).unclaimed_fees_x)} ${p.token_x_info.symbol} / ` +
-          `${fmtAmt((p as any).unclaimed_fees_y)} ${p.token_y_info.symbol} (${formatCurrency(p.total_unclaimed_fees_usd)})`
+        `Unclaimed Fees: ${fmtAmt(p.unclaimed_fees_x)} ${p.token_x_info.symbol} / ` +
+          `${fmtAmt(p.unclaimed_fees_y)} ${p.token_y_info.symbol} (${formatCurrency(p.total_unclaimed_fees_usd)})`
       );
     } else {
       lines.push(
@@ -156,13 +133,10 @@ export class MessageService {
     }
 
     if (p.total_claimed_fees_usd > 0) {
-      if (
-        (p as any).claimed_fees_x != null &&
-        (p as any).claimed_fees_y != null
-      ) {
+      if (p.claimed_fees_x != null && p.claimed_fees_y != null) {
         lines.push(
-          `Claimed Fees: ${fmtAmt((p as any).claimed_fees_x)} ${p.token_x_info.symbol} / ` +
-            `${fmtAmt((p as any).claimed_fees_y)} ${p.token_y_info.symbol} (${formatCurrency(p.total_claimed_fees_usd)})`
+          `Claimed Fees: ${fmtAmt(p.claimed_fees_x)} ${p.token_x_info.symbol} / ` +
+            `${fmtAmt(p.claimed_fees_y)} ${p.token_y_info.symbol} (${formatCurrency(p.total_claimed_fees_usd)})`
         );
       } else {
         lines.push(`Claimed Fees: ${formatCurrency(p.total_claimed_fees_usd)}`);
@@ -171,67 +145,11 @@ export class MessageService {
 
     if (p.pool_fee_tvl_24h != null)
       lines.push(`24h Fee / TVL: ${pct(p.pool_fee_tvl_24h)}`);
-    lines.push(`In Range: ${p.in_range ? "Yes" : "No"}`);
+    lines.push(`In Range: ${p.in_range ? "✅" : "❌"}`);
     lines.push(`Updated: ${p.created_at}`);
     lines.push(`Dexscreener: ${dexUrl(p.pool_address)}`);
 
     return title + "\n" + lines.join("\n");
-  }
-
-  /**
-   * Generate portfolio message
-   */
-  static getPortfolioMessage(data: PortfolioData): string {
-    const list = data.positions ?? [];
-    if (list.length === 0) return "❌ No LP positions found for this wallet.";
-
-    // Fallback totals nếu caller chưa cung cấp
-    const t = data.totals ?? {
-      total_positions: list.length,
-      total_current_value_usd: list.reduce(
-        (s, p) => s + p.current_value_usd,
-        0
-      ),
-      total_unclaimed_fees_usd: list.reduce(
-        (s, p) => s + p.total_unclaimed_fees_usd,
-        0
-      ),
-      total_claimed_fees_usd: list.reduce(
-        (s, p) => s + p.total_claimed_fees_usd,
-        0
-      ),
-      total_deposits_usd: list.reduce((s, p) => s + p.total_deposits_usd, 0),
-      total_withdrawals_usd: list.reduce(
-        (s, p) => s + p.total_withdrawals_usd,
-        0
-      ),
-      total_pnl_usd: list.reduce((s, p) => s + p.pnl_usd, 0),
-      total_net_deposited_usd: 0,
-    };
-
-    let msg = "📊 *Portfolio Overview:*\n\n";
-    msg += `🏦 *Wallet:* \`${data.walletAddress}\`\n`;
-    msg += `*Total Positions:* ${t.total_positions} | *Total Deposit:* ${formatCurrency(
-      t.total_current_value_usd
-    )}\n\n`;
-
-    list.forEach((p, i) => {
-      msg += `/${i + 1} ${p.token_x_info.symbol}-${p.token_y_info.symbol}\n`;
-      msg += `• *Pool:* \`${p.pool_address}\`\n`;
-      msg += `• *Address:* \`${p.position_address}\`\n`;
-      msg += `• *Current Value (TVL):* ${formatCurrency(p.current_value_usd)}\n`;
-      msg += `• *Unclaimed fees:* ${formatCurrency(p.total_unclaimed_fees_usd)}\n`;
-      if (p.total_claimed_fees_usd > 0) {
-        msg += `• *Claimed fees:* ${formatCurrency(p.total_claimed_fees_usd)}\n`;
-      }
-      if (p.pool_fee_tvl_24h !== undefined) {
-        msg += `• *24h Fee / TVL:* ${fmtPct(p.pool_fee_tvl_24h)}\n`;
-      }
-      msg += `• *In Range:* ${p.in_range ? "🟢" : "🔴"}\n`;
-      msg += `• *Updated:* ${p.created_at}\n\n`;
-    });
-
-    return msg;
   }
 
   /**
