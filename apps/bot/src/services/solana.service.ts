@@ -10,7 +10,7 @@ import {
   AccountMeta
 } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { privy, PrivyService } from "./privy.service";
+import { PrivyService } from "./privy.service";
 import { CONFIG } from "../config";
 
 export interface WalletInfo {
@@ -37,8 +37,8 @@ export interface TransferTokenParams {
 export class SolanaService {
   private connection: Connection;
   private maxRetries = 3;
-  private retryDelay = 1000; // 1 second
-  private requestTimeout = 10000; // 10 seconds timeout for RPC requests
+  private retryDelay = 1000;
+  private requestTimeout = 10000; 
 
   constructor() {
     this.connection = new Connection(CONFIG.SOLANA.RPC_URL);
@@ -217,20 +217,16 @@ export class SolanaService {
           error.message?.includes("Too Many Requests");
           
         if (isRateLimit && attempt < maxRetries - 1) {
-          // Calculate delay with exponential backoff
           const delay = baseDelay * Math.pow(2, attempt);
 
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
-        
-        // If not a rate limit or last attempt, rethrow
         console.error("Error getting token account address:", error);
         throw new Error(`Failed to get token account: ${error instanceof Error ? error.message : "Unknown error"}`);
       }
     }
     
-    // If we've exhausted all retries
     throw lastError || new Error("Failed to get token account after multiple retries");
   }
 
@@ -245,10 +241,9 @@ export class SolanaService {
       throw new Error("Invalid wallet or token address");
     }
 
-    // Implement retry with exponential backoff for RPC rate limiting
     let lastError: Error | null = null;
     const maxRetries = 5;
-    let baseDelay = 500; // Start with 500ms delay
+    let baseDelay = 500;
     
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
@@ -272,26 +267,20 @@ export class SolanaService {
       } catch (error: any) {
         lastError = error;
         
-        // Check if it's a rate limit error
         const isRateLimit = 
           error.message?.includes("429") || 
           error.message?.includes("Too Many Requests");
           
         if (isRateLimit && attempt < maxRetries - 1) {
-          // Calculate delay with exponential backoff
           const delay = baseDelay * Math.pow(2, attempt);
 
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
-        
-        // If not a rate limit or last attempt, rethrow
         console.error("Error getting token balance:", error);
         throw new Error(`Failed to get token balance: ${error instanceof Error ? error.message : "Unknown error"}`);
       }
     }
-    
-    // If we've exhausted all retries
     throw lastError || new Error("Failed to get token balance after multiple retries");
   }
 
@@ -459,7 +448,6 @@ export class SolanaService {
           throw error;
         }
         // If balance check fails, use the original amount
-        // Fallback to original amount if balance check fails
         lamports = Math.floor(amount * LAMPORTS_PER_SOL);
       }
       
@@ -467,8 +455,6 @@ export class SolanaService {
       const connection = new Connection(clusterApiUrl("mainnet-beta"));
       
       // Step 3: Create a valid placeholder wallet public key
-      // Privy will replace this with the actual wallet address during signing
-      // Use a real Solana address format to avoid base58 errors
       const walletPublicKey = new PublicKey(walletAddress);
       
       // Step 5: Create transfer instruction
