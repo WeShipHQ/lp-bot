@@ -53,6 +53,13 @@ export class MessageService {
     static getTransferSolRequestMessage(): string {
       return "💸 *Transfer SOL*\n\nPlease enter the recipient's wallet address and the amount to transfer in the format:\n\n`address amount`\n\nExample: `GgS64xkW9JqR3VkBn4fpPi7sMqcnAzqRWTUXbBZhHpLT 0.1`\n\nOr type /cancel to cancel the transfer.";
     }
+    
+    /**
+     * Generate transfer ALL SOL request message
+     */
+    static getTransferAllSolRequestMessage(): string {
+      return "💸 *Transfer ALL SOL*\n\nPlease enter the recipient's wallet address:\n\n`address`\n\nExample: `GgS64xkW9JqR3VkBn4fpPi7sMqcnAzqRWTUXbBZhHpLT`\n\nThis will transfer your entire SOL balance (minus transaction fees).\n\nOr type /cancel to cancel the transfer.";
+    }
 
     /**
      * Generate transfer SOL confirmation message
@@ -102,6 +109,13 @@ export class MessageService {
     static getTransferTokenRequestMessage(): string {
       return "💸 *Transfer SPL Token*\n\nPlease enter the token address, recipient address, and amount to transfer in the format:\n\n`tokenAddress recipientAddress amount`\n\nExample: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v GgS64xkW9JqR3VkBn4fpPi7sMqcnAzqRWTUXbBZhHpLT 10`\n\nNote: The recipient must have already interacted with this token before. They need to have a token account for this specific token.\n\nOr type /cancel to cancel the transfer.";
     }
+    
+    /**
+     * Generate transfer all tokens request message
+     */
+    static getTransferAllTokensRequestMessage(): string {
+      return "💸 *Transfer All of a Token*\n\nPlease enter the token address and recipient address in the format:\n\n`tokenAddress recipientAddress`\n\nExample: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v GgS64xkW9JqR3VkBn4fpPi7sMqcnAzqRWTUXbBZhHpLT`\n\nThis will transfer your entire balance of the specified token.\n\nNote: The recipient must have already interacted with this token before. They need to have a token account for this specific token.\n\nOr type /cancel to cancel the transfer.";
+    }
 
     /**
      * Generate transfer token confirmation message
@@ -137,7 +151,7 @@ export class MessageService {
      * Generate transfer token success message
      */
     static getTransferTokenSuccessMessage(tokenSymbol: string, recipientAddress: string, amount: number, signature: string): string {
-      return `✅ *Token Transfer Successful*\n\n` +
+      return `*Token Transfer Successful*\n\n` +
         `Successfully sent *${amount} ${tokenSymbol}* to:\n` +
         `\`${recipientAddress}\`\n\n` +
         `Transaction signature:\n` +

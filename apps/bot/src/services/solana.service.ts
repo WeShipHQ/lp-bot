@@ -38,6 +38,7 @@ export class SolanaService {
   private connection: Connection;
   private maxRetries = 3;
   private retryDelay = 1000; // 1 second
+  private requestTimeout = 10000; // 10 seconds timeout for RPC requests
 
   constructor() {
     this.connection = new Connection(CONFIG.SOLANA.RPC_URL);
@@ -75,26 +76,39 @@ export class SolanaService {
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
         const publicKey = new PublicKey(address);
-        const balance = await this.connection.getBalance(publicKey);
+        
+        // Create a timeout promise
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('RPC request timeout')), this.requestTimeout);
+        });
+        
+        // Race between the actual request and timeout
+        const balance = await Promise.race([
+          this.connection.getBalance(publicKey),
+          timeoutPromise
+        ]) as number;
+        
         return balance / LAMPORTS_PER_SOL;
       } catch (error) {
         lastError = error as Error;
-        console.error(
-          `Attempt ${attempt} failed to fetch balance for ${address}:`,
-          error
-        );
+        
+        // Only log first attempt errors or timeout errors
+        if (attempt === 1 || (error instanceof Error && error.message.includes('timeout'))) {
+          console.error(`Balance fetch attempt ${attempt} failed for ${address}:`, 
+            error instanceof Error ? error.message : 'Unknown error');
+        }
 
         if (attempt < this.maxRetries) {
-          await this.delay(this.retryDelay * attempt);
+          // Exponential backoff
+          await this.delay(this.retryDelay * Math.pow(2, attempt - 1));
         }
       }
     }
 
-    console.error(
-      `Failed to fetch balance after ${this.maxRetries} attempts:`,
-      lastError
-    );
-    throw new Error("Failed to fetch balance after multiple attempts");
+    // If all attempts fail, return 0 balance instead of throwing error
+    // This is more user-friendly than showing an error
+    console.error(`Failed to fetch balance after ${this.maxRetries} attempts`);
+    return 0;
   }
 
   /**

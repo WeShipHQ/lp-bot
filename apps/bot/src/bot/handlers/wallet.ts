@@ -76,74 +76,147 @@ export async function handleTransferInput(ctx: BotContext, _server: FastifyInsta
       return true;
     }
 
-    if (transferState.step === "token_input") {
-      const parts = messageText.trim().split(/\s+/);
+          if (transferState.step === "token_input") {
+        const parts = messageText.trim().split(/\s+/);
+        
+        // Different handling based on transfer type
+        if (transferState.type === "all_tokens") {
+          // For transfer all tokens, we expect just token address and recipient address
+          if (parts.length !== 2) {
+            await ctx.reply(MessageService.getErrorMessage("Please enter the token address and recipient address in the format: tokenAddress recipientAddress"));
+            return true;
+          }
+          
+          const [tokenAddress, recipientAddress] = parts;
+          
+          if (!solanaService.validateAddress(tokenAddress)) {
+            await ctx.reply(MessageService.getErrorMessage("Invalid token address. Please check and try again."));
+            return true;
+          }
+          
+          if (!solanaService.validateAddress(recipientAddress)) {
+            await ctx.reply(MessageService.getErrorMessage("Invalid recipient address. Please check and try again."));
+            return true;
+          }
+          
+          // Store the values in the state for later use
+          transferState.tokenAddress = tokenAddress;
+          transferState.recipientAddress = recipientAddress;
+          
+          // For transfer all, we'll get the balance later
+          ctx.session.transferState = {
+            ...transferState,
+            step: "token_confirmation"
+          };
+        } else {
+          // For transfer specific amount of tokens
+          if (parts.length !== 3) {
+            await ctx.reply(MessageService.getErrorMessage("Please enter the token address, recipient address, and amount in the format: tokenAddress recipientAddress amount"));
+            return true;
+          }
 
-      if (parts.length !== 3) {
-        await ctx.reply(MessageService.getErrorMessage("Please enter the token address, recipient address, and amount in the format: tokenAddress recipientAddress amount"));
-        return true;
-      }
+          const [tokenAddress, recipientAddress, amountStr] = parts;
+          const amount = parseFloat(amountStr);
 
-      const [tokenAddress, recipientAddress, amountStr] = parts;
-      const amount = parseFloat(amountStr);
+          if (!solanaService.validateAddress(tokenAddress)) {
+            await ctx.reply(MessageService.getErrorMessage("Invalid token address. Please check and try again."));
+            return true;
+          }
 
-      if (!solanaService.validateAddress(tokenAddress)) {
-        await ctx.reply(MessageService.getErrorMessage("Invalid token address. Please check and try again."));
-        return true;
-      }
+          if (!solanaService.validateAddress(recipientAddress)) {
+            await ctx.reply(MessageService.getErrorMessage("Invalid recipient address. Please check and try again."));
+            return true;
+          }
 
-      if (!solanaService.validateAddress(recipientAddress)) {
-        await ctx.reply(MessageService.getErrorMessage("Invalid recipient address. Please check and try again."));
-        return true;
-      }
-
-      if (isNaN(amount) || amount <= 0) {
-        await ctx.reply(MessageService.getErrorMessage("Please enter a valid amount greater than 0."));
-        return true;
-      }
+          if (isNaN(amount) || amount <= 0) {
+            await ctx.reply(MessageService.getErrorMessage("Please enter a valid amount greater than 0."));
+            return true;
+          }
+          
+          // Store the values in the state for later use
+          transferState.tokenAddress = tokenAddress;
+          transferState.recipientAddress = recipientAddress;
+          transferState.amount = amount;
+          
+          ctx.session.transferState = {
+            ...transferState,
+            tokenAddress,
+            recipientAddress,
+            amount,
+            step: "token_confirmation"
+          };
+        }
 
       // Get token info
       await ctx.reply("⏳ Looking up token information...");
 
       try {
         // Get token balance and info
-        const { balance, decimals } = await solanaService.getTokenBalance(ctx.user?.walletAddress as string, tokenAddress);
+        const { balance, decimals } = await solanaService.getTokenBalance(ctx.user?.walletAddress as string, transferState.tokenAddress as string);
 
-        if (balance < amount) {
+        if (transferState.type === "token" && balance < (transferState.amount as number)) {
           await ctx.reply(MessageService.getErrorMessage(`Insufficient token balance. You have ${balance} tokens available.`));
           return true;
         }
 
-        const tokenInfo = await jupiterService.getTokenInfo(tokenAddress);
+        const tokenInfo = await jupiterService.getTokenInfo(transferState.tokenAddress as string);
 
         if (!tokenInfo) {
           throw new Error("Could not get token information");
         }
 
-        // Update state
-        ctx.session.transferState = {
-          ...transferState,
-          tokenAddress,
-          tokenSymbol: tokenInfo.symbol,
-          tokenName: tokenInfo.name,
-          recipientAddress,
-          amount,
-          decimals,
-          step: "token_confirmation"
-        };
-
-        await ctx.reply(
-          MessageService.getTransferTokenConfirmationMessage(
-            tokenInfo.symbol,
-            tokenInfo.name,
-            recipientAddress,
-            amount
-          ),
-          {
-            parse_mode: "Markdown",
-            reply_markup: getTransferConfirmKeyboard()
+        // Update state based on transfer type
+        if (transferState.type === "all_tokens") {
+          // For transfer all tokens, use the current balance as amount
+          if (balance <= 0) {
+            await ctx.reply(MessageService.getErrorMessage(`You don't have any ${tokenInfo.symbol} tokens to transfer.`));
+            return true;
           }
-        );
+          
+          ctx.session.transferState = {
+            ...transferState,
+            tokenSymbol: tokenInfo.symbol,
+            tokenName: tokenInfo.name,
+            amount: balance, // Use full balance
+            decimals,
+            step: "token_confirmation"
+          };
+          
+          // Send confirmation message for transfer all
+          await ctx.reply(
+            `🔍 *Confirm Transfer All Tokens*\n\n` +
+            `You are about to send *ALL ${balance} ${tokenInfo.symbol}* (${tokenInfo.name}) to:\n` +
+            `\`${transferState.recipientAddress}\`\n\n` +
+            `Please confirm this transaction by clicking the button below.`,
+            {
+              parse_mode: "Markdown",
+              reply_markup: getTransferConfirmKeyboard()
+            }
+          );
+        } else {
+          // For transfer specific amount
+          ctx.session.transferState = {
+            ...transferState,
+            tokenSymbol: tokenInfo.symbol,
+            tokenName: tokenInfo.name,
+            decimals,
+            step: "token_confirmation"
+          };
+          
+          // Send confirmation message for specific amount
+          await ctx.reply(
+            MessageService.getTransferTokenConfirmationMessage(
+              tokenInfo.symbol,
+              tokenInfo.name,
+              transferState.recipientAddress as string,
+              transferState.amount as number
+            ),
+            {
+              parse_mode: "Markdown",
+              reply_markup: getTransferConfirmKeyboard()
+            }
+          );
+        }
 
       } catch (error) {
         console.error("Error getting token info:", error);
@@ -314,7 +387,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
             }
           };
           
-          await ctx.reply(MessageService.getTransferSolRequestMessage(), {
+          await ctx.reply(MessageService.getTransferAllSolRequestMessage(), {
             parse_mode: "Markdown",
             reply_markup: { force_reply: true }
           });
@@ -347,12 +420,25 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
         break;
 
       case "transfer_all_tokens":
-        await ctx.reply(
-          "🚧 *Transfer All Tokens*\n\nThis feature is coming soon! You'll be able to transfer all your SPL tokens to another wallet.",
-          {
+        try {
+          await ctx.answerCbQuery("⏳ Preparing to transfer all tokens");
+          
+          ctx.session = {
+            ...ctx.session,
+            transferState: {
+              type: "all_tokens",
+              step: "token_input"
+            }
+          };
+          
+          await ctx.reply(MessageService.getTransferAllTokensRequestMessage(), {
             parse_mode: "Markdown",
+            reply_markup: { force_reply: true }
+          });
+        } catch (error) {
+          console.error("Transfer all tokens error:", error);
+          await ctx.reply(MessageService.getErrorMessage("Failed to prepare token transfer. Please try again."));
           }
-        );
         break;
 
       case "transfer_x_tokens":
@@ -434,7 +520,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
           });
           
           // Check if this is a token transfer or SOL transfer
-          if (transferState.type === "token" && transferState.tokenAddress && transferState.step === "token_confirmation") {
+          if ((transferState.type === "token" || transferState.type === "all_tokens") && transferState.tokenAddress && transferState.step === "token_confirmation") {
             const result = await solanaService.transferToken({
               walletId: ctx.user.walletId,
               walletAddress: ctx.user.walletAddress as string,
@@ -497,7 +583,6 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
             await ctx.reply(message, { parse_mode: "Markdown" });
           }
           
-          // Clear transfer state
           delete ctx.session.transferState;
           
         } catch (error) {

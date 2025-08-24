@@ -1,8 +1,8 @@
 import type { Context } from "telegraf";
 
 interface TransferState {
-   type: "all_sol" | "specific_sol" | "all_tokens" | "specific_tokens" | "token";
-  step: "address_input" | "amount_input" | "confirmation" | "token_input" | "token_confirmation";
+  type: "all_sol" | "specific_sol" | "all_tokens" | "specific_tokens" | "token";
+  step: "address_input" | "amount_input" | "confirmation" | "token_input" | "token_confirmation" | "token_confirmation_all";
   recipientAddress?: string;
   amount?: number;
   tokenMint?: string;

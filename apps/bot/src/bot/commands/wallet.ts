@@ -19,7 +19,9 @@ export function walletCommand(
         await next();
       }
     } catch (error) {
-      console.error("Error in transfer handler:", error);
+      if (error instanceof Error && !error.message.includes("not in transfer mode")) {
+        console.error("Error in transfer handler:", error);
+      }
       await next();
     }
   });
