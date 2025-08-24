@@ -1,9 +1,4 @@
 import {
-  DlmmClaimFee,
-  DlmmClaimReward,
-  DlmmDepositWithdraw,
-} from "@/types/portfolio.types";
-import {
   MeteoraPoolData,
   DlmmPoolResponse,
   DammV1PoolResponse,
@@ -162,48 +157,6 @@ export class MeteoraService {
       console.error(`[Meteora] Error validating pool ${poolId}:`, error);
       return false;
     }
-  }
-
-  async getPositionClaimFees(positionAddress: string): Promise<DlmmClaimFee[]> {
-    const url = `${this.dlmmApiUrl}/position/${positionAddress}/claim_fees`;
-    const res = await this.fetchWithRetry(url);
-    if (res.status === 404) return [];
-    if (!res.ok) throw new Error(`DLMM claim_fees error ${res.status}`);
-    const data = (await res.json()) as DlmmClaimFee[];
-    return Array.isArray(data) ? data : [];
-  }
-
-  async getPositionClaimRewards(
-    positionAddress: string
-  ): Promise<DlmmClaimReward[]> {
-    const url = `${this.dlmmApiUrl}/position/${positionAddress}/claim_rewards`;
-    const res = await this.fetchWithRetry(url);
-    if (res.status === 404) return [];
-    if (!res.ok) throw new Error(`DLMM claim_rewards error ${res.status}`);
-    const data = (await res.json()) as DlmmClaimReward[];
-    return Array.isArray(data) ? data : [];
-  }
-
-  async getPositionDeposits(
-    positionAddress: string
-  ): Promise<DlmmDepositWithdraw[]> {
-    const url = `${this.dlmmApiUrl}/position/${positionAddress}/deposits`;
-    const res = await this.fetchWithRetry(url);
-    if (res.status === 404) return [];
-    if (!res.ok) throw new Error(`DLMM deposits error ${res.status}`);
-    const data = (await res.json()) as DlmmDepositWithdraw[];
-    return Array.isArray(data) ? data : [];
-  }
-
-  async getPositionWithdraws(
-    positionAddress: string
-  ): Promise<DlmmDepositWithdraw[]> {
-    const url = `${this.dlmmApiUrl}/position/${positionAddress}/withdraws`;
-    const res = await this.fetchWithRetry(url);
-    if (res.status === 404) return [];
-    if (!res.ok) throw new Error(`DLMM withdraws error ${res.status}`);
-    const data = (await res.json()) as DlmmDepositWithdraw[];
-    return Array.isArray(data) ? data : [];
   }
 
   /**

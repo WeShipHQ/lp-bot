@@ -113,14 +113,13 @@ export interface TokenInfo {
   name: string;
   symbol: string;
   icon?: string;
-  decimals: number;
   price: number;
   priceChange24h: number;
   marketCap: number;
   volume24h: number;
   liquidity: number;
   isVerified: boolean;
-  source: "jupiter" | "meteora";
+  source: 'jupiter' | 'meteora';
 }
 
 export interface TokenDisplayData {
@@ -130,12 +129,7 @@ export interface TokenDisplayData {
 }
 
 // Updated Input Detection Types
-export type TokenInputType =
-  | "address"
-  | "meteora_damm_v1"
-  | "meteora_damm_v2"
-  | "meteora_dlmm"
-  | "start_param";
+export type TokenInputType = 'address' | 'meteora_damm_v1' | 'meteora_damm_v2' | 'meteora_dlmm' | 'start_param';
 
 export interface TokenInputDetection {
   type: TokenInputType;
