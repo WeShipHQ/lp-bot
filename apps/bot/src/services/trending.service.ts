@@ -1,9 +1,5 @@
 import { PoolTrendingItem, TrendingPageState } from "@/types/trending.types";
-import {
-  HotPoolsService,
-  hotPoolsService,
-  
-} from "./hot-pools.service";
+import { HotPoolsService, hotPoolsService } from "./hot-pools.service";
 import { PoolSortCriteria, PoolSource } from "./hot-pools/types";
 
 export class TrendingService {
@@ -42,7 +38,6 @@ export class TrendingService {
     const st =
       this.pageStates.get(chatId) ||
       ({ items: [], page: 1 } as TrendingPageState);
-
     st.poolItems = poolItems;
     st.page = clamped + 1;
     st.apiPage = clamped;
@@ -83,7 +78,7 @@ export class TrendingService {
       ].join("\n");
     }
 
-    const fmt = (n?: number | null) => {
+    const fmtMoney = (n?: number | null) => {
       if (n == null) return "N/A";
       const v = Math.abs(n);
       if (v >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
@@ -91,13 +86,15 @@ export class TrendingService {
       if (v >= 1e3) return `$${(n / 1e3).toFixed(2)}K`;
       return `$${n.toFixed(2)}`;
     };
-    const fmtPercent = (n: number) => `${n.toFixed(2)}%`;
+    const fmtPct = (n: number) => `${n.toFixed(2)}%`;
 
-    const lines = poolItems.map((pool, idx) => {
-      const apy = fmtPercent(pool.apy);
-      const fee24h = fmt(pool.fee24h);
-      const tvl = fmt(pool.tvl);
-      return `${(page - 1) * 5 + idx + 1}) ${pool.tokenPair} APY: *${apy}* | Fee24h: *${fee24h}* | TVL: *${tvl}*`;
+    const lines = poolItems.map((pool, i) => {
+      const apy = fmtPct(pool.apy);
+      const fee24h = fmtMoney(pool.fee24h);
+      const tvl = fmtMoney(pool.tvl);
+      const n = (page - 1) * 5 + i + 1;
+
+      return `/${n} ${pool.tokenPair} APY: *${apy}* | Fee24h: *${fee24h}* | TVL: *${tvl}*`;
     });
 
     const spaced: string[] = [];
