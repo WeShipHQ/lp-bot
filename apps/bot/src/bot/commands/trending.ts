@@ -9,45 +9,52 @@ export function trendingCommand(
   bot: Telegraf<BotContext>,
   server: FastifyInstance
 ) {
-  bot.command("trending", (ctx: Context) =>
-    trendingHandler(ctx as any, server)
+  bot.command("trending", (context: Context) =>
+    trendingHandler(context as any, server)
   );
 
-  bot.action(/^tr_(next|prev|refresh)_[0-9]+$/, (ctx) =>
-    handleTrendingCallback(ctx, server)
+  bot.action(/^tr_(next|prev|refresh)_[0-9]+$/, (context) =>
+    handleTrendingCallback(context, server)
   );
 
-  // bot.action(/^tr_sort_(apy|fee24h|fee_tvl_ratio)_[0-9]+$/, (ctx) => {
-  //   return handleTrendingCallback(ctx, server);
+  // bot.action(/^tr_sort_(apy|fee24h|fee_tvl_ratio)_[0-9]+$/, (context) => {
+  //   return handleTrendingCallback(context, server);
   // });
 
-  bot.action(/^tr_src_(dlmm|dammv1|dammv2)_[0-9]+$/, (ctx) =>
-    handleTrendingCallback(ctx, server)
+  bot.action(/^tr_src_(dlmm|dammv1|dammv2)_[0-9]+$/, (context) =>
+    handleTrendingCallback(context, server)
   );
 
-  bot.hears(/^\/([1-5])(?:@[A-Za-z0-9_]+)?$/, async (ctx) => {
+  bot.hears(/^\/([1-5])(?:@[A-Za-z0-9_]+)?$/, async (context) => {
     try {
-      const m = ctx.message?.text?.match(/^\/([1-5])(?:@[A-Za-z0-9_]+)?$/);
-      if (!m) return;
+      const match = context.message?.text?.match(
+        /^\/([1-5])(?:@[A-Za-z0-9_]+)?$/
+      );
+      if (!match) return;
 
-      const idx0 = Number(m[1]) - 1;
-      const chatId = ctx.chat!.id;
+      const poolIndex = Number(match[1]) - 1;
+      const chatId = context.chat!.id;
 
-      const st = trendingService.getState(chatId);
-      if (!st || !st.poolItems?.[idx0]) {
-        await ctx.reply("❌ Pool not found or list expired. Try /trending.");
+      const trendingState = trendingService.getState(chatId);
+      if (!trendingState || !trendingState.poolItems?.[poolIndex]) {
+        await context.reply(
+          "❌ Pool not found or list expired. Try /trending."
+        );
         return;
       }
 
-      const baseItem = st.poolItems[idx0];
-      const md = await buildPoolDetailMarkdown(st.poolSource!, baseItem);
+      const selectedPoolItem = trendingState.poolItems[poolIndex];
+      const detailMarkdown = await buildPoolDetailMarkdown(
+        trendingState.poolSource!,
+        selectedPoolItem
+      );
 
-      await ctx.reply(md, {
+      await context.reply(detailMarkdown, {
         parse_mode: "Markdown",
         link_preview_options: { is_disabled: true },
       });
     } catch {
-      await ctx.reply("❌ Error.");
+      await context.reply("❌ Error.");
     }
   });
 }
