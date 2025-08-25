@@ -16,14 +16,14 @@ import { generateWeisheepPoster } from "@/services/weisheep-poster.service";
  * /weisheep -$0.16 | SOL - USDC | $181.15 | -0.09% | https://weisheep.fun/r/jsamv
  * /weisheep -$0.16 | SOL - USDC | $181.15 | -0.09% | weisheep.fun/r/jsamv | https://example.com/qr
  */
-export function weisheepCommand(bot: Telegraf<BotContext>) {
-  bot.command("weisheep", async (ctx: Context) => {
+export function generateImageCommand(bot: Telegraf<BotContext>) {
+  bot.command("generate", async (ctx: Context) => {
     try {
       const raw = (ctx.message as any)?.text ?? "";
       const payload = raw.replace(/^\/weisheep(@\w+)?\s*/, "");
       if (!payload.trim()) {
         return (ctx as any).reply(
-          "Cú pháp: /weisheep <bigText> | <pair> | <tvl> | <pnl> | <refLink> | <qrData?>"
+          "Cú pháp: /generate <bigText> | <pair> | <tvl> | <pnl> | <refLink> | <qrData?>"
         );
       }
 
@@ -37,7 +37,6 @@ export function weisheepCommand(bot: Telegraf<BotContext>) {
       const qr = parts[5] || ref;
 
       const buffer = await generateWeisheepPoster({
-      
         bigText,
         pair,
         tvl,
@@ -51,11 +50,10 @@ export function weisheepCommand(bot: Telegraf<BotContext>) {
         { caption: "weisheep poster ✅" }
       );
     } catch (err) {
-     console.error("[weisheep] error:", err);
-     await (ctx as any).reply(
-       "❌ Failed to generate the poster. Please check the parameters or try again."
-     );
-
+      console.error("[weisheep] error:", err);
+      await (ctx as any).reply(
+        "❌ Failed to generate the poster. Please check the parameters or try again."
+      );
     }
   });
 }

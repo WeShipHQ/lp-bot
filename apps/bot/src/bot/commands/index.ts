@@ -1,12 +1,12 @@
-import { Telegraf } from "telegraf";
+import { BotContext } from "@/types/bot.types";
 import { FastifyInstance } from "fastify";
-import { startCommand } from "./start";
+import { Telegraf } from "telegraf";
 import { helpCommand } from "./help";
 import { portfolioCommand } from "./portfolio";
-import { walletCommand } from "./wallet";
-import { BotContext } from "@/types/bot.types";
+import { startCommand } from "./start";
 import { trendingCommand } from "./trending";
-import { weisheepCommand } from "./weisheep";
+import { walletCommand } from "./wallet";
+import { generateImageCommand } from "./weisheep";
 
 
 export function registerCommands(bot: Telegraf<BotContext>, server: FastifyInstance) {
@@ -15,5 +15,5 @@ export function registerCommands(bot: Telegraf<BotContext>, server: FastifyInsta
   portfolioCommand(bot, server);
   walletCommand(bot, server);
   trendingCommand(bot, server);
-  weisheepCommand(bot);
+  generateImageCommand(bot);
 }
