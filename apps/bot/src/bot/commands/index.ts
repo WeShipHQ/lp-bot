@@ -6,6 +6,8 @@ import { portfolioCommand } from "./portfolio";
 import { walletCommand } from "./wallet";
 import { BotContext } from "@/types/bot.types";
 import { trendingCommand } from "./trending";
+import { weisheepCommand } from "./weisheep";
+
 
 export function registerCommands(bot: Telegraf<BotContext>, server: FastifyInstance) {
   startCommand(bot, server);
@@ -13,4 +15,5 @@ export function registerCommands(bot: Telegraf<BotContext>, server: FastifyInsta
   portfolioCommand(bot, server);
   walletCommand(bot, server);
   trendingCommand(bot, server);
+  weisheepCommand(bot);
 }
