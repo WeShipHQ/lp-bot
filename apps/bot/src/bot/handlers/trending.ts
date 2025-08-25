@@ -59,7 +59,7 @@ export async function handleTrendingCallback(
 
     const paginationMatch = /^tr_(prev|next|refresh)_(\d+)$/.exec(raw);
     const sourceMatch = /^tr_src_(dlmm|dammv1|dammv2)_(\d+)$/.exec(raw);
-    const openMatch = /^tr_open_(\d+)_(\d+)$/.exec(raw); // <<-- mở detail
+    const openMatch = /^tr_open_(\d+)_(\d+)$/.exec(raw); 
 
     let action: "prev" | "next" | "refresh" | "source" | "open";
     let chatIdStr = "";
