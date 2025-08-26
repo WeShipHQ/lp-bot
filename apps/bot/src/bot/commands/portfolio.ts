@@ -11,5 +11,5 @@ export function portfolioCommand(
   server: FastifyInstance
 ) {
   bot.command("portfolio", (ctx) => portfolioHandler(ctx, server));
-  registerPortfolioCallbacks(bot, server);
+  registerPortfolioCallbacks(bot);
 }

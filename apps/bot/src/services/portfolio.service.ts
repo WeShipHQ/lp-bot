@@ -10,16 +10,19 @@ import {
   PortfolioResult,
   PortfolioTotals,
 } from "@/types/portfolio.types";
+import { CONFIG } from "@/config";
 
-const toNum = (raw?: string | bigint | number, decimals = 0) =>
+// Numeric helpers (data-layer)
+const fromRawAmount = (raw?: string | bigint | number, decimals = 0) =>
   (raw ? Number(raw) : 0) / Math.pow(10, decimals || 0);
 
-const toISOFromBnSec = (bnLike?: any) => {
+const toIsoFromBignumSeconds = (bnLike?: any) => {
   const sec = bnLike ? Number(bnLike.toString()) : undefined;
   return sec ? new Date(sec * 1000).toISOString() : new Date().toISOString();
 };
 
-const sumClaimFeesUsd = (arr: DlmmClaimFee[]) =>
+// s-sum, it-item
+const sumClaimFeesInUsd = (arr: DlmmClaimFee[]) =>
   arr.reduce(
     (s, it) =>
       s +
@@ -28,10 +31,10 @@ const sumClaimFeesUsd = (arr: DlmmClaimFee[]) =>
     0
   );
 
-const sumRewardsUsd = (arr: DlmmClaimReward[]) =>
+const sumRewardsInUsd = (arr: DlmmClaimReward[]) =>
   arr.reduce((s, it) => s + Number(it.token_usd_amount || 0), 0);
 
-const sumDepWdrUsd = (arr: DlmmDepositWithdraw[]) =>
+const sumDepositsWithdrawalsInUsd = (arr: DlmmDepositWithdraw[]) =>
   arr.reduce(
     (s, it) =>
       s +
@@ -41,22 +44,19 @@ const sumDepWdrUsd = (arr: DlmmDepositWithdraw[]) =>
   );
 
 export class PortfolioService {
-  private static connection = new Connection(
-    "https://mainnet.helius-rpc.com/?api-key=1f208f9b-11d6-4d11-82a4-3dcc1774e1c2"
-  );
+  private static connection = new Connection(CONFIG.SOLANA.RPC_URL);
 
   static async getUserPortfolio(
     walletAddress: string
   ): Promise<PortfolioResult> {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const dlmm = (DLMM as any).default || DLMM;
       const owner = new PublicKey(walletAddress);
 
       const map: Map<string, PositionInfo> =
         await dlmm.getAllLbPairPositionsByUser(this.connection, owner);
 
-      const positions = await this.toPortfolioPositions(map);
+      const positions = await this.mapDlmmPositionsToPortfolio(map);
 
       const totals: PortfolioTotals = {
         total_positions: positions.length,
@@ -83,6 +83,7 @@ export class PortfolioService {
         total_pnl_usd: positions.reduce((s, p) => s + p.pnl_usd, 0),
         total_net_deposited_usd: 0,
       };
+
       totals.total_net_deposited_usd =
         totals.total_deposits_usd - totals.total_withdrawals_usd;
 
@@ -99,7 +100,7 @@ export class PortfolioService {
     }
   }
 
-  private static async toPortfolioPositions(
+  private static async mapDlmmPositionsToPortfolio(
     positionsByPool: Map<string, PositionInfo>
   ): Promise<PortfolioPosition[]> {
     const out: PortfolioPosition[] = [];
@@ -161,16 +162,22 @@ export class PortfolioService {
 
         const totalXRaw = p.totalXAmountExcludeTransferFee ?? p.totalXAmount;
         const totalYRaw = p.totalYAmountExcludeTransferFee ?? p.totalYAmount;
-        const current_x_amount = toNum(totalXRaw, xDecimals);
-        const current_y_amount = toNum(totalYRaw, yDecimals);
+        const current_x_amount = fromRawAmount(totalXRaw, xDecimals);
+        const current_y_amount = fromRawAmount(totalYRaw, yDecimals);
 
         const current_value_usd =
           current_x_amount * xPrice + current_y_amount * yPrice;
 
-        const unclaimed_fees_x = toNum(p.feeX, xDecimals);
-        const unclaimed_fees_y = toNum(p.feeY, yDecimals);
-        const claimed_fees_x = toNum(p.totalClaimedFeeXAmount, xDecimals);
-        const claimed_fees_y = toNum(p.totalClaimedFeeYAmount, yDecimals);
+        const unclaimed_fees_x = fromRawAmount(p.feeX, xDecimals);
+        const unclaimed_fees_y = fromRawAmount(p.feeY, yDecimals);
+        const claimed_fees_x = fromRawAmount(
+          p.totalClaimedFeeXAmount,
+          xDecimals
+        );
+        const claimed_fees_y = fromRawAmount(
+          p.totalClaimedFeeYAmount,
+          yDecimals
+        );
 
         const total_unclaimed_fees_usd =
           unclaimed_fees_x * xPrice + unclaimed_fees_y * yPrice;
@@ -182,7 +189,7 @@ export class PortfolioService {
           meteoraService.getPositionClaimRewards(addr),
         ]);
         const claimed_usd_api =
-          sumClaimFeesUsd(claimedFees) + sumRewardsUsd(rewards);
+          sumClaimFeesInUsd(claimedFees) + sumRewardsInUsd(rewards);
 
         const claimed_usd_fallback =
           claimed_fees_x * xPrice + claimed_fees_y * yPrice;
@@ -190,8 +197,8 @@ export class PortfolioService {
         const total_claimed_fees_usd =
           claimed_usd_api > 0 ? claimed_usd_api : claimed_usd_fallback;
 
-        const total_deposits_usd = sumDepWdrUsd(deposits);
-        const total_withdrawals_usd = sumDepWdrUsd(withdraws);
+        const total_deposits_usd = sumDepositsWithdrawalsInUsd(deposits);
+        const total_withdrawals_usd = sumDepositsWithdrawalsInUsd(withdraws);
 
         const lower = Number(p.lowerBinId);
         const upper = Number(p.upperBinId);
@@ -237,7 +244,7 @@ export class PortfolioService {
           pool_fee_tvl_24h: poolFeeTvlRatio,
           auto_rebalancing_enabled: false,
           in_range,
-          created_at: toISOFromBnSec(p.lastUpdatedAt),
+          created_at: toIsoFromBignumSeconds(p.lastUpdatedAt),
         });
       }
     }

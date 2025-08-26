@@ -1,9 +1,8 @@
-import { PortfolioData, PortfolioPosition } from "@/types/portfolio.types";
-import { InlineKeyboardMarkup } from "node_modules/telegraf/typings/core/types/typegram";
+// @ts-expect-error
+import { InlineKeyboardMarkup } from "telegraf/typings/core/types/typegram";
+import { PortfolioPosition } from "@/types/portfolio.types";
 
-export function getOverviewKeyboard(
-  _data: PortfolioData
-): InlineKeyboardMarkup {
+export function getOverviewKeyboard(): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [
@@ -15,29 +14,23 @@ export function getOverviewKeyboard(
 }
 
 export function getPositionDetailKeyboard(
-  p: PortfolioPosition,
+  position: PortfolioPosition,
   index: number
 ): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [
         { text: "Claim fees", callback_data: `pos:claim:${index}` },
-        {
-          text: p.auto_rebalancing_enabled
-            ? "Disable rebalancing"
-            : "Enable rebalancing",
-          callback_data: `pos:toggle_ar:${index}`,
-        },
+        // {
+        //   text: position.auto_rebalancing_enabled
+        //     ? "Disable rebalancing"
+        //     : "Enable rebalancing",
+        //   callback_data: `pos:toggle_ar:${index}`,
+        // },
       ],
       [
         { text: "Rebalance now", callback_data: `pos:rebalance:${index}` },
         { text: "Back", callback_data: "portfolio:back" },
-      ],
-      [
-        {
-          text: "View on Dexscreener",
-          url: `https://dexscreener.com/solana/${p.pool_address}`,
-        },
       ],
     ],
   };
