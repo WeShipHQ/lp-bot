@@ -11,12 +11,23 @@ import {
   PortfolioTotals,
 } from "@/types/portfolio.types";
 import { CONFIG } from "@/config";
+import { db } from "@/db";
+import {
+  users as usersTable,
+  wallets as walletsTable,
+  positions as positionsTable,
+  PositionStatus,
+} from "@/db/schema";
+import { and, eq, inArray } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 
 // Numeric helpers (data-layer)
 const fromRawAmount = (raw?: string | bigint | number, decimals = 0) =>
   (raw ? Number(raw) : 0) / Math.pow(10, decimals || 0);
 
-const toIsoFromBignumSeconds = (bnLike?: any) => {
+type BnLike = { toString(): string } | number | bigint;
+
+const toIsoFromBignumSeconds = (bnLike?: BnLike) => {
   const sec = bnLike ? Number(bnLike.toString()) : undefined;
   return sec ? new Date(sec * 1000).toISOString() : new Date().toISOString();
 };
@@ -56,7 +67,12 @@ export class PortfolioService {
       const map: Map<string, PositionInfo> =
         await dlmm.getAllLbPairPositionsByUser(this.connection, owner);
 
-      const positions = await this.mapDlmmPositionsToPortfolio(map);
+      const positionsRaw = await this.mapDlmmPositionsToPortfolio(map);
+
+      const positions = await this.annotatePositionsWithDbTracking(
+        positionsRaw,
+        walletAddress
+      );
 
       const totals: PortfolioTotals = {
         total_positions: positions.length,
@@ -154,7 +170,7 @@ export class PortfolioService {
           feeY?: string | bigint | number;
           totalClaimedFeeXAmount?: string | bigint | number;
           totalClaimedFeeYAmount?: string | bigint | number;
-          lastUpdatedAt?: any;
+          lastUpdatedAt?: BnLike;
         };
       }>) {
         const addr = pos.publicKey.toString();
@@ -250,5 +266,72 @@ export class PortfolioService {
     }
 
     return out;
+  }
+
+  // Resolve user ID by wallet address
+  private static async resolveUserIdByWalletAddress(
+    walletAddress: string
+  ): Promise<string | undefined> {
+    // 1) Check user table first
+    const u = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.walletAddress, walletAddress))
+      .limit(1);
+
+    if (u[0]?.id) return u[0].id;
+
+    // 2) Fallback: Check wallets table
+    const w = await db
+      .select({ userId: walletsTable.userId })
+      .from(walletsTable)
+      .where(eq(walletsTable.address, walletAddress))
+      .limit(1);
+
+    return w[0]?.userId;
+  }
+
+  // Annotate positions with database tracking information
+  private static async annotatePositionsWithDbTracking(
+    dlmmPositions: PortfolioPosition[],
+    walletAddress: string
+  ): Promise<PortfolioPosition[]> {
+    if (dlmmPositions.length === 0) return dlmmPositions;
+
+    const tokenAddresses = Array.from(
+      new Set(dlmmPositions.map((p) => p.position_address))
+    );
+    if (tokenAddresses.length === 0) {
+      return dlmmPositions.map((p) => ({ ...p, is_tracked_in_db: false }));
+    }
+
+    const userId = await this.resolveUserIdByWalletAddress(walletAddress);
+    const ACTIVE: PositionStatus = "ACTIVE";
+
+    const tokenFilter = inArray(positionsTable.tokenAddress, tokenAddresses);
+
+    let whereExpr = and(
+      tokenFilter,
+      eq(positionsTable.status, ACTIVE)
+    ) as SQL<unknown>;
+
+    if (userId) {
+      whereExpr = and(
+        whereExpr,
+        eq(positionsTable.userId, userId)
+      ) as SQL<unknown>;
+    }
+
+    const rows = await db
+      .select({ tokenAddress: positionsTable.tokenAddress })
+      .from(positionsTable)
+      .where(whereExpr);
+
+    const trackedSet = new Set(rows.map((row) => row.tokenAddress));
+
+    return dlmmPositions.map((p) => ({
+      ...p,
+      is_tracked_in_db: trackedSet.has(p.position_address),
+    }));
   }
 }

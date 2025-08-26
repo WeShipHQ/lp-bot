@@ -74,6 +74,8 @@ export type PortfolioPosition = {
 
   in_range: boolean;
   created_at: string;
+
+  is_tracked_in_db?: boolean;
 };
 
 export type PortfolioTotals = {

@@ -2,7 +2,6 @@ import {
   formatCurrency,
   formatPercentage,
   formatTokenAmount,
-  truncateAddress,
 } from "@/bot/utils/formatters";
 import { PortfolioData, PortfolioPosition } from "@/types/portfolio.types";
 
@@ -64,7 +63,7 @@ export class MessageService {
     if (positions.length === 0) {
       return (
         `\n❌ No active positions found.\n\n` +
-        `Get started by:\n` +
+        `Get started by:\n\n` +
         `➡️ Use /trending to see hot pools\n` +
         `➡️ Or paste a token address to create new positions`
       );
@@ -77,6 +76,11 @@ export class MessageService {
     msg += positions
       .map((pos, i) => {
         const title = `/${i + 1} ${formatPairSymbol(pos)}\n`;
+        const dbTracked =
+          pos.is_tracked_in_db != null
+            ? `• Tracked in DB: ${pos.is_tracked_in_db ? "🟢 Yes" : "🟠 No"}`
+            : undefined;
+
         const balance =
           pos.current_x_amount != null && pos.current_y_amount != null
             ? `• Position Balance: ${bold(formatTokenAmount(pos.current_x_amount, 3))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.current_y_amount, 3))} ${pos.token_y_info.symbol} (${bold(formatCurrency(pos.current_value_usd))})`
@@ -100,7 +104,7 @@ export class MessageService {
 
         const inRange = `• In Range: ${pos.in_range ? "🟢" : "🔴"}`;
 
-        return [title, balance, unclaimed, claimed, feeTvl, inRange]
+        return [title, dbTracked, balance, unclaimed, claimed, feeTvl, inRange]
           .filter(Boolean)
           .join("\n");
       })
@@ -117,7 +121,10 @@ export class MessageService {
     const sy = pos.token_y_info.symbol;
 
     let msg = `**${pairName}** · [Dexscreener](${buildDexScreenerUrl(pos.pool_address)})\n\n`;
-    // msg += `**🏦 Pool:** \`${truncateAddress(pos.pool_address, 6, 6)}\`  •  **📍 Address:** \`${truncateAddress(pos.position_address, 6, 6)}\`\n\n`;
+
+    if (pos.is_tracked_in_db != null) {
+      msg += `**• Tracked in DB:** ${pos.is_tracked_in_db ? "🟢 Yes" : "🟠 No"}\n`;
+    }
 
     if (pos.current_x_amount != null && pos.current_y_amount != null) {
       msg += `**• Position Balance:** ${bold(formatTokenAmount(pos.current_x_amount, 3))} ${sx} / ${bold(formatTokenAmount(pos.current_y_amount, 3))} ${sy} (${bold(formatCurrency(pos.current_value_usd))})\n`;
