@@ -4,6 +4,9 @@ export class JupiterService {
   private readonly baseUrl = "https://lite-api.jup.ag";
   private readonly maxRetries = 3;
   private readonly retryDelay = 1000;
+  
+  private tokenInfoCache = new Map<string, { data: any; timestamp: number }>();
+  private readonly CACHE_TTL = 1 * 60 * 1000; 
 
   /**
    * Fetch token information by address
@@ -11,13 +14,21 @@ export class JupiterService {
    * @returns Promise<TokenInfo | null>
    */
   async getTokenInfo(tokenAddress: string): Promise<TokenInfo | null> {
+    // Check cache first
+    const cachedToken = this.tokenInfoCache.get(tokenAddress);
+    const now = Date.now();
+    
+    if (cachedToken && (now - cachedToken.timestamp) < this.CACHE_TTL) {
+      return cachedToken.data;
+    }
+    
     let lastError: Error | null = null;
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
-        console.log(
-          `[Jupiter] Fetching token info for: ${tokenAddress} (attempt ${attempt})`
-        );
+        if (attempt > 1) {
+          console.log(`[Jupiter] Retrying token info for: ${tokenAddress} (attempt ${attempt})`);
+        }
 
         const searchResponse = await fetch(
           `${this.baseUrl}/tokens/v2/search?query=${tokenAddress}`
@@ -30,30 +41,28 @@ export class JupiterService {
         const tokens: JupiterToken[] = await searchResponse.json();
 
         if (!tokens || tokens.length === 0) {
-          console.log(`[Jupiter] No token found for address: ${tokenAddress}`);
           return null;
         }
 
         const token = tokens.find((t) => t.id === tokenAddress) || tokens[0];
+        const tokenInfo = this.mapJupiterTokenToTokenInfo(token);
+        
+        // Cache the result
+        this.tokenInfoCache.set(tokenAddress, {
+          data: tokenInfo,
+          timestamp: now
+        });
 
-        return this.mapJupiterTokenToTokenInfo(token);
+        return tokenInfo;
       } catch (error) {
         lastError = error as Error;
-        console.error(
-          `[Jupiter] Attempt ${attempt} failed to fetch token info for ${tokenAddress}:`,
-          error
-        );
+        console.error(`[Jupiter] API error for ${tokenAddress}:`, error);
 
         if (attempt < this.maxRetries) {
-          await this.delay(this.retryDelay * attempt);
+          await this.delay(this.retryDelay * Math.pow(2, attempt - 1)); 
         }
       }
     }
-
-    console.error(
-      `[Jupiter] Failed to fetch token info after ${this.maxRetries} attempts:`,
-      lastError
-    );
     
     throw new Error(`Failed to fetch token information: ${lastError?.message}`);
   }
