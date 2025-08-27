@@ -3,10 +3,11 @@ import { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { Telegraf } from "telegraf";
 import { CONFIG } from "../config";
 import { setupBotCommands } from "../bot";
+import { BotContext } from "@/types/bot.types";
 
 declare module "fastify" {
   interface FastifyInstance {
-    bot: Telegraf;
+    bot: Telegraf<BotContext>;
   }
 }
 
@@ -21,7 +22,7 @@ const telegrafPlugin: FastifyPluginAsync = fp(async (server, _options) => {
   }
 
   // Create Telegraf instance
-  const bot = new Telegraf(CONFIG.TELEGRAM.BOT_TOKEN);
+  const bot = new Telegraf<BotContext>(CONFIG.TELEGRAM.BOT_TOKEN);
 
   // Setup bot commands and middleware
   await setupBotCommands(bot, server);

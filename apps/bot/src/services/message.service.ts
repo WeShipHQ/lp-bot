@@ -157,23 +157,115 @@ export class MessageService {
       msg += `**• Created Date:** ${new Date(pos.created_at).toLocaleString()}\n\n`;
     }
 
-    msg += `Net Profit: View on [Instafin](https://instafin.com)`;
-    return msg;
-  }
+    /**
+     * Generate transfer SOL request message
+     */
+    static getTransferSolRequestMessage(): string {
+      return "💸 *Transfer SOL*\n\nPlease enter the recipient's wallet address and the amount to transfer in the format:\n\n`address amount`\n\nExample: `GgS64xkW9JqR3VkBn4fpPi7sMqcnAzqRWTUXbBZhHpLT 0.1`\n\nOr type /cancel to cancel the transfer.";
+    }
+    
+    /**
+     * Generate transfer ALL SOL request message
+     */
+    static getTransferAllSolRequestMessage(): string {
+      return "💸 *Transfer ALL SOL*\n\nPlease enter the recipient's wallet address:\n\n`address`\n\nExample: `GgS64xkW9JqR3VkBn4fpPi7sMqcnAzqRWTUXbBZhHpLT`\n\nThis will transfer your entire SOL balance (minus transaction fees).\n\nOr type /cancel to cancel the transfer.";
+    }
 
-  /**
-   * Generate error message
-   */
-  static getErrorMessage(
-    message: string = "Something went wrong. Please try again later."
-  ): string {
-    return `❌ ${message}`;
-  }
+    /**
+     * Generate transfer SOL confirmation message
+     */
+    static getTransferConfirmationMessage(recipientAddress: string, amount: number, usdValue: number): string {
+      return `🔍 *Confirm Transfer*\n\n` +
+        `You are about to send *${amount} SOL* (${formatCurrency(usdValue)}) to:\n` +
+        `\`${recipientAddress}\`\n\n` +
+        `Please confirm this transaction by clicking the button below.`;
+    }
 
-  /**
-   * Generate private chat required message
-   */
-  static getPrivateChatRequiredMessage(): string {
-    return "❌ Please start the bot in a private chat with me.";
-  }
+    /**
+     * Generate transfer SOL success message
+     */
+    static getTransferSuccessMessage(recipientAddress: string, amount: number, signature: string): string {
+      return `✅ *Transfer Successful*\n\n` +
+        `Successfully sent *${amount} SOL* to:\n` +
+        `\`${recipientAddress}\`\n\n` +
+        `Transaction signature:\n` +
+        `\`${signature}\`\n\n` +
+        `View on Solscan: https://solscan.io/tx/${signature}`;
+    }
+    
+    /**
+     * Generate transfer SOL success message with amount adjustment
+     */
+    static getTransferSuccessWithAdjustmentMessage(recipientAddress: string, requestedAmount: number, actualAmount: number, signature: string): string {
+      return `✅ *Transfer Successful*\n\n` +
+        `You requested to send *${requestedAmount} SOL*, but the amount was adjusted to *${actualAmount} SOL* to account for transaction fees.\n\n` +
+        `Successfully sent to:\n` +
+        `\`${recipientAddress}\`\n\n` +
+        `Transaction signature:\n` +
+        `\`${signature}\`\n\n` +
+        `View on Solscan: https://solscan.io/tx/${signature}`;
+    }
+
+    /**
+     * Generate transfer SOL error message
+     */
+    static getTransferErrorMessage(error: string): string {
+      return `❌ *Transfer Failed*\n\n${error}`;
+    }
+
+    /**
+     * Generate transfer token request message
+     */
+    static getTransferTokenRequestMessage(): string {
+      return "💸 *Transfer SPL Token*\n\nPlease enter the token address, recipient address, and amount to transfer in the format:\n\n`tokenAddress recipientAddress amount`\n\nExample: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v GgS64xkW9JqR3VkBn4fpPi7sMqcnAzqRWTUXbBZhHpLT 10`\n\nNote: The recipient must have already interacted with this token before. They need to have a token account for this specific token.\n\nOr type /cancel to cancel the transfer.";
+    }
+    
+    /**
+     * Generate transfer all tokens request message
+     */
+    static getTransferAllTokensRequestMessage(): string {
+      return "💸 *Transfer All of a Token*\n\nPlease enter the token address and recipient address in the format:\n\n`tokenAddress recipientAddress`\n\nExample: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v GgS64xkW9JqR3VkBn4fpPi7sMqcnAzqRWTUXbBZhHpLT`\n\nThis will transfer your entire balance of the specified token.\n\nNote: The recipient must have already interacted with this token before. They need to have a token account for this specific token.\n\nOr type /cancel to cancel the transfer.";
+    }
+
+    /**
+     * Generate transfer token confirmation message
+     */
+    static getTransferTokenConfirmationMessage(tokenSymbol: string, tokenName: string, recipientAddress: string, amount: number): string {
+      return `🔍 *Confirm Token Transfer*\n\n` +
+        `You are about to send *${amount} ${tokenSymbol}* (${tokenName}) to:\n` +
+        `\`${recipientAddress}\`\n\n` +
+        `Please confirm this transaction by clicking the button below.`;
+    }
+
+    /**
+     * Generate processing transaction message
+     */
+    static getProcessingTransactionMessage(): string {
+      return "⏳ *Processing Transaction*\n\nYour transaction is being processed. Please wait a moment...\n\n_Please do not click the confirm button again to avoid duplicate transactions._";
+    }
+    
+    /**
+     * Generate wallet export message
+     */
+    static getWalletExportMessage(walletAddress: string, privateKey: string): string {
+      return `🔐 *Wallet Export Successful*\n\n` +
+        `*Address:* \`${walletAddress}\`\n` +
+        `*Private Key:* \`${privateKey}\`\n\n` +
+        `⚠️ **SECURITY WARNING:**\n` +
+        `• Never share your private key with anyone\n` +
+        `• Store it securely offline\n` +
+        `• Anyone with this key can access your wallet\n\n`;
+    }
+
+    /**
+     * Generate transfer token success message
+     */
+    static getTransferTokenSuccessMessage(tokenSymbol: string, recipientAddress: string, amount: number, signature: string): string {
+      return `*Token Transfer Successful*\n\n` +
+        `Successfully sent *${amount} ${tokenSymbol}* to:\n` +
+        `\`${recipientAddress}\`\n\n` +
+        `Transaction signature:\n` +
+        `\`${signature}\`\n\n` +
+        `View on Solscan: https://solscan.io/tx/${signature}`;
+    }
 }
