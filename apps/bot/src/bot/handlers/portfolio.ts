@@ -9,6 +9,13 @@ import {
 import { MessageService } from "@/services/message.service";
 import { PortfolioService } from "@/services/portfolio.service";
 
+interface TelegramError {
+  response?: {
+    description?: string;
+    error_code?: number;
+  };
+}
+
 const portfolioSessions = new Map<number, PortfolioData>();
 
 const DISABLE_LINK_PREVIEW = {
@@ -19,17 +26,16 @@ const PORTFOLIO_CALLBACK = {
   portfolio: { back: "portfolio:back", refresh: "portfolio:refresh" },
   position: {
     claim: (i: number) => `pos:claim:${i}`,
-    // toggleAutoRebalance: (i: number) => `pos:toggle_ar:${i}`,
     rebalance: (i: number) => `pos:rebalance:${i}`,
   },
   ui: { close: "ui:close" },
 } as const;
 
 // Unified regex for all position actions
-// const POSITION_ACTION_REGEX = /^pos:(claim|toggle_ar|rebalance):(\d+)$/;
 const POSITION_ACTION_REGEX = /^pos:(claim|rebalance):(\d+)$/;
 
-// Session helpers
+// -------- Session helpers --------
+
 function tryGetChatId(context: BotContext): number | undefined {
   return context.chat ? context.chat.id : undefined;
 }
@@ -46,10 +52,17 @@ function setPortfolio(context: BotContext, portfolio: PortfolioData): void {
   portfolioSessions.set(chatId, portfolio);
 }
 
+// -------- Error helpers --------
+
 // Classify Telegram errors that are safe to ignore for delete/edit/answer operations.
-function isIgnorableTelegramError(err: any): boolean {
-  const code = err?.status ?? err?.response?.error_code;
-  const desc = String(err?.description || "").toLowerCase();
+function isIgnorableTelegramError(err: unknown): boolean {
+  const e = err as {
+    status?: number;
+    response?: { error_code?: number; description?: string };
+  };
+  const code = e?.status ?? e?.response?.error_code;
+  const desc = (e?.response?.description ?? "").toLowerCase();
+
   return (
     (code === 400 &&
       (desc.includes("message to delete not found") ||
@@ -92,38 +105,52 @@ async function answerCallbackSafely(
   }
 }
 
-/** Safe edit wrapper that ignores "not modified" and other benign Telegram errors. */
+/** Safe edit wrapper that ignores "not modified" and other benign Telegram errors.
+ * @returns true if the message was edited, false if it was unchanged
+ */
 async function safeEditMessage(
   context: BotContext,
   text: string,
   extra: Parameters<BotContext["editMessageText"]>[1],
   logger?: FastifyBaseLogger
-): Promise<void> {
+): Promise<boolean> {
   try {
     await context.editMessageText(text, extra);
+    return true;
   } catch (err) {
+    const tgErr = err as TelegramError;
+    const desc = tgErr?.response?.description ?? "";
+    if (desc.includes("message is not modified")) {
+      logger?.debug("Message content unchanged, skipping edit");
+      return false;
+    }
     if (!isIgnorableTelegramError(err)) {
       logger?.debug({ err }, "editMessageText failed");
       throw err;
     }
+    return false;
   }
 }
 
-// Render helpers
+// -------- Render helpers --------
+
 async function renderPortfolioOverview(
   context: BotContext,
   portfolio: PortfolioData,
   mode: "edit" | "reply" = "edit"
-) {
+): Promise<boolean> {
   const text = MessageService.getPortfolioOverviewMessage(portfolio);
   const extra = {
     parse_mode: "Markdown" as const,
     ...DISABLE_LINK_PREVIEW,
     reply_markup: getOverviewKeyboard(),
   };
-  return mode === "edit"
-    ? safeEditMessage(context, text, extra)
-    : context.reply(text, extra);
+  if (mode === "edit") {
+    return await safeEditMessage(context, text, extra);
+  } else {
+    await context.reply(text, extra);
+    return true;
+  }
 }
 
 async function renderPortfolioPosition(
@@ -149,7 +176,8 @@ async function renderPortfolioPosition(
     : context.reply(text, extra);
 }
 
-// Entry command: /portfolio
+// -------- Entry command: /portfolio --------
+
 export async function portfolioHandler(
   ctx: BotContext,
   _server: FastifyInstance
@@ -198,18 +226,47 @@ export function registerPortfolioCallbacks(bot: Telegraf<BotContext>) {
 
   // Refresh portfolio
   router.action(PORTFOLIO_CALLBACK.portfolio.refresh, async (ctx) => {
-    const walletAddress = ctx.user?.walletAddress;
-    if (!walletAddress) return;
+    try {
+      const walletAddress = ctx.user?.walletAddress;
+      if (!walletAddress) {
+        await ctx.answerCbQuery("No wallet connected");
+        return;
+      }
 
-    const portfolioResponse =
-      await PortfolioService.getUserPortfolio(walletAddress);
-    if (!portfolioResponse.success || !portfolioResponse.data) {
-      return ctx.answerCbQuery("Refresh failed");
+      const portfolioResponse =
+        await PortfolioService.getUserPortfolio(walletAddress);
+
+      if (!portfolioResponse.success || !portfolioResponse.data) {
+        await answerCallbackSafely(
+          ctx,
+          portfolioResponse.message || "Refresh failed"
+        );
+        return;
+      }
+
+      const portfolioData = portfolioResponse.data;
+      setPortfolio(ctx, portfolioData);
+
+      const edited = await renderPortfolioOverview(ctx, portfolioData, "edit");
+      await answerCallbackSafely(
+        ctx,
+        edited
+          ? "Portfolio refreshed successfully"
+          : "Portfolio is already up to date"
+      );
+    } catch (error: unknown) {
+      const tgErr = error as TelegramError;
+      const desc = tgErr?.response?.description ?? "";
+      if (desc.includes("message is not modified")) {
+        await answerCallbackSafely(ctx, "Portfolio is already up to date");
+        return;
+      }
+      console.error("Portfolio refresh error:", error);
+      await answerCallbackSafely(
+        ctx,
+        "Failed to refresh portfolio. Please try again."
+      );
     }
-
-    setPortfolio(ctx, portfolioResponse.data);
-    await renderPortfolioOverview(ctx, portfolioResponse.data, "edit");
-    await ctx.answerCbQuery("Refreshed");
   });
 
   // Handle all position actions (claim/toggle_ar/rebalance)
@@ -225,20 +282,6 @@ export function registerPortfolioCallbacks(bot: Telegraf<BotContext>) {
     switch (action) {
       case "claim":
         return context.answerCbQuery("Claim flow not implemented.");
-
-      // case "toggle_ar":
-      //   position.auto_rebalancing_enabled = !position.auto_rebalancing_enabled;
-      //   await renderPortfolioPosition(
-      //     context,
-      //     portfolio,
-      //     positionIndex,
-      //     "edit"
-      //   );
-      //   return context.answerCbQuery(
-      //     position.auto_rebalancing_enabled
-      //       ? "Auto-rebalancing enabled"
-      //       : "Auto-rebalancing disabled"
-      //   );
 
       case "rebalance":
         return context.answerCbQuery("Rebalance not implemented.");
