@@ -183,6 +183,7 @@ export class JupiterService {
       name: jupiterToken.name,
       symbol: jupiterToken.symbol,
       icon: jupiterToken.icon,
+      decimals: jupiterToken.decimals,
       price: jupiterToken.usdPrice || 0,
       priceChange24h: jupiterToken.stats24h?.priceChange || 0,
       marketCap: jupiterToken.mcap || 0,

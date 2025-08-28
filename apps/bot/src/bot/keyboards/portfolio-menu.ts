@@ -1,16 +1,36 @@
 // @ts-expect-error
 import { InlineKeyboardMarkup } from "telegraf/typings/core/types/typegram";
+import { PortfolioPosition } from "@/types/portfolio.types";
 
-export function getPortfolioKeyboard(): InlineKeyboardMarkup {
+export function getOverviewKeyboard(): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [
-        { text: "Close all", callback_data: "close_all" },
-        { text: "Claim fees", callback_data: "claim_fees" },
+        { text: "Refresh", callback_data: "portfolio:refresh" },
+        { text: "Close", callback_data: "ui:close" },
+      ],
+    ],
+  };
+}
+
+export function getPositionDetailKeyboard(
+  position: PortfolioPosition,
+  index: number
+): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [
+        { text: "Claim fees", callback_data: `pos:claim:${index}` },
+        // {
+        //   text: position.auto_rebalancing_enabled
+        //     ? "Disable rebalancing"
+        //     : "Enable rebalancing",
+        //   callback_data: `pos:toggle_ar:${index}`,
+        // },
       ],
       [
-        { text: "Close", callback_data: "close" },
-        { text: "Refresh", callback_data: "refresh" },
+        { text: "Rebalance now", callback_data: `pos:rebalance:${index}` },
+        { text: "Back", callback_data: "portfolio:back" },
       ],
     ],
   };
