@@ -6,7 +6,7 @@ import { portfolioCommand } from "./portfolio";
 import { startCommand } from "./start";
 import { trendingCommand } from "./trending";
 import { walletCommand } from "./wallet";
-import { generateImageCommand } from "./weisheep";
+import { generateImageCommand } from "./genarate-images";
 
 
 export function registerCommands(bot: Telegraf<BotContext>, server: FastifyInstance) {
