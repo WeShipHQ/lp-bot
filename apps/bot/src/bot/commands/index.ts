@@ -8,6 +8,8 @@ import { trendingCommand } from "./trending";
 import { walletCommand } from "./wallet";
 import { generateImageCommand } from "./genarate-images";
 
+import { settingsCommand } from "./settings";
+
 
 export function registerCommands(bot: Telegraf<BotContext>, server: FastifyInstance) {
   startCommand(bot, server);
@@ -15,5 +17,6 @@ export function registerCommands(bot: Telegraf<BotContext>, server: FastifyInsta
   portfolioCommand(bot, server);
   walletCommand(bot, server);
   trendingCommand(bot, server);
-  generateImageCommand(bot);
+  generateImageCommand(bot, server);
+  settingsCommand(bot, server);
 }

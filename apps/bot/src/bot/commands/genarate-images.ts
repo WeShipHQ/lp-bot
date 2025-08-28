@@ -1,4 +1,5 @@
 import { Telegraf, Context } from "telegraf";
+import { FastifyInstance } from "fastify";
 import { BotContext } from "@/types/bot.types";
 import { generateWeisheepPoster } from "@/services/weisheep-poster.service";
 
@@ -13,7 +14,7 @@ import { generateWeisheepPoster } from "@/services/weisheep-poster.service";
  * - qrCodeData       : (tùy chọn) nội dung QR riêng
  * - backgroundTemplate : 1 | 2 | 3 để đổi template nền
  */
-export function generateImageCommand(bot: Telegraf<BotContext>) {
+export function generateImageCommand(bot: Telegraf<BotContext>, server: FastifyInstance) {
   bot.command("generate", async (telegramContext: Context) => {
     try {
       const rawMessageText = (telegramContext.message as any)?.text ?? "";
@@ -48,7 +49,7 @@ export function generateImageCommand(bot: Telegraf<BotContext>) {
       else if (/^\s*-/.test(highlightedText)) highlightedTextColor = "#FF2D2D";
 
       // ====== Tạo poster ======
-      const posterBuffer = await generateWeisheepPoster({
+  const posterBuffer = await generateWeisheepPoster({
         highlightedText,
         tradingPair,
         totalValueLocked,
@@ -78,9 +79,9 @@ export function generateImageCommand(bot: Telegraf<BotContext>) {
         disable_web_page_preview: true,
       });
 
-      await (telegramContext as any).replyWithPhoto({ source: posterBuffer });
+  await (telegramContext as any).replyWithPhoto({ source: posterBuffer });
     } catch (error) {
-      console.error("[weisheep] error:", error);
+      server.log.error("[weisheep] error:", error);
       await (telegramContext as any).reply(
         "❌ Failed to generate the poster. Please check the parameters or try again."
       );
