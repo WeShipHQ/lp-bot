@@ -6,6 +6,7 @@ import {
 import { PortfolioData, PortfolioPosition } from "@/types/portfolio.types";
 
 const bold = (s: string) => `**${s}**`;
+const italic = (s: string) => `_${s}_`;
 
 const buildDexScreenerUrl = (poolAddress: string) =>
   `https://dexscreener.com/solana/${poolAddress}`;
@@ -94,7 +95,7 @@ export class MessageService {
         const title = `/${i + 1} ${formatPairSymbol(pos)}\n`;
         const dbTracked =
           pos.is_tracked_in_db != null
-            ? `• Tracked in DB: ${pos.is_tracked_in_db ? "🟢 Yes" : "🟠 No"} (Click to add to DB)`
+            ? `• Tracked in DB: ${pos.is_tracked_in_db ? "🟢 Yes" : "🟠 No"} ${italic("(Click to add to DB)")}`
             : undefined;
 
         const balance =
@@ -139,7 +140,7 @@ export class MessageService {
     let msg = `**${pairName}** · [Dexscreener](${buildDexScreenerUrl(pos.pool_address)})\n\n`;
 
     if (pos.is_tracked_in_db != null) {
-      msg += `**• Tracked in DB:** ${pos.is_tracked_in_db ? "🟢 Yes" : "🟠 No"} (Click to add to DB)\n`;
+      msg += `**• Tracked in DB:** ${pos.is_tracked_in_db ? "🟢 Yes" : "🟠 No"} ${italic("(Click to add to DB)")}\n`;
     }
 
     if (pos.current_x_amount != null && pos.current_y_amount != null) {
