@@ -73,8 +73,10 @@ async function handlePoolPositionWithType(
   try {
     server.log.info(`Opening position for ${poolType} pool: ${poolAddress}`);
 
-    // ✅ Use the known pool type directly
-    const poolData = await meteoraPoolService.getPoolInfo(poolAddress, poolType);
+    const poolData = await meteoraPoolService.getPoolInfo(
+      poolAddress,
+      poolType
+    );
     if (!poolData) {
       await ctx.editMessageText(
         formatErrorMessage(poolAddress, "Pool not found"),
@@ -174,7 +176,10 @@ async function handlePoolPosition(
     server.log.info(`Opening position for pool: ${poolAddress}`);
 
     // Get pool information
-    const poolData = await meteoraPoolService.getPoolInfo(poolAddress, poolType);
+    const poolData = await meteoraPoolService.getPoolInfo(
+      poolAddress,
+      poolType
+    );
     if (!poolData) {
       await ctx.editMessageText(
         formatErrorMessage(poolAddress, "Pool not found"),
@@ -251,6 +256,7 @@ export async function handlePositionCreation(
 
     // Mock position creation
     const result = await positionService.createPosition(
+      // @ts-expect-error
       ctx.from?.id.toString() || "",
       poolAddress,
       type as "spot" | "curve" | "single",

@@ -30,4 +30,6 @@ export interface BotContext extends Context {
   scene: any
 }
 
+// TODO move to a suiable folder
 export type StrategyTypeKey = keyof typeof StrategyType
+export type MeteoraPoolType = "damm_v1" | "damm_v2" | "dlmm"
