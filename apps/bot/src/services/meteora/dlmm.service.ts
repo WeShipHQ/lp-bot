@@ -3,6 +3,7 @@ import DLMM, {
   StrategyType,
   autoFillXByStrategy,
   autoFillYByStrategy,
+  PositionInfo,
 } from "@meteora-ag/dlmm";
 import {
   Connection,
@@ -115,7 +116,7 @@ export class MeteoraDlmmService {
       console.log(
         `[DLMM] Calculated Y amount (${totalYAmount.toString()}) exceeds available Y balance (${tokenYAmount.toString()}), trying strategy 2`
       );
-      
+
       // Strategy 2: Use tokenYAmount and calculate X amount
       totalYAmount = tokenYAmount;
       const calculatedXAmount = autoFillXByStrategy(
@@ -128,11 +129,11 @@ export class MeteoraDlmmService {
         maxBinId,
         strategyType
       );
-      
+
       console.log(
         `[DLMM] Strategy 2 - calculated X: ${calculatedXAmount.toString()}, available X: ${tokenXAmount.toString()}, Y: ${totalYAmount.toString()}`
       );
-      
+
       // Check if calculated X amount also exceeds available X balance
       if (calculatedXAmount.gt(tokenXAmount)) {
         console.log(
@@ -151,7 +152,7 @@ export class MeteoraDlmmService {
           ).toString()}) exceeds available Y balance (${tokenYAmount.toString()})`
         );
       }
-      
+
       // Use calculated X amount from strategy 2
       totalXAmount = calculatedXAmount;
     }
@@ -208,6 +209,59 @@ export class MeteoraDlmmService {
         Number(fromPrice) / 10 ** dlmmPool.tokenX.mint.decimals,
       toPrice: Number(toPrice),
       toPriceFormatted: Number(toPrice) / 10 ** dlmmPool.tokenY.mint.decimals,
+    };
+  }
+
+  async getAllLbPairPositionsByUser(
+    walletAddress: string | PublicKey
+  ): Promise<Map<string, PositionInfo>> {
+    const connection = new Connection(CONFIG.SOLANA.RPC_URL, "confirmed");
+
+    // @ts-expect-error
+    return DLMM.default.getAllLbPairPositionsByUser(
+      connection,
+      typeof walletAddress === "string"
+        ? new PublicKey(walletAddress)
+        : walletAddress
+    );
+  }
+
+  async closePositionIx(
+    ownerAddress: string | PublicKey,
+    poolAddress: string | PublicKey,
+    positionAddress: string | PublicKey
+  ): Promise<{
+    instructions: TransactionInstruction[];
+  }> {
+    const dlmmPool = await this.createInstance(poolAddress);
+    const position = await dlmmPool.getPosition(
+      typeof positionAddress === "string"
+        ? new PublicKey(positionAddress)
+        : positionAddress
+    );
+
+    if (!position) {
+      throw new Error("Position not found");
+    }
+
+    const binIdsToRemove = position.positionData.positionBinData.map(
+      (bin) => bin.binId
+    );
+
+    const removeLiquidityTx = await dlmmPool.removeLiquidity({
+      position: position.publicKey,
+      user:
+        typeof ownerAddress === "string"
+          ? new PublicKey(ownerAddress)
+          : ownerAddress,
+      fromBinId: binIdsToRemove[0],
+      toBinId: binIdsToRemove[binIdsToRemove.length - 1],
+      bps: new BN(100 * 100), // 100% (range from 0 to 100)
+      shouldClaimAndClose: true, // should claim swap fee and close position together
+    });
+
+    return {
+      instructions: removeLiquidityTx.flatMap((tx) => tx.instructions),
     };
   }
 }

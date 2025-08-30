@@ -21,6 +21,7 @@ import { logger } from "@/utils/logger";
 import { message } from "telegraf/filters";
 import { positionService } from "@/services/position.service";
 import { meteoraDlmmService } from "@/services/meteora/dlmm.service";
+import { SCENE_IDS } from "../config/scenes";
 
 type SceneState = {
   detection: TokenInputDetection;
@@ -31,18 +32,7 @@ type SceneState = {
   amount?: number;
 };
 
-const SCENE_IDS = {
-  TOKEN_INPUT: "TOKEN_INPUT_SCENE",
-  POOL_SELECTION: "POOL_SELECTION_SCENE",
-  STRATEGY_SELECTION: "STRATEGY_SELECTION_SCENE",
-  AMOUNT_INPUT: "AMOUNT_INPUT_SCENE",
-  CUSTOM_AMOUNT: "CUSTOM_AMOUNT_SCENE",
-  SIDE_SELECTION: "SIDE_SELECTION_SCENE",
-  CONFIRMATION: "CONFIRMATION_SCENE",
-  POSITION_PREVIEW: "POSITION_PREVIEW_SCENE",
-};
-
-const inputMessageScene = new Scenes.BaseScene<BotContext>(
+export const inputMessageScene = new Scenes.BaseScene<BotContext>(
   SCENE_IDS.TOKEN_INPUT
 );
 
@@ -152,7 +142,7 @@ inputMessageScene.action("open_position", async (ctx) => {
 });
 
 // Scene: Strategy Selection
-const strategySelectionScene = new Scenes.BaseScene<BotContext>(
+export const strategySelectionScene = new Scenes.BaseScene<BotContext>(
   SCENE_IDS.STRATEGY_SELECTION
 );
 
@@ -190,7 +180,7 @@ strategySelectionScene.action(/^strategy_(spot|curve|single)$/, async (ctx) => {
 });
 
 // Scene: Side Selection (for Single-Sided strategy)
-const sideSelectionScene = new Scenes.BaseScene<BotContext>(
+export const sideSelectionScene = new Scenes.BaseScene<BotContext>(
   SCENE_IDS.SIDE_SELECTION
 );
 
@@ -230,7 +220,7 @@ sideSelectionScene.action(/^side_(.+)$/, async (ctx) => {
 });
 
 // Scene: Amount Input
-const amountInputScene = new Scenes.BaseScene<BotContext>(
+export const amountInputScene = new Scenes.BaseScene<BotContext>(
   SCENE_IDS.AMOUNT_INPUT
 );
 
@@ -271,7 +261,7 @@ amountInputScene.action("amount_custom", async (ctx) => {
 });
 
 // Scene: Custom Amount Input
-const customAmountScene = new Scenes.BaseScene<BotContext>(
+export const customAmountScene = new Scenes.BaseScene<BotContext>(
   SCENE_IDS.CUSTOM_AMOUNT
 );
 
@@ -297,7 +287,7 @@ customAmountScene.on(message("text"), async (ctx) => {
 });
 
 // Scene: Confirmation
-const confirmationScene = new Scenes.BaseScene<BotContext>(
+export const confirmationScene = new Scenes.BaseScene<BotContext>(
   SCENE_IDS.CONFIRMATION
 );
 
@@ -337,7 +327,7 @@ confirmationScene.action("confirm_yes", async (ctx) => {
 });
 
 // Scene: Position Preview
-const positionPreviewScene = new Scenes.BaseScene<BotContext>(
+export const positionPreviewScene = new Scenes.BaseScene<BotContext>(
   SCENE_IDS.POSITION_PREVIEW
 );
 
@@ -447,18 +437,6 @@ positionPreviewScene.action("final_confirm_yes", async (ctx) => {
 
   return ctx.scene.leave();
 });
-
-export const createTradingStage = () => {
-  return new Scenes.Stage<any>([
-    inputMessageScene,
-    strategySelectionScene,
-    sideSelectionScene,
-    amountInputScene,
-    customAmountScene,
-    confirmationScene,
-    positionPreviewScene,
-  ]);
-};
 
 export async function messageHandler(
   ctx: BotContext,

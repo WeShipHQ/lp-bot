@@ -20,6 +20,7 @@ import {
 } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+import { meteoraDlmmService } from "./meteora/dlmm.service";
 
 // Numeric helpers (data-layer)
 const fromRawAmount = (raw?: string | bigint | number, decimals = 0) =>
@@ -55,19 +56,17 @@ const sumDepositsWithdrawalsInUsd = (arr: DlmmDepositWithdraw[]) =>
   );
 
 export class PortfolioService {
-  private static connection = new Connection(CONFIG.SOLANA.RPC_URL);
-
   static async getUserPortfolio(
     walletAddress: string
   ): Promise<PortfolioResult> {
     try {
-      const dlmm = (DLMM as any).default || DLMM;
       const owner = new PublicKey(walletAddress);
 
-      const map: Map<string, PositionInfo> =
-        await dlmm.getAllLbPairPositionsByUser(this.connection, owner);
+      const userPositions =
+        await meteoraDlmmService.getAllLbPairPositionsByUser(owner);
 
-      const positionsRaw = await this.mapDlmmPositionsToPortfolio(map);
+      const positionsRaw =
+        await this.mapDlmmPositionsToPortfolio(userPositions);
 
       const positions = await this.annotatePositionsWithDbTracking(
         positionsRaw,
@@ -108,7 +107,8 @@ export class PortfolioService {
         data: { walletAddress, positions, totals },
         message: "Portfolio loaded successfully",
       };
-    } catch {
+    } catch (error) {
+      console.error(error);
       return {
         success: false,
         message: "Failed to load portfolio. Please try again.",

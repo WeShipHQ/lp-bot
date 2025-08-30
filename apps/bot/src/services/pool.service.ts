@@ -1,9 +1,11 @@
+import { MeteoraPoolType } from "@/types/bot.types";
 import { MeteoraPoolData } from "../types/token.types";
+import { meteoraPoolService } from "./meteora/pool.service";
 
 /**
  * Service for discovering pools for tokens
  */
-export class PoolDiscoveryService {
+export class PoolService {
   /**
    * Find Meteora pools that contain the specified token
    * @param tokenAddress - Token address to search for
@@ -128,6 +130,20 @@ export class PoolDiscoveryService {
     const pools = await this.findPoolsForToken(tokenAddress);
     return pools.length > 0 ? pools[0] : null;
   }
+
+  async getPool(poolAddress: string, poolType: MeteoraPoolType) {
+    try {
+      const pool = await meteoraPoolService.getPoolInfo(poolAddress, poolType);
+
+      return pool;
+    } catch (error) {
+      console.error(
+        `[Meteora] Error fetching pool ${poolAddress} with type ${poolType}:`,
+        error
+      );
+      return null;
+    }
+  }
 }
 
-export const poolDiscoveryService = new PoolDiscoveryService();
+export const poolService = new PoolService();

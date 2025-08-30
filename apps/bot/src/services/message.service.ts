@@ -1,9 +1,14 @@
 import {
   formatCurrency,
+  formatNumber,
   formatPercentage,
+  formatPrice,
   formatTokenAmount,
+  truncateAddress,
 } from "@/bot/utils/formatters";
+import { MeteoraDlmmPosition, MeteoraPoolData } from "@/types/meteora.types";
 import { PortfolioData, PortfolioPosition } from "@/types/portfolio.types";
+import { getPositionStartCommand } from "@/utils/link";
 
 const bold = (s: string) => `**${s}**`;
 const italic = (s: string) => `_${s}_`;
@@ -73,7 +78,10 @@ export class MessageService {
     return "❌ Please start the bot in a private chat with me.";
   }
 
-  static getPortfolioOverviewMessage(data: PortfolioData): string {
+  static getPortfolioOverviewMessage(
+    data: PortfolioData,
+    botName?: string
+  ): string {
     const positions = data.positions ?? [];
     const totals = data.totals;
 
@@ -92,7 +100,11 @@ export class MessageService {
 
     msg += positions
       .map((pos, i) => {
-        const title = `/${i + 1} ${formatPairSymbol(pos)}\n`;
+        // Create the link if botName is provided
+        const title = botName
+          ? `[/${i + 1} ${formatPairSymbol(pos)}](${getPositionStartCommand(botName, pos.position_address)})\n`
+          : `/${i + 1} ${formatPairSymbol(pos)}\n`;
+
         const dbTracked =
           pos.is_tracked_in_db != null
             ? `• Tracked in DB: ${pos.is_tracked_in_db ? "🟢 Yes" : "🟠 No"} ${italic("(Click to add to DB)")}`
@@ -176,6 +188,48 @@ export class MessageService {
 
     msg += `Net Profit: View on [Instafin](https://instafin.com)`;
     return msg;
+  }
+
+  static getPositionDetailMessageV1(position: MeteoraDlmmPosition): string {
+    // const verifiedEmoji = poolInfo.tokens_verified ? "✅" : "⚠️";
+    // const farmEmoji = poolInfo.has_farm
+    //   ? poolInfo.farm_active
+    //     ? "🚜✅"
+    //     : "🚜⏸️"
+    //   : "";
+
+    function truncateAddress(address: string, start = 4, end = 4): string {
+      if (address.length <= start + end) return address;
+      return `${address.slice(0, start)}...${address.slice(-end)}`;
+    }
+
+    let message = `📊 **Position Details**\n\n`;
+
+    // Position Info
+    message += `🎯 **Position**: \`${truncateAddress(position.address)}\`\n`;
+    // message += `🏊‍♂️ **Pool**: ${poolInfo.pool_name} ${farmEmoji}\n`;
+    // message += `📍 **Pool Address**: \`${this.truncateAddress(poolInfo.pool_address)}\`\n`;
+    // message += `👤 **Owner**: \`${this.truncateAddress(position.owner)}\`\n\n`;
+
+    // Performance Metrics
+    message += `📈 **Performance**\n`;
+    message += `💰 **Total Fees Claimed**: ${bold(formatCurrency(position.total_fee_usd_claimed))}\n`;
+    message += `🎁 **Total Rewards Claimed**: ${bold(formatCurrency(position.total_reward_usd_claimed))}\n`;
+    message += `📊 **24h Fee APY**: ${bold(formatPercentage(position.fee_apy_24h))}\n`;
+    message += `📊 **24h Fee APR**: ${bold(formatPercentage(position.fee_apr_24h))}\n`;
+    message += `💵 **Daily Fee Yield**: ${bold(formatCurrency(position.daily_fee_yield))}\n\n`;
+
+    // Pool Metrics
+    // message += `🏊 **Pool Metrics**\n`;
+    // message += `💹 **Pool APR**: ${bold(formatPercentage(poolInfo.apr))}\n`;
+    // message += `💰 **TVL**: ${bold(formatCurrency(poolInfo.tvl))}\n`;
+    // message += `📈 **24h Volume**: ${bold(formatCurrency(poolInfo.volume24h))}\n`;
+    // message += `💸 **24h Fees**: ${bold(formatCurrency(poolInfo.fee24h))}\n\n`;
+
+    // Pool Type
+    // message += `🔧 **Pool Type**: ${poolType.toUpperCase()}\n`;
+
+    return message;
   }
 
   /**

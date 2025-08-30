@@ -3,6 +3,7 @@ import { FastifyInstance } from "fastify";
 import { getMainKeyboard } from "../keyboards/main-menu";
 import { MessageService } from "@/services/message.service";
 import { BotContext } from "@/types/bot.types";
+import { SCENE_IDS } from "../config/scenes";
 
 export function startCommand(
   bot: Telegraf<BotContext>,
@@ -10,15 +11,33 @@ export function startCommand(
 ) {
   bot.start(async (ctx: BotContext) => {
     try {
-      if (!ctx.user) {
-        await ctx.reply(
-          MessageService.getErrorMessage("Authentication failed")
-        );
-        return;
+      // @ts-expect-error
+      const messageText = ctx.message?.text || "";
+      const startParam = messageText.split(" ")[1];
+
+      if (startParam) {
+        if (
+          startParam.startsWith("position_") ||
+          startParam.startsWith("dl_position_")
+        ) {
+          const positionAddress = startParam.replace(/^(dl_)?position_/, "");
+          await ctx.scene.enter(SCENE_IDS.POSITION_DETAIL_SCENE, {
+            positionAddress,
+          });
+          return;
+        }
+
+        if (startParam.startsWith("dlmm_pool_")) {
+          const poolAddress = startParam.replace(/^dlmm_pool_/, "");
+          await ctx.scene.enter(SCENE_IDS.POOL_DETAIL_SCENE, {
+            poolAddress,
+          });
+          return;
+        }
       }
 
       const welcomeMessage = MessageService.getWelcomeMessage(
-        ctx.user.walletAddress
+        ctx.user.walletAddress!
       );
 
       await ctx.reply(welcomeMessage, {

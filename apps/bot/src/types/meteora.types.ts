@@ -13,62 +13,64 @@ export interface CloseMeteoraPositionParams {
 }
 
 // pools
-export interface MeteoraDlmmPoolResponse {
+export interface MeteoraDlmmPool {
   address: string;
-  name: string;
-  mint_x: string;
-  mint_y: string;
-  reserve_x: string;
-  reserve_y: string;
-  reserve_x_amount: number;
-  reserve_y_amount: number;
-  bin_step: number;
-  base_fee_percentage: string;
-  max_fee_percentage: string;
-  protocol_fee_percentage: string;
-  liquidity: string;
-  reward_mint_x: string;
-  reward_mint_y: string;
-  fees_24h: number;
-  today_fees: number;
-  trade_volume_24h: number;
-  cumulative_trade_volume: string;
-  cumulative_fee_volume: string;
-  current_price: number;
   apr: number;
   apy: number;
+  base_fee_percentage: string;
+  bin_step: number;
+  cumulative_fee_volume: string;
+  cumulative_trade_volume: string;
+  current_price: number;
   farm_apr: number;
   farm_apy: number;
+  fee_tvl_ratio: {
+    hour_1: number;
+    hour_12: number;
+    hour_2: number;
+    hour_24: number;
+    hour_4: number;
+    min_30: number;
+  };
+  fees: {
+    hour_1: number;
+    hour_12: number;
+    hour_2: number;
+    hour_24: number;
+    hour_4: number;
+    min_30: number;
+  };
+  fees_24h: number;
   hide: boolean;
   is_blacklisted: boolean;
-  fees: {
-    min_30: number;
-    hour_1: number;
-    hour_2: number;
-    hour_4: number;
-    hour_12: number;
-    hour_24: number;
-  };
-  fee_tvl_ratio: {
-    min_30: number;
-    hour_1: number;
-    hour_2: number;
-    hour_4: number;
-    hour_12: number;
-    hour_24: number;
-  };
-  volume: {
-    min_30: number;
-    hour_1: number;
-    hour_2: number;
-    hour_4: number;
-    hour_12: number;
-    hour_24: number;
-  };
-  tags: string[];
-  launchpad: any;
   is_verified: boolean;
+  launchpad: string;
+  liquidity: string;
+  max_fee_percentage: string;
+  mint_x: string;
+  mint_y: string;
+  name: string;
+  protocol_fee_percentage: string;
+  reserve_x: string;
+  reserve_x_amount: number;
+  reserve_y: string;
+  reserve_y_amount: number;
+  reward_mint_x: string;
+  reward_mint_y: string;
+  tags: Array<string>;
+  today_fees: number;
+  trade_volume_24h: number;
+  volume: {
+    hour_1: number;
+    hour_12: number;
+    hour_2: number;
+    hour_24: number;
+    hour_4: number;
+    min_30: number;
+  };
 }
+
+export interface MeteoraDlmmPoolResponse extends MeteoraDlmmPool {}
 
 export interface MeteoraDammV1PoolResponse {
   fee_volume: number;
@@ -195,4 +197,56 @@ export interface MeteoraPoolData {
   tokens_verified: boolean;
   has_farm: boolean;
   farm_active: boolean;
+}
+
+// position
+export interface MeteoraDlmmPosition {
+  address: string;
+  pair_address: string;
+  owner: string;
+  total_fee_x_claimed: number;
+  total_fee_y_claimed: number;
+  total_reward_x_claimed: number;
+  total_reward_y_claimed: number;
+  total_fee_usd_claimed: number;
+  total_reward_usd_claimed: number;
+  fee_apy_24h: number;
+  fee_apr_24h: number;
+  daily_fee_yield: number;
+}
+
+export interface MeteoraDlmmPoolsPaginationResponse {
+  pairs: Array<MeteoraDlmmPool>;
+  total: number;
+}
+
+export interface DlmmPoolsPaginationParams {
+  page?: number;
+  limit?: number;
+  skip_size?: number;
+  pools_to_top?: string[];
+  sort_key?:
+    | "tvl"
+    | "volume"
+    | "feetvlratio"
+    | "lm"
+    | "feetvlratio30m"
+    | "feetvlratio1h"
+    | "feetvlratio2h"
+    | "feetvlratio4h"
+    | "feetvlratio12h"
+    | "volume30m"
+    | "volume1h"
+    | "volume2h"
+    | "volume4h"
+    | "volume12h";
+  order_by?: "asc" | "desc";
+  search_term?: string;
+  include_unknown?: boolean;
+  hide_low_tvl?: number;
+  hide_low_apr?: boolean;
+  include_token_mints?: string[];
+  include_pool_token_pairs?: string[];
+  tags?: string[];
+  launchpad?: string[];
 }

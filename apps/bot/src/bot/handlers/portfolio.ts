@@ -154,7 +154,7 @@ async function renderPortfolioOverview(
   portfolio: PortfolioData,
   mode: "edit" | "reply" = "edit"
 ): Promise<boolean> {
-  const text = MessageService.getPortfolioOverviewMessage(portfolio);
+  const text = MessageService.getPortfolioOverviewMessage(portfolio, "weship");
   const extra = {
     parse_mode: "Markdown" as const,
     ...DISABLE_LINK_PREVIEW,

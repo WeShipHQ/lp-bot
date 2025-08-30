@@ -9,6 +9,8 @@ import {
   MeteoraDlmmPoolResponse,
   MeteoraDammV1PoolResponse,
   MeteoraDammV2PoolResponse,
+  MeteoraDlmmPoolsPaginationResponse,
+  DlmmPoolsPaginationParams,
 } from "@/types/meteora.types";
 import { MeteoraPoolType } from "@/types/bot.types";
 
@@ -149,6 +151,54 @@ export class MeteoraPoolService {
       return Array.isArray(data) ? data : [];
     } catch (error: any) {
       if (error.status === 404) return [];
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch all DLMM pools with pagination
+   * @param params - Query parameters for pagination and filtering
+   * @returns Promise<MeteoraDlmmPoolsPaginationResponse>
+   */
+  async getAllDlmmPools(params: DlmmPoolsPaginationParams = {}): Promise<MeteoraDlmmPoolsPaginationResponse> {
+    try {
+      console.log(`[Meteora] Fetching all DLMM pools with params:`, params);
+
+      // Build query string
+      const queryParams = new URLSearchParams();
+      
+      if (params.page !== undefined) queryParams.append('page', params.page.toString());
+      if (params.limit !== undefined) queryParams.append('limit', params.limit.toString());
+      if (params.skip_size !== undefined) queryParams.append('skip_size', params.skip_size.toString());
+      if (params.pools_to_top) {
+        params.pools_to_top.forEach(pool => queryParams.append('pools_to_top', pool));
+      }
+      if (params.sort_key) queryParams.append('sort_key', params.sort_key);
+      if (params.order_by) queryParams.append('order_by', params.order_by);
+      if (params.search_term) queryParams.append('search_term', params.search_term);
+      if (params.include_unknown !== undefined) queryParams.append('include_unknown', params.include_unknown.toString());
+      if (params.hide_low_tvl !== undefined) queryParams.append('hide_low_tvl', params.hide_low_tvl.toString());
+      if (params.hide_low_apr !== undefined) queryParams.append('hide_low_apr', params.hide_low_apr.toString());
+      if (params.include_token_mints) {
+        params.include_token_mints.forEach(mint => queryParams.append('include_token_mints', mint));
+      }
+      if (params.include_pool_token_pairs) {
+        params.include_pool_token_pairs.forEach(pair => queryParams.append('include_pool_token_pairs', pair));
+      }
+      if (params.tags) {
+        params.tags.forEach(tag => queryParams.append('tags', tag));
+      }
+      if (params.launchpad) {
+        params.launchpad.forEach(lp => queryParams.append('launchpad', lp));
+      }
+
+      const url = `${this.dlmmApiUrl}/pair/all_with_pagination${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+      
+      const data = await api.getWithRetry<MeteoraDlmmPoolsPaginationResponse>(url);
+
+      return data;
+    } catch (error) {
+      console.error(`[Meteora] Error fetching all DLMM pools:`, error);
       throw error;
     }
   }

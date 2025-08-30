@@ -5,6 +5,8 @@ import BN from "bn.js";
 import { WalletService } from "./wallet.service";
 import { User } from "@/db";
 import { SOL_MINT } from "@/config/constants";
+import { meteoraPositionService } from "./meteora/position.service";
+import { MeteoraDlmmPosition } from "@/types/meteora.types";
 
 export class PositionService {
   async createPosition(
@@ -19,7 +21,10 @@ export class PositionService {
       );
       console.log(`[Position] Pool: ${poolAddress}, Amount: ${amount} SOL`);
 
-      const poolInfo = await meteoraPoolService.getDlmmPoolInfo(poolAddress);
+      const poolInfo = await meteoraPoolService.getPoolInfo(
+        poolAddress,
+        "dlmm"
+      );
       if (!poolInfo) {
         throw new Error("Pool not found");
       }
@@ -147,6 +152,56 @@ export class PositionService {
         error:
           error instanceof Error ? error.message : "Failed to create position",
       };
+    }
+  }
+
+  async closePosition(
+    user: User,
+    // TODO create abstract type
+    position: MeteoraDlmmPosition
+  ): Promise<{ success: boolean; transactionId?: string; error?: string }> {
+    try {
+      console.log(
+        `[Position] Closing position ${position.address} for user ${user.id}`
+      );
+
+      const { instructions } = await meteoraDlmmService.closePositionIx(
+        user.walletAddress!,
+        position.pair_address,
+        position.address
+      );
+
+      const transactionId = await WalletService.signAndSendTransaction(
+        user,
+        instructions
+      );
+
+      return {
+        success: true,
+        transactionId,
+      };
+    } catch (error) {
+      console.error(`[Position] Error closing position:`, error);
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to close position",
+      };
+    }
+  }
+
+  async getPosition(positionAddress: string) {
+    try {
+      const position =
+        await meteoraPositionService.getDlmmPosition(positionAddress);
+
+      return position;
+    } catch (error) {
+      console.error(
+        `[Meteora] Error fetching DLMM position ${positionAddress}:`,
+        error
+      );
+      return null;
     }
   }
 }
