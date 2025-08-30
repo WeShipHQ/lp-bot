@@ -7,30 +7,33 @@ import {
   SwapParams,
   SwapResult,
 } from "../types/jupiter.types";
+import { VersionedTransaction } from "@solana/web3.js";
 
 export class JupiterService {
   private readonly baseUrl = "https://lite-api.jup.ag";
   private readonly maxRetries = 3;
   private readonly retryDelay = 1000;
-  
+
   private tokenInfoCache = new Map<string, { data: any; timestamp: number }>();
-  private readonly CACHE_TTL = 1 * 60 * 1000; 
+  private readonly CACHE_TTL = 1 * 60 * 1000;
 
   async getTokenInfo(tokenAddress: string): Promise<TokenInfo | null> {
     // Check cache first
     const cachedToken = this.tokenInfoCache.get(tokenAddress);
     const now = Date.now();
-    
-    if (cachedToken && (now - cachedToken.timestamp) < this.CACHE_TTL) {
+
+    if (cachedToken && now - cachedToken.timestamp < this.CACHE_TTL) {
       return cachedToken.data;
     }
-    
+
     let lastError: Error | null = null;
 
     for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
       try {
         if (attempt > 1) {
-          console.log(`[Jupiter] Retrying token info for: ${tokenAddress} (attempt ${attempt})`);
+          console.log(
+            `[Jupiter] Retrying token info for: ${tokenAddress} (attempt ${attempt})`
+          );
         }
 
         const searchResponse = await fetch(
@@ -49,11 +52,11 @@ export class JupiterService {
 
         const token = tokens.find((t) => t.id === tokenAddress) || tokens[0];
         const tokenInfo = this.mapJupiterTokenToTokenInfo(token);
-        
+
         // Cache the result
         this.tokenInfoCache.set(tokenAddress, {
           data: tokenInfo,
-          timestamp: now
+          timestamp: now,
         });
 
         return tokenInfo;
@@ -62,11 +65,11 @@ export class JupiterService {
         console.error(`[Jupiter] API error for ${tokenAddress}:`, error);
 
         if (attempt < this.maxRetries) {
-          await this.delay(this.retryDelay * Math.pow(2, attempt - 1)); 
+          await this.delay(this.retryDelay * Math.pow(2, attempt - 1));
         }
       }
     }
-    
+
     throw new Error(`Failed to fetch token information: ${lastError?.message}`);
   }
 
@@ -261,51 +264,58 @@ export class JupiterService {
     }
   }
 
-  async createSwap(params: SwapParams) {
-    try {
-      console.log(
-        `[Jupiter] Starting swap process: ${params.amount} ${params.inputMint} -> ${params.outputMint}`
-      );
-
-      const orderResponse = await this.getOrder({
-        inputMint: params.inputMint,
-        outputMint: params.outputMint,
-        amount: params.amount,
-        taker: params.taker,
-        referralAccount: params.referralAccount,
-        referralFee: params.referralFee,
-      });
-
-      return {
-        orderResponse,
-        execute: async (signedTransaction: string): Promise<SwapResult> => {
-          try {
-            const executeResponse = await this.executeOrder({
-              signedTransaction,
-              requestId: orderResponse.requestId,
-            });
-
-            return {
-              success: executeResponse.status === "Success",
-              signature: executeResponse.signature,
-              error: executeResponse.error,
-              inputAmount: executeResponse.inputAmountResult,
-              outputAmount: executeResponse.outputAmountResult,
-              swapEvents: executeResponse.swapEvents,
-            };
-          } catch (error) {
-            return {
-              success: false,
-              error: (error as Error).message,
-            };
-          }
-        },
-      };
-    } catch (error) {
-      console.error(`[Jupiter] Error in swap process:`, error);
-      throw error;
-    }
+  getOrderTransaction(transactionStr: string): VersionedTransaction {
+    const transaction = VersionedTransaction.deserialize(
+      Buffer.from(transactionStr, "base64")
+    );
+    return transaction;
   }
+
+  // async createSwap(params: SwapParams) {
+  //   try {
+  //     console.log(
+  //       `[Jupiter] Starting swap process: ${params.amount} ${params.inputMint} -> ${params.outputMint}`
+  //     );
+
+  //     const orderResponse = await this.getOrder({
+  //       inputMint: params.inputMint,
+  //       outputMint: params.outputMint,
+  //       amount: params.amount,
+  //       taker: params.taker,
+  //       referralAccount: params.referralAccount,
+  //       referralFee: params.referralFee,
+  //     });
+
+  //     return {
+  //       orderResponse,
+  //       execute: async (signedTransaction: string): Promise<SwapResult> => {
+  //         try {
+  //           const executeResponse = await this.executeOrder({
+  //             signedTransaction,
+  //             requestId: orderResponse.requestId,
+  //           });
+
+  //           return {
+  //             success: executeResponse.status === "Success",
+  //             signature: executeResponse.signature,
+  //             error: executeResponse.error,
+  //             inputAmount: executeResponse.inputAmountResult,
+  //             outputAmount: executeResponse.outputAmountResult,
+  //             swapEvents: executeResponse.swapEvents,
+  //           };
+  //         } catch (error) {
+  //           return {
+  //             success: false,
+  //             error: (error as Error).message,
+  //           };
+  //         }
+  //       },
+  //     };
+  //   } catch (error) {
+  //     console.error(`[Jupiter] Error in swap process:`, error);
+  //     throw error;
+  //   }
+  // }
 }
 
 export const jupiterService = new JupiterService();

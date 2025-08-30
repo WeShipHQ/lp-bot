@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { positions, users } from '../db/schema';
-import { meteoraService } from './meteora.service';
+import { meteoraPoolService } from './meteora/pool.service';
 import { rebalanceService } from './rebalance.service';
 import { CONFIG } from '../config';
 
@@ -401,7 +401,7 @@ export class PriceMonitoringService {
     while (retries < this.maxRetries) {
       try {
         // Try to get pool info from Meteora
-        const poolData = await meteoraService.getPoolInfo(poolAddress, 'dlmm');
+        const poolData: any = await meteoraPoolService.getPoolInfo(poolAddress, 'dlmm');
         
         if (poolData) {
           return {

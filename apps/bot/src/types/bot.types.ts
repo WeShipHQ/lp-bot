@@ -1,4 +1,5 @@
 import { User } from "@/db";
+import { StrategyType } from "@meteora-ag/dlmm";
 import type { Context, Scenes } from "telegraf";
 
 interface TransferState {
@@ -26,4 +27,7 @@ export interface BotContext extends Context {
     transferState?: TransferState;
     twoFactorVerification?: TwoFactorVerificationState;
   };
+  scene: any
 }
+
+export type StrategyTypeKey = keyof typeof StrategyType

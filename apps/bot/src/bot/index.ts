@@ -29,14 +29,12 @@ export async function setupBotCommands(
   });
 
   const stage = createTradingStage();
-  bot.use(session());
+  // bot.use(session());
   bot.use(stage.middleware());
 
   bot.on(message("text"), async (ctx) => {
     try {
       await messageHandler(ctx, server);
-      // implement this
-      // await handleDirectMessage(ctx, server);
     } catch (error) {
       logger.error(error, "Error in text handler:");
     }

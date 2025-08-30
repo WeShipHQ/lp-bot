@@ -2,6 +2,20 @@ import { generateAuthorizationSignature } from "@privy-io/server-auth/wallet-api
 import { CONFIG } from "../config";
 import { generateRecipientKeypair } from "../bot/utils/hpke-keygen";
 import { decryptHPKEMessage } from "../bot/utils/hpke-decrypt";
+import { privy } from "./privy.service";
+import {
+  Connection,
+  PublicKey,
+  Signer,
+  TransactionInstruction,
+  AddressLookupTableAccount,
+  Transaction,
+  VersionedTransaction,
+} from "@solana/web3.js";
+import { User } from "@/db";
+import { CreateSmartTransactionOptions } from "@/types/transaction.types";
+import { broadcastTransaction, createSmartTransaction } from "@/utils/build-tx";
+
 export interface WalletExportResult {
   privateKey: string;
 }
@@ -13,7 +27,9 @@ export interface TransferSolParams {
 }
 
 export class WalletService {
-  static async exportAndDecryptWallet(walletId: string): Promise<WalletExportResult> {
+  static async exportAndDecryptWallet(
+    walletId: string
+  ): Promise<WalletExportResult> {
     try {
       // 1. Generate keypair for HPKE encryption
       const { publicKeyBase64, privateKeyBase64 } =
@@ -115,22 +131,13 @@ export class WalletService {
     }
   }
 
-  static async signMessage(walletId: string, message: string): Promise<void> {
-    const result = await privy.walletApi.solana.signMessage({
-      walletId,
-      message,
-    });
-
-    console.log("Sign message result:", result);
-  }
-
   static async signAndSendTransaction(
     user: User,
     instructions: TransactionInstruction[],
     signers: Signer[] = [],
     lookupTables: AddressLookupTableAccount[] = [],
     options: CreateSmartTransactionOptions = {}
-  ): Promise<void> {
+  ): Promise<string> {
     const connection = new Connection(CONFIG.SOLANA.RPC_URL);
 
     const payer = new PublicKey(user.walletAddress!);
@@ -152,5 +159,16 @@ export class WalletService {
     const result = await broadcastTransaction(connection, signedTransaction);
 
     console.log("Sign message result:", result);
+    return result;
+  }
+
+  static async signTransaction(
+    user: User,
+    transaction: Transaction | VersionedTransaction
+  ): Promise<{ signedTransaction: Transaction | VersionedTransaction }> {
+    return privy.walletApi.solana.signTransaction({
+      walletId: user.walletId,
+      transaction: transaction,
+    });
   }
 }

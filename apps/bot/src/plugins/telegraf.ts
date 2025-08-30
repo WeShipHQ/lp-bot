@@ -29,7 +29,6 @@ const telegrafPlugin: FastifyPluginAsync = fp(async (server, _options) => {
     await bot.telegram.setWebhook(CONFIG.TELEGRAM.WEBHOOK_URL);
     server.log.info(`Bot webhook set to: ${CONFIG.TELEGRAM.WEBHOOK_URL}`);
   } else {
-    console.log("aaaaa");
     // bot.launch({ dropPendingUpdates: true }, () =>
     //   console.log("Bot is starting!")
     // );

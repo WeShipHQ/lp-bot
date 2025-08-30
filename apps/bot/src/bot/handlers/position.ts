@@ -1,7 +1,7 @@
 import { Context } from "telegraf";
 import { FastifyInstance } from "fastify";
 import { jupiterService } from "../../services/jupiter.service";
-import { meteoraService } from "../../services/meteora.service";
+import { meteoraPoolService } from "../../services/meteora/pool.service";
 import { poolDiscoveryService } from "../../services/pool-discovery.service";
 import { positionService } from "../../services/position.service";
 import {
@@ -74,7 +74,7 @@ async function handlePoolPositionWithType(
     server.log.info(`Opening position for ${poolType} pool: ${poolAddress}`);
 
     // ✅ Use the known pool type directly
-    const poolData = await meteoraService.getPoolInfo(poolAddress, poolType);
+    const poolData = await meteoraPoolService.getPoolInfo(poolAddress, poolType);
     if (!poolData) {
       await ctx.editMessageText(
         formatErrorMessage(poolAddress, "Pool not found"),
@@ -174,7 +174,7 @@ async function handlePoolPosition(
     server.log.info(`Opening position for pool: ${poolAddress}`);
 
     // Get pool information
-    const poolData = await meteoraService.getPoolInfo(poolAddress, poolType);
+    const poolData = await meteoraPoolService.getPoolInfo(poolAddress, poolType);
     if (!poolData) {
       await ctx.editMessageText(
         formatErrorMessage(poolAddress, "Pool not found"),

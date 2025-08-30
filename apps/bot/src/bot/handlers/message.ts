@@ -2,7 +2,7 @@ import { Markup, Scenes } from "telegraf";
 import { FastifyInstance } from "fastify";
 import { inputDetectionService } from "../../services/input-detection.service";
 import { jupiterService } from "../../services/jupiter.service";
-import { meteoraService } from "../../services/meteora.service";
+import { meteoraPoolService } from "../../services/meteora/pool.service";
 import {
   formatTokenDisplayData,
   formatErrorMessage,
@@ -39,6 +39,7 @@ const SCENE_IDS = {
   CUSTOM_AMOUNT: "CUSTOM_AMOUNT_SCENE",
   SIDE_SELECTION: "SIDE_SELECTION_SCENE",
   CONFIRMATION: "CONFIRMATION_SCENE",
+  POSITION_PREVIEW: "POSITION_PREVIEW_SCENE",
 };
 
 const inputMessageScene = new Scenes.BaseScene<BotContext>(
@@ -114,7 +115,7 @@ inputMessageScene.enter(async (ctx) => {
         "Invalid Meteora pool URL"
       );
     } else {
-      const poolData = await meteoraService.getPoolInfo(
+      const poolData = await meteoraPoolService.getPoolInfo(
         detection.value,
         poolType
       );
@@ -125,9 +126,6 @@ inputMessageScene.enter(async (ctx) => {
           "Pool not found or invalid pool ID"
         );
       } else {
-        // ----
-        meteoraDlmmService.calculatePoolDepositAmount(poolData.pool_address, 0.1);
-        //---
         (ctx.scene.state as SceneState).poolInfo = poolData;
         responseMessage = formatPoolInfo(poolData);
       }
@@ -335,24 +333,100 @@ confirmationScene.action("confirm_no", async (ctx) => {
 
 confirmationScene.action("confirm_yes", async (ctx) => {
   await ctx.answerCbQuery();
+  return ctx.scene.enter(SCENE_IDS.POSITION_PREVIEW, ctx.scene.state);
+});
+
+// Scene: Position Preview
+const positionPreviewScene = new Scenes.BaseScene<BotContext>(
+  SCENE_IDS.POSITION_PREVIEW
+);
+
+positionPreviewScene.enter(async (ctx) => {
+  const { strategy, amount, poolInfo, selectedSide } = ctx.scene
+    .state as SceneState;
+
+  // Show loading message first
+  await ctx.editMessageText("⏳ **Calculating position preview...**", {
+    parse_mode: "Markdown",
+  });
+
+  try {
+    // Calculate position preview
+    const preview = await calculatePositionPreview(
+      strategy,
+      amount || 0,
+      poolInfo!,
+      selectedSide
+    );
+
+    let message = `👀 **Position Preview**\n\n`;
+    message += `Strategy: ${strategy.toUpperCase()}\n`;
+    message += `Pool: ${poolInfo?.token_a_symbol}-${poolInfo?.token_b_symbol}\n`;
+
+    if (strategy !== "single") {
+      message += `Position Range: ${preview.rangeMin} - ${preview.rangeMax} ${poolInfo?.token_b_symbol} / ${poolInfo?.token_a_symbol}\n`;
+      message += `Amount: ${preview.tokenAAmount} ${poolInfo?.token_a_symbol} / ${preview.tokenBAmount} ${poolInfo?.token_b_symbol}\n`;
+      if (preview.autoRebalancing) {
+        message += `Auto-rebalancing: enabled\n`;
+      }
+    } else {
+      message += `Side: ${selectedSide}\n`;
+      if (selectedSide === poolInfo?.token_a_symbol) {
+        message += `Amount: ${preview.tokenAAmount} ${poolInfo?.token_a_symbol}\n`;
+      } else {
+        message += `Amount: ${preview.tokenBAmount} ${poolInfo?.token_b_symbol}\n`;
+      }
+    }
+
+    message += `\nCreate position by confirming on the button below`;
+
+    await ctx.editMessageText(message, {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback("✅ Yes", "final_confirm_yes")],
+        [Markup.button.callback("❌ No", "final_confirm_no")],
+      ]),
+    });
+  } catch (error) {
+    console.error("Error calculating position preview:", error);
+    await ctx.editMessageText(
+      "❌ **Error calculating position preview**\n\nPlease try again later.",
+      { parse_mode: "Markdown" }
+    );
+    return ctx.scene.leave();
+  }
+});
+
+positionPreviewScene.action("final_confirm_no", async (ctx) => {
+  await ctx.answerCbQuery();
+  await ctx.editMessageText(
+    "❌ **Cancelled initialization of the position.**",
+    { parse_mode: "Markdown" }
+  );
+  return ctx.scene.leave();
+});
+
+positionPreviewScene.action("final_confirm_yes", async (ctx) => {
+  await ctx.answerCbQuery();
 
   const { strategy, amount, poolInfo, selectedSide } = ctx.scene
     .state as SceneState;
 
   try {
-    await ctx.editMessageText("⏳ **Processing transaction...**", {
+    // Send new message instead of editing
+    await ctx.reply("⏳ **Processing transaction...**", {
       parse_mode: "Markdown",
     });
 
     const result = await positionService.createPosition(
-      ctx.user.id,
+      ctx.user,
       poolInfo?.pool_address!,
       "spot",
       Number(amount || 0)
     );
 
     if (result.success) {
-      await ctx.editMessageText(
+      await ctx.reply(
         `✅ **Transaction Successful!**\n\n` +
           `🎉 Your ${strategy} position has been created successfully.\n` +
           `📝 Transaction: \`${result.transactionId}\`\n\n` +
@@ -364,7 +438,7 @@ confirmationScene.action("confirm_yes", async (ctx) => {
       throw new Error("Transaction failed");
     }
   } catch (error) {
-    await ctx.editMessageText(
+    await ctx.reply(
       "❌ **Transaction Failed**\n\n" +
         "Something went wrong while creating your position. Please try again later.",
       { parse_mode: "Markdown" }
@@ -382,6 +456,7 @@ export const createTradingStage = () => {
     amountInputScene,
     customAmountScene,
     confirmationScene,
+    positionPreviewScene,
   ]);
 };
 
@@ -405,59 +480,156 @@ export async function messageHandler(
   return ctx.scene.enter(SCENE_IDS.TOKEN_INPUT, {
     detection: detection,
   });
+}
 
-  // try {
-  //   const loadingMessage = formatLoadingMessage(detection.type);
-  //   const sentMessage = await ctx.reply(loadingMessage);
+async function calculatePositionPreview(
+  strategy: string,
+  amount: number,
+  poolInfo: MeteoraPoolData,
+  selectedSide?: string
+) {
+  const SOL_MINT = "So11111111111111111111111111111111111111112";
 
-  //   let responseMessage: string;
-  //   let type: "token" | "pool" | "unknown" = "unknown";
-  //   let poolType: "damm_v1" | "damm_v2" | "dlmm" | undefined;
+  // For single-sided strategy
+  if (strategy === "single") {
+    if (selectedSide === poolInfo.token_a_symbol) {
+      // Converting SOL to token A
+      if (poolInfo.token_a_mint === SOL_MINT) {
+        return {
+          rangeMin: "N/A",
+          rangeMax: "N/A",
+          tokenAAmount: amount.toString(),
+          tokenBAmount: "0",
+          autoRebalancing: false,
+        };
+      } else {
+        try {
+          const orderResponse = await jupiterService.getOrder({
+            inputMint: SOL_MINT,
+            outputMint: poolInfo.token_a_mint,
+            amount: (amount * 1e9).toString(), // Convert SOL to lamports
+          });
+          // TODO fix decimals
+          const tokenAAmount = (
+            parseInt(orderResponse.outAmount) / Math.pow(10, 6)
+          ).toString();
 
-  //   switch (detection.type) {
-  //     case "address":
-  //       responseMessage = await handleTokenAddress(detection.value, server);
-  //       type = "token";
-  //       break;
+          return {
+            rangeMin: "N/A",
+            rangeMax: "N/A",
+            tokenAAmount,
+            tokenBAmount: "0",
+            autoRebalancing: false,
+          };
+        } catch (error) {
+          console.error("Error getting Jupiter quote for token A:", error);
+          return {
+            rangeMin: "N/A",
+            rangeMax: "N/A",
+            tokenAAmount: "Error calculating",
+            tokenBAmount: "0",
+            autoRebalancing: false,
+          };
+        }
+      }
+    } else {
+      if (poolInfo.token_b_mint === SOL_MINT) {
+        return {
+          rangeMin: "N/A",
+          rangeMax: "N/A",
+          tokenAAmount: "0",
+          tokenBAmount: amount.toString(),
+          autoRebalancing: false,
+        };
+      } else {
+        try {
+          const orderResponse = await jupiterService.getOrder({
+            inputMint: SOL_MINT,
+            outputMint: poolInfo.token_b_mint,
+            amount: (amount * 1e9).toString(), // Convert SOL to lamports
+          });
 
-  //     case "meteora_damm_v1":
-  //     case "meteora_damm_v2":
-  //     case "meteora_dlmm":
-  //       responseMessage = await handleMeteoraPool(detection, server);
-  //       type = "pool";
-  //       poolType =
-  //         inputDetectionService.getMeteoraPoolType(detection.originalInput) ||
-  //         undefined;
-  //       break;
+          const tokenBAmount = (
+            parseInt(orderResponse.outAmount) / Math.pow(10, 6)
+          ).toString();
 
-  //     default:
-  //       responseMessage = formatErrorMessage(
-  //         messageText,
-  //         `Unsupported input type: ${detection.type}`
-  //       );
-  //   }
+          return {
+            rangeMin: "N/A",
+            rangeMax: "N/A",
+            tokenAAmount: "0",
+            tokenBAmount,
+            autoRebalancing: false,
+          };
+        } catch (error) {
+          console.error("Error getting Jupiter quote for token B:", error);
+          return {
+            rangeMin: "N/A",
+            rangeMax: "N/A",
+            tokenAAmount: "0",
+            tokenBAmount: "Error calculating",
+            autoRebalancing: false,
+          };
+        }
+      }
+    }
+  }
 
-  //   await ctx.telegram.editMessageText(
-  //     ctx.chat?.id,
-  //     sentMessage.message_id,
-  //     undefined,
-  //     responseMessage,
-  //     {
-  //       parse_mode: "Markdown",
-  //       reply_markup: {
-  //         inline_keyboard: getTokenInfoKeyboard(detection.value, type, poolType)
-  //           .inline_keyboard,
-  //       },
-  //     }
-  //   );
-  // } catch (error) {
-  //   server.log.error("Error handling token input:", error);
+  // For spot and curve strategies, split amount 50/50
+  const halfAmount = amount / 2;
+  const halfAmountLamports = (halfAmount * 1e9).toString();
 
-  //   const errorMessage = formatErrorMessage(
-  //     messageText,
-  //     "Failed to fetch token/pool information. Please try again later."
-  //   );
+  let tokenAAmount = "0";
+  let tokenBAmount = "0";
 
-  //   await ctx.reply(errorMessage, { parse_mode: "Markdown" });
-  // }
+  try {
+    // Calculate token A amount
+    if (poolInfo.token_a_mint === SOL_MINT) {
+      // Token A is SOL, no conversion needed
+      tokenAAmount = halfAmount.toString();
+    } else {
+      // Convert SOL to token A
+      const orderResponseA = await jupiterService.getOrder({
+        inputMint: SOL_MINT,
+        outputMint: poolInfo.token_a_mint,
+        amount: halfAmountLamports,
+      });
+
+      tokenAAmount = (
+        parseInt(orderResponseA.outAmount) / Math.pow(10, 6)
+      ).toFixed(6);
+    }
+
+    // Calculate token B amount
+    if (poolInfo.token_b_mint === SOL_MINT) {
+      // Token B is SOL, no conversion needed
+      tokenBAmount = halfAmount.toString();
+    } else {
+      // Convert SOL to token B
+      const orderResponseB = await jupiterService.getOrder({
+        inputMint: SOL_MINT,
+        outputMint: poolInfo.token_b_mint,
+        amount: halfAmountLamports,
+      });
+
+      tokenBAmount = (
+        parseInt(orderResponseB.outAmount) / Math.pow(10, 6)
+      ).toFixed(6);
+    }
+  } catch (error) {
+    console.error("Error getting Jupiter quotes:", error);
+    tokenAAmount = "Error calculating";
+    tokenBAmount = "Error calculating";
+  }
+
+  const { fromPrice, toPrice } = await meteoraDlmmService.getPriceRange(
+    poolInfo.pool_address
+  );
+
+  return {
+    rangeMin: fromPrice,
+    rangeMax: toPrice,
+    tokenAAmount,
+    tokenBAmount,
+    autoRebalancing: strategy === "curve" || strategy === "spot",
+  };
 }

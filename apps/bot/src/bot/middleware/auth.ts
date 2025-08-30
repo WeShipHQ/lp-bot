@@ -32,7 +32,6 @@ export function authMiddleware(
 ): MiddlewareFn<BotContext> {
   return async (ctx, next) => {
     if (!ctx.from) return;
-    console.log("aaaaaaaaaaa");
     const telegramUserId = ctx.from.id.toString();
 
     try {

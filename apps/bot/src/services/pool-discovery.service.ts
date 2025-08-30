@@ -1,5 +1,4 @@
-import { MeteoraPoolData } from '../types/token.types';
-import { meteoraService } from './meteora.service';
+import { MeteoraPoolData } from "../types/token.types";
 
 /**
  * Service for discovering pools for tokens
@@ -22,22 +21,22 @@ export class PoolDiscoveryService {
 
       const mockPools: MeteoraPoolData[] = [
         {
-          pool_address: '7YttLkHDoNj9wyDur5pM1ejNaAvT9X4eqaYcHQqtj2G5',
+          pool_address: "7YttLkHDoNj9wyDur5pM1ejNaAvT9X4eqaYcHQqtj2G5",
           pool_name: `${tokenAddress.slice(0, 4)}...${tokenAddress.slice(-4)}-USDC`,
-          creator: 'meteora',
+          creator: "meteora",
           token_a_mint: tokenAddress,
-          token_b_mint: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
-          token_a_vault: '',
-          token_b_vault: '',
-          token_a_symbol: 'TOKEN',
-          token_b_symbol: 'USDC',
-          alpha_vault: '',
-          sqrt_min_price: '0',
-          sqrt_max_price: '0',
-          min_price: '0',
-          max_price: '0',
-          liquidity: '1000000',
-          permanent_lock_liquidity: '0',
+          token_b_mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", // USDC
+          token_a_vault: "",
+          token_b_vault: "",
+          token_a_symbol: "TOKEN",
+          token_b_symbol: "USDC",
+          alpha_vault: "",
+          sqrt_min_price: "0",
+          sqrt_max_price: "0",
+          min_price: "0",
+          max_price: "0",
+          liquidity: "1000000",
+          permanent_lock_liquidity: "0",
           sqrt_price: 1.0,
           token_a_amount: 500000,
           token_b_amount: 500000,
@@ -64,22 +63,22 @@ export class PoolDiscoveryService {
           farm_active: true,
         },
         {
-          pool_address: '8YttLkHDoNj9wyDur5pM1ejNaAvT9X4eqaYcHQqtj2G6',
+          pool_address: "8YttLkHDoNj9wyDur5pM1ejNaAvT9X4eqaYcHQqtj2G6",
           pool_name: `${tokenAddress.slice(0, 4)}...${tokenAddress.slice(-4)}-SOL`,
-          creator: 'meteora',
+          creator: "meteora",
           token_a_mint: tokenAddress,
-          token_b_mint: 'So11111111111111111111111111111111111111112', // SOL
-          token_a_vault: '',
-          token_b_vault: '',
-          token_a_symbol: 'TOKEN',
-          token_b_symbol: 'SOL',
-          alpha_vault: '',
-          sqrt_min_price: '0',
-          sqrt_max_price: '0',
-          min_price: '0',
-          max_price: '0',
-          liquidity: '750000',
-          permanent_lock_liquidity: '0',
+          token_b_mint: "So11111111111111111111111111111111111111112", // SOL
+          token_a_vault: "",
+          token_b_vault: "",
+          token_a_symbol: "TOKEN",
+          token_b_symbol: "SOL",
+          alpha_vault: "",
+          sqrt_min_price: "0",
+          sqrt_max_price: "0",
+          min_price: "0",
+          max_price: "0",
+          liquidity: "750000",
+          permanent_lock_liquidity: "0",
           sqrt_price: 1.0,
           token_a_amount: 375000,
           token_b_amount: 375000,
@@ -110,7 +109,10 @@ export class PoolDiscoveryService {
       // Sort by TVL descending
       return mockPools.sort((a, b) => b.tvl - a.tvl);
     } catch (error) {
-      console.error(`[PoolDiscovery] Error finding pools for token ${tokenAddress}:`, error);
+      console.error(
+        `[PoolDiscovery] Error finding pools for token ${tokenAddress}:`,
+        error
+      );
       return [];
     }
   }
@@ -120,7 +122,9 @@ export class PoolDiscoveryService {
    * @param tokenAddress - Token address
    * @returns Best pool or null if none found
    */
-  async getBestPoolForToken(tokenAddress: string): Promise<MeteoraPoolData | null> {
+  async getBestPoolForToken(
+    tokenAddress: string
+  ): Promise<MeteoraPoolData | null> {
     const pools = await this.findPoolsForToken(tokenAddress);
     return pools.length > 0 ? pools[0] : null;
   }

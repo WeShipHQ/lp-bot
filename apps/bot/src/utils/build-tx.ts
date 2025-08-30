@@ -115,19 +115,15 @@ export async function createSmartTransaction(
 ): Promise<SmartTransactionContext> {
   const { feePayer, priorityFeeCap } = options;
 
-  // const existingComputeBudgetInstructions = instructions.filter((instruction) =>
-  //   instruction.programId.equals(ComputeBudgetProgram.programId)
-  // );
+  const existingComputeBudgetInstructions = instructions.filter((instruction) =>
+    instruction.programId.equals(ComputeBudgetProgram.programId)
+  );
 
   // if (existingComputeBudgetInstructions.length > 0) {
   //   throw new Error(
   //     "Cannot provide instructions that set the compute unit price and/or limit"
   //   );
   // }
-
-  instructions = instructions.filter(
-    (ix) => !ix.programId.equals(ComputeBudgetProgram.programId)
-  );
 
   // Determine the fee payer key (override if provided)
   const payerKey = feePayer ? feePayer.publicKey : payer;
@@ -186,6 +182,8 @@ export async function createSmartTransaction(
     });
   }
 
+  console.log("priorityFeeResponse", priorityFeeResponse);
+
   const { priorityFeeEstimate } = priorityFeeResponse;
 
   if (!priorityFeeEstimate) {
@@ -204,30 +202,33 @@ export async function createSmartTransaction(
   });
   instructions.unshift(computeBudgetPriceIx);
 
-  // Simulate the tx to get the CUs consumed
-  let units = await getComputeUnits(
-    connection,
-    instructions,
-    payerKey,
-    lookupTables
-  );
-
-  if (!units) {
-    // throw new Error(
-    //   "Error fetching compute units for the instructions provided"
-    // );
-    console.warn(
-      "Error fetching compute units for the instructions provided, defaulting to 1_400_000"
+  if (existingComputeBudgetInstructions.length === 0) {
+    // Simulate the tx to get the CUs consumed
+    let units = await getComputeUnits(
+      connection,
+      instructions,
+      payerKey,
+      lookupTables
     );
-    units = 200_000;
-  }
+    console.log("compute unit", units);
 
-  // For very small transactions, default to 1,000 CUs; otherwise, add a 10% margin
-  const customersCU = units < 1000 ? 1000 : Math.ceil(units * 1.1);
-  const computeUnitsIx = ComputeBudgetProgram.setComputeUnitLimit({
-    units: customersCU,
-  });
-  instructions.unshift(computeUnitsIx);
+    if (!units) {
+      // throw new Error(
+      //   "Error fetching compute units for the instructions provided"
+      // );
+      console.warn(
+        "Error fetching compute units for the instructions provided, defaulting to 1_400_000"
+      );
+      units = 800_000;
+    }
+
+    // For very small transactions, default to 1,000 CUs; otherwise, add a 10% margin
+    const customersCU = units < 1000 ? 1000 : Math.ceil(units * 1.1);
+    const computeUnitsIx = ComputeBudgetProgram.setComputeUnitLimit({
+      units: customersCU,
+    });
+    instructions.unshift(computeUnitsIx);
+  }
 
   // Rebuild the final unsigned tx
   if (isVersioned) {

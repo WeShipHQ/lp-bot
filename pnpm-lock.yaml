@@ -114,6 +114,7 @@ importers:
       '@langchain/community':
         specifier: ^0.3.27
 <<<<<<< HEAD
+<<<<<<< HEAD
         version: 0.3.27(@browserbasehq/stagehand@1.14.0)(@ibm-cloud/watsonx-ai@1.6.10)(@langchain/core@0.3.36)(@langchain/google-genai@0.1.9)(@langchain/groq@0.1.3)(@langchain/ollama@0.2.0)(@neondatabase/serverless@1.0.1)(axios@1.11.0)(ibm-cloud-sdk-core@5.4.2)(openai@5.12.2)(pg@8.16.3)(ws@7.5.10)
 =======
 <<<<<<< HEAD
@@ -122,6 +123,9 @@ importers:
         version: 0.3.27(@browserbasehq/stagehand@1.14.0)(@ibm-cloud/watsonx-ai@1.6.10)(@langchain/core@0.3.36)(@langchain/google-genai@0.1.9)(@langchain/groq@0.1.3)(@langchain/ollama@0.2.0)(@neondatabase/serverless@1.0.1)(axios@1.11.0)(ibm-cloud-sdk-core@5.4.2)(ioredis@5.7.0)(openai@5.12.2)(pg@8.16.3)(ws@8.18.3)
 >>>>>>> 2509565 (feat: deposit flow)
 >>>>>>> 17a5afd (feat: deposit flow)
+=======
+        version: 0.3.27(@browserbasehq/stagehand@1.14.0)(@ibm-cloud/watsonx-ai@1.6.10)(@langchain/core@0.3.36)(@langchain/google-genai@0.1.9)(@langchain/groq@0.1.3)(@langchain/ollama@0.2.0)(@neondatabase/serverless@1.0.1)(axios@1.11.0)(ibm-cloud-sdk-core@5.4.2)(ioredis@5.7.0)(openai@5.12.2)(pg@8.16.3)(ws@7.5.10)
+>>>>>>> 6ff59a8 (feat: handle create position)
       '@langchain/core':
         specifier: ^0.3.36
         version: 0.3.36(openai@5.12.2)
@@ -2182,6 +2186,7 @@ packages:
       '@jridgewell/sourcemap-codec': 1.5.4
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   /@langchain/community@0.3.27(@browserbasehq/stagehand@1.14.0)(@ibm-cloud/watsonx-ai@1.6.10)(@langchain/core@0.3.36)(@langchain/google-genai@0.1.9)(@langchain/groq@0.1.3)(@langchain/ollama@0.2.0)(@neondatabase/serverless@1.0.1)(axios@1.11.0)(ibm-cloud-sdk-core@5.4.2)(openai@5.12.2)(pg@8.16.3)(ws@7.5.10):
 =======
 <<<<<<< HEAD
@@ -2190,6 +2195,9 @@ packages:
   /@langchain/community@0.3.27(@browserbasehq/stagehand@1.14.0)(@ibm-cloud/watsonx-ai@1.6.10)(@langchain/core@0.3.36)(@langchain/google-genai@0.1.9)(@langchain/groq@0.1.3)(@langchain/ollama@0.2.0)(@neondatabase/serverless@1.0.1)(axios@1.11.0)(ibm-cloud-sdk-core@5.4.2)(ioredis@5.7.0)(openai@5.12.2)(pg@8.16.3)(ws@8.18.3):
 >>>>>>> 2509565 (feat: deposit flow)
 >>>>>>> 17a5afd (feat: deposit flow)
+=======
+  /@langchain/community@0.3.27(@browserbasehq/stagehand@1.14.0)(@ibm-cloud/watsonx-ai@1.6.10)(@langchain/core@0.3.36)(@langchain/google-genai@0.1.9)(@langchain/groq@0.1.3)(@langchain/ollama@0.2.0)(@neondatabase/serverless@1.0.1)(axios@1.11.0)(ibm-cloud-sdk-core@5.4.2)(ioredis@5.7.0)(openai@5.12.2)(pg@8.16.3)(ws@7.5.10):
+>>>>>>> 6ff59a8 (feat: handle create position)
     resolution: {integrity: sha512-YdVDysg/k4LiRJgtGo5IHlrtAMsWK5o7/WtgUGsyABAfKNAcFY2dBV5NClbEwS2GuE4Ll8TC3PxSWIctH42oeg==}
     engines: {node: '>=18'}
     peerDependencies:
@@ -5095,8 +5103,6 @@ packages:
     peerDependencies:
       typescript: ^4.1 || ^5.0
     peerDependenciesMeta:
-      '@swc/helpers':
-        optional: true
       typescript:
         optional: true
     dependencies:
@@ -5420,8 +5426,6 @@ packages:
       - supports-color
       - ts-node
 
-<<<<<<< HEAD
-=======
   /cron-parser@4.9.0:
     resolution: {integrity: sha512-p0SaNjrHOnQeR8/VnfGbmg9te2kfyYSQ7Sc/j/6DtPL3JQvKxmjO9TSjNFpujqV3vEYYBvNNvXSxzyksBWAx1Q==}
     engines: {node: '>=12.0.0'}
@@ -5429,7 +5433,6 @@ packages:
       luxon: 3.7.1
     dev: false
 
->>>>>>> 2509565 (feat: deposit flow)
   /cross-fetch@3.2.0:
     resolution: {integrity: sha512-Q+xVJLoGOeIMXZmbUK4HYk+69cQH6LudR0Vu/pRm2YlU/hDV9CiS0gKUMaWY5f2NeUH9C1nV3bsTlCo0FsTV1Q==}
     dependencies:
@@ -5614,6 +5617,7 @@ packages:
   /detect-libc@2.0.4:
     resolution: {integrity: sha512-3UDv+G9CsCKO1WKMGw9fwq/SWJYbI0c5Y7LU1AXYoDdbhE2AHQ6N6Nb34sG8Fj7T5APy8qXDCKuuIHd1BR0tVA==}
     engines: {node: '>=8'}
+    requiresBuild: true
     dev: false
     optional: true
 
@@ -8788,6 +8792,7 @@ packages:
   /node-gyp-build-optional-packages@5.2.2:
     resolution: {integrity: sha512-s+w+rBWnpTMwSFbaE0UXsRlg7hU4FjekKU4eyAih5T8nJuNZT1nNsskXpxmeqSK9UzkBl6UgRlnKc8hz8IEqOw==}
     hasBin: true
+    requiresBuild: true
     dependencies:
       detect-libc: 2.0.4
     dev: false

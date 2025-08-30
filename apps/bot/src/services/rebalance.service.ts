@@ -2,8 +2,7 @@ import { eq, and } from 'drizzle-orm';
 import { db } from '../db';
 import { positions, users, rebalanceEvents, transactions } from '../db/schema';
 import type { Position, User, RebalanceStrategy } from '../db/schema';
-import { meteoraService } from './meteora.service';
-import { solanaService } from './solana.service';
+import { meteoraPoolService } from './meteora/pool.service';
 import { CONFIG } from '../config';
 
 export interface RebalanceResult {
@@ -68,7 +67,7 @@ export class RebalanceService {
       }
 
       // Get current pool data
-      const poolData = await meteoraService.getPoolInfo(
+      const poolData: any = await meteoraPoolService.getPoolInfo(
         position.poolAddress,
         this.getPoolTypeFromStrategy(position.strategyType)
       );
