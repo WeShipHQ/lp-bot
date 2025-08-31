@@ -1,8 +1,13 @@
 import type {
   LbPosition,
   TInitializePositionAndAddLiquidityParamsByStrategy,
+  StrategyType,
 } from "@meteora-ag/dlmm";
 import type { PublicKey } from "@solana/web3.js";
+
+export type MeteoraStrategyTypeKey = keyof typeof StrategyType;
+export type MeteoraPoolType = "damm_v1" | "damm_v2" | "dlmm";
+export type MeteoraCreatePositionStrategy = "spot" | "curve" | "single-sided";
 
 export interface CreateMeteoraPositionParams
   extends TInitializePositionAndAddLiquidityParamsByStrategy {}

@@ -51,13 +51,12 @@ export function getPoolInfoKeyboard(
       [
         {
           text: "💰 Open position",
-          // callback_data: `open_position_pool_${address}`,
           callback_data: "open_position",
         },
       ],
       [
-        { text: "Close", callback_data: "close_pool" },
-        { text: "Refresh", callback_data: "refresh_pool" },
+        { text: "Close", callback_data: "close_pool_detail" },
+        { text: "Refresh", callback_data: "refresh_pool_detail" },
       ],
     ],
   };

@@ -5,13 +5,20 @@ import {
   formatTokenAmount,
   truncateAddress,
 } from "@/bot/utils/formatters";
+import { bold, code, link } from "@/bot/utils/text-formatters";
 import { MeteoraDlmmPosition, MeteoraPoolData } from "@/types/meteora.types";
 import { PortfolioData, PortfolioPosition } from "@/types/portfolio.types";
 import { TokenDisplayData, TokenInfo } from "@/types/token.types";
 import { getPositionStartCommand } from "@/utils/link";
+import { LbPair, LbPosition } from "@meteora-ag/dlmm";
+import { BN } from "bn.js";
 
-const bold = (s: string) => `**${s}**`;
+// const bold = (s: string) => `**${s}**`;
 const italic = (s: string) => `_${s}_`;
+
+// Add utility functions for generating URLs
+const buildSolscanUrl = (poolAddress: string) =>
+  `https://solscan.io/account/${poolAddress}`;
 
 const buildDexScreenerUrl = (poolAddress: string) =>
   `https://dexscreener.com/solana/${poolAddress}`;
@@ -190,7 +197,11 @@ export class MessageService {
     return msg;
   }
 
-  static getPositionDetailMessageV1(position: MeteoraDlmmPosition): string {
+  static getPositionDetailMessageV1(
+    position: MeteoraDlmmPosition,
+    lbPosition: LbPosition,
+    lpPair: LbPair
+  ): string {
     // const verifiedEmoji = poolInfo.tokens_verified ? "✅" : "⚠️";
     // const farmEmoji = poolInfo.has_farm
     //   ? poolInfo.farm_active
@@ -203,16 +214,22 @@ export class MessageService {
       return `${address.slice(0, start)}...${address.slice(-end)}`;
     }
 
-    let message = `📊 **Position Details**\n\n`;
+    let message = `*Position Details*\n\n`;
+
+    message += `*${lpPair.baseKey}* | ${link("Meteora", `https://www.meteora.ag/dlmm/${lpPair.baseKey.toBase58()}`)} \n\n`;
 
     // Position Info
-    message += `🎯 **Position**: \`${truncateAddress(position.address)}\`\n`;
+    // message += `🎯 **Position**: \`${truncateAddress(position.address)}\`\n`;
     // message += `🏊‍♂️ **Pool**: ${poolInfo.pool_name} ${farmEmoji}\n`;
     // message += `📍 **Pool Address**: \`${this.truncateAddress(poolInfo.pool_address)}\`\n`;
     // message += `👤 **Owner**: \`${this.truncateAddress(position.owner)}\`\n\n`;
 
     // Performance Metrics
-    message += `📈 **Performance**\n`;
+    // const tokenXBalance = new BN(lbPosition.positionData.totalXAmount).div(
+    //   new BN(10 ** Number(poolInfo.))
+    // );
+
+    message += `Position Balance: *${lbPosition.positionData.totalXAmount} JLP / 0.049 SOL ($--)*`;
     message += `💰 **Total Fees Claimed**: ${bold(formatPrice(position.total_fee_usd_claimed))}\n`;
     message += `🎁 **Total Rewards Claimed**: ${bold(formatPrice(position.total_reward_usd_claimed))}\n`;
     message += `📊 **24h Fee APY**: ${bold(formatPercentage(position.fee_apy_24h))}\n`;
@@ -470,7 +487,7 @@ export class MessageService {
   static getTwoFactorStatusMessage(isEnabled: boolean): string {
     const status = isEnabled ? "✅ Enabled" : "❌ Disabled";
     const statusColor = isEnabled ? "🟢" : "🔴";
-    
+
     return (
       `🔐 **Two-Factor Authentication Status**\n\n` +
       `${statusColor} **Status:** ${status}\n\n` +
@@ -510,7 +527,9 @@ export class MessageService {
     );
   }
 
-  static getTwoFactorInvalidCodeWithAttemptsMessage(remainingAttempts: number): string {
+  static getTwoFactorInvalidCodeWithAttemptsMessage(
+    remainingAttempts: number
+  ): string {
     return (
       `❌ **Invalid Authentication Code**\n\n` +
       `Please check your Authenticator App app and try again.\n\n` +

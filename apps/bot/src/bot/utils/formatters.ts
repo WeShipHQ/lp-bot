@@ -9,18 +9,56 @@ export function truncateAddress(
 /**
  * Format numbers with appropriate suffixes (K, M, B)
  */
-export function formatNumber(num: number | string): string {
+export function formatNumber(
+  num: number | string,
+  options: {
+    locale?: string;
+    minDecimals?: number;
+    maxDecimals?: number;
+    useSuffixes?: boolean;
+  } = {}
+): string {
+  const {
+    locale = "en-US",
+    minDecimals = 0,
+    maxDecimals = 2,
+    useSuffixes = false,
+  } = options;
+
   num = Number(num);
-  if (num >= 1e9) {
-    return (num / 1e9).toFixed(2) + "B";
+  
+  if (!isFinite(num) || isNaN(num)) return "N/A";
+
+  // Apply suffixes only when requested
+  if (useSuffixes) {
+    if (num >= 1e9) {
+      const value = num / 1e9;
+      return new Intl.NumberFormat(locale, {
+        minimumFractionDigits: minDecimals,
+        maximumFractionDigits: maxDecimals,
+      }).format(value) + "B";
+    }
+    if (num >= 1e6) {
+      const value = num / 1e6;
+      return new Intl.NumberFormat(locale, {
+        minimumFractionDigits: minDecimals,
+        maximumFractionDigits: maxDecimals,
+      }).format(value) + "M";
+    }
+    if (num >= 1e3) {
+      const value = num / 1e3;
+      return new Intl.NumberFormat(locale, {
+        minimumFractionDigits: minDecimals,
+        maximumFractionDigits: maxDecimals,
+      }).format(value) + "K";
+    }
   }
-  if (num >= 1e6) {
-    return (num / 1e6).toFixed(2) + "M";
-  }
-  if (num >= 1e3) {
-    return (num / 1e3).toFixed(2) + "K";
-  }
-  return num.toFixed(2);
+
+  // Format without suffixes
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: minDecimals,
+    maximumFractionDigits: maxDecimals,
+  }).format(num);
 }
 
 /**
@@ -121,7 +159,7 @@ export function formatPercentage(
   const {
     locale = "en-US",
     decimals = 2,
-    alwaysShowSign = true,
+    alwaysShowSign = false,
     compact = false,
   } = options;
 

@@ -16,11 +16,8 @@ export function startCommand(
       const startParam = messageText.split(" ")[1];
 
       if (startParam) {
-        if (
-          startParam.startsWith("position_") ||
-          startParam.startsWith("dl_position_")
-        ) {
-          const positionAddress = startParam.replace(/^(dl_)?position_/, "");
+        if (startParam.startsWith("dlmm_position_")) {
+          const positionAddress = startParam.replace(/^dlmm_position_/, "");
           await ctx.scene.enter(SCENE_IDS.POSITION_DETAIL_SCENE, {
             positionAddress,
           });

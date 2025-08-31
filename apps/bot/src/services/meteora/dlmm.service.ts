@@ -1,9 +1,9 @@
 import DLMM, {
   getPriceOfBinByBinId,
   StrategyType,
-  autoFillXByStrategy,
-  autoFillYByStrategy,
   PositionInfo,
+  LbPosition,
+  LbPair,
 } from "@meteora-ag/dlmm";
 import {
   Connection,
@@ -14,6 +14,7 @@ import {
 import BN from "bn.js";
 import { meteoraPoolService } from "../meteora/pool.service";
 import { CONFIG } from "@/config";
+import { TOTAL_RANGE_INTERVAL } from "@/bot/config/constants";
 
 export interface DepositAmountCalculation {
   tokenXAmount: BN;
@@ -50,9 +51,9 @@ export class MeteoraDlmmService {
   async createPositionIx(
     poolAddress: string,
     userPublicKey: string,
-    tokenXAmount: BN,
-    tokenYAmount: BN,
-    strategy: "spot" | "curve" | "single"
+    totalXAmount: BN,
+    totalYAmount: BN,
+    strategy: StrategyType
   ): Promise<{
     instructions: TransactionInstruction[];
     signers: Keypair[];
@@ -73,88 +74,11 @@ export class MeteoraDlmmService {
       `[DLMM] Active bin ID: ${activeBin.binId}, Price: ${activeBinPricePerToken}`
     );
 
-    // Define range interval
-    const TOTAL_RANGE_INTERVAL = 20;
     const minBinId = activeBin.binId - TOTAL_RANGE_INTERVAL;
     const maxBinId = activeBin.binId + TOTAL_RANGE_INTERVAL;
 
-    // Map strategy type
-    let strategyType: StrategyType;
-    switch (strategy) {
-      case "spot":
-        strategyType = StrategyType.Spot;
-        break;
-      case "curve":
-        strategyType = StrategyType.Curve;
-        break;
-      case "single":
-        strategyType = StrategyType.BidAsk;
-        break;
-      default:
-        strategyType = StrategyType.Spot;
-    }
-
-    // Strategy 1: Use tokenXAmount and calculate Y amount
-    let totalXAmount = tokenXAmount;
-    let totalYAmount = autoFillYByStrategy(
-      activeBin.binId,
-      dlmmPool.lbPair.binStep,
-      totalXAmount,
-      activeBin.xAmount,
-      activeBin.yAmount,
-      minBinId,
-      maxBinId,
-      strategyType
-    );
-
-    console.log(
-      `[DLMM] Strategy 1 - X: ${totalXAmount.toString()}, calculated Y: ${totalYAmount.toString()}, available Y: ${tokenYAmount.toString()}`
-    );
-
-    // Check if calculated Y amount exceeds available Y balance
-    if (totalYAmount.gt(tokenYAmount)) {
-      console.log(
-        `[DLMM] Calculated Y amount (${totalYAmount.toString()}) exceeds available Y balance (${tokenYAmount.toString()}), trying strategy 2`
-      );
-
-      // Strategy 2: Use tokenYAmount and calculate X amount
-      totalYAmount = tokenYAmount;
-      const calculatedXAmount = autoFillXByStrategy(
-        activeBin.binId,
-        dlmmPool.lbPair.binStep,
-        totalYAmount,
-        activeBin.xAmount,
-        activeBin.yAmount,
-        minBinId,
-        maxBinId,
-        strategyType
-      );
-
-      console.log(
-        `[DLMM] Strategy 2 - calculated X: ${calculatedXAmount.toString()}, available X: ${tokenXAmount.toString()}, Y: ${totalYAmount.toString()}`
-      );
-
-      // Check if calculated X amount also exceeds available X balance
-      if (calculatedXAmount.gt(tokenXAmount)) {
-        console.log(
-          `[DLMM] Both calculated amounts exceed available balances. Cannot create position.`
-        );
-        throw new Error(
-          `Insufficient balance: calculated X amount (${calculatedXAmount.toString()}) exceeds available X balance (${tokenXAmount.toString()}), and calculated Y amount from strategy 1 (${autoFillYByStrategy(
-            activeBin.binId,
-            dlmmPool.lbPair.binStep,
-            tokenXAmount,
-            activeBin.xAmount,
-            activeBin.yAmount,
-            minBinId,
-            maxBinId,
-            strategyType
-          ).toString()}) exceeds available Y balance (${tokenYAmount.toString()})`
-        );
-      }
-
-      // Use calculated X amount from strategy 2
-      totalXAmount = calculatedXAmount;
+    if (totalXAmount.isZero() && totalYAmount.isZero()) {
+      throw new Error("Invalid amount");
     }
 
     console.log(
@@ -173,7 +97,7 @@ export class MeteoraDlmmService {
         strategy: {
           maxBinId,
           minBinId,
-          strategyType,
+          strategyType: strategy,
         },
       });
 
@@ -184,31 +108,30 @@ export class MeteoraDlmmService {
   }
 
   async getPriceRange(poolAddress: string): Promise<{
-    fromPrice: number;
-    fromPriceFormatted: number;
-    toPrice: number;
-    toPriceFormatted: number;
+    fromPrice: string;
+    toPrice: string;
   }> {
     const dlmmPool = await this.createInstance(poolAddress);
     const activeBin = await dlmmPool.getActiveBin();
     const fromBinId = activeBin.binId - 20;
     const toBinId = activeBin.binId + 20;
 
-    const fromPrice = await getPriceOfBinByBinId(
+    const fromPriceLamport = await getPriceOfBinByBinId(
       fromBinId,
       dlmmPool.lbPair.binStep
     );
-    const toPrice = await getPriceOfBinByBinId(
+
+    const toPriceLamport = await getPriceOfBinByBinId(
       toBinId,
       dlmmPool.lbPair.binStep
     );
 
+    const fromPrice = dlmmPool.fromPricePerLamport(Number(fromPriceLamport));
+    const toPrice = dlmmPool.fromPricePerLamport(Number(toPriceLamport));
+
     return {
-      fromPrice: Number(fromPrice),
-      fromPriceFormatted:
-        Number(fromPrice) / 10 ** dlmmPool.tokenX.mint.decimals,
-      toPrice: Number(toPrice),
-      toPriceFormatted: Number(toPrice) / 10 ** dlmmPool.tokenY.mint.decimals,
+      fromPrice,
+      toPrice,
     };
   }
 
@@ -224,6 +147,27 @@ export class MeteoraDlmmService {
         ? new PublicKey(walletAddress)
         : walletAddress
     );
+  }
+
+  async getPosition(
+    positionAddress: string | PublicKey,
+    poolAddress: string | PublicKey
+  ): Promise<{
+    lpPair: LbPair;
+    lbPosition: LbPosition;
+  }> {
+    const dlmmPool = await this.createInstance(poolAddress);
+
+    const lbPosition = await dlmmPool.getPosition(
+      typeof positionAddress === "string"
+        ? new PublicKey(positionAddress)
+        : positionAddress
+    );
+
+    return {
+      lpPair: dlmmPool.lbPair,
+      lbPosition,
+    };
   }
 
   async closePositionIx(

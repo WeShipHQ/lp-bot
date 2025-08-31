@@ -6,20 +6,30 @@ import { WalletService } from "./wallet.service";
 import { User } from "@/db";
 import { SOL_MINT } from "@/config/constants";
 import { meteoraPositionService } from "./meteora/position.service";
-import { MeteoraDlmmPosition } from "@/types/meteora.types";
+import {
+  MeteoraCreatePositionStrategy,
+  MeteoraDlmmPosition,
+} from "@/types/meteora.types";
+import { OPEN_POSITION_FEE } from "@/bot/config/constants";
+import { StrategyType } from "@meteora-ag/dlmm";
 
 export class PositionService {
   async createPosition(
     user: User,
     poolAddress: string,
-    depositType: "spot" | "curve" | "single",
-    amount: number
+    depositType: MeteoraCreatePositionStrategy,
+    enteredAmount: number
   ): Promise<{ success: boolean; transactionId?: string; error?: string }> {
     try {
       console.log(
         `[Position] Creating ${depositType} position for user ${user.id}`
       );
-      console.log(`[Position] Pool: ${poolAddress}, Amount: ${amount} SOL`);
+      console.log(
+        `[Position] Pool: ${poolAddress}, Amount: ${enteredAmount} SOL`
+      );
+
+      const feeAmount = enteredAmount * (OPEN_POSITION_FEE / 100);
+      const amount = enteredAmount - feeAmount;
 
       const poolInfo = await meteoraPoolService.getPoolInfo(
         poolAddress,
@@ -27,6 +37,22 @@ export class PositionService {
       );
       if (!poolInfo) {
         throw new Error("Pool not found");
+      }
+
+      // Map strategy type
+      let strategy: StrategyType;
+      switch (depositType) {
+        case "spot":
+          strategy = StrategyType.Spot;
+          break;
+        case "curve":
+          strategy = StrategyType.Curve;
+          break;
+        case "single-sided":
+          strategy = StrategyType.BidAsk;
+          break;
+        default:
+          strategy = StrategyType.Spot;
       }
 
       const halfAmount = amount / 2;
@@ -132,7 +158,7 @@ export class PositionService {
           user.walletAddress!,
           tokenAAmount,
           tokenBAmount,
-          depositType
+          strategy
         );
 
       const transactionId = await WalletService.signAndSendTransaction(
@@ -195,13 +221,21 @@ export class PositionService {
       const position =
         await meteoraPositionService.getDlmmPosition(positionAddress);
 
-      return position;
+      const { lpPair, lbPosition } = await meteoraDlmmService.getPosition(
+        positionAddress,
+        position.pair_address
+      );
+      console.log("lp", lbPosition);
+
+      console.log("lp", lpPair);
+
+      return { position, lbPosition, lpPair };
     } catch (error) {
       console.error(
         `[Meteora] Error fetching DLMM position ${positionAddress}:`,
         error
       );
-      return null;
+      return { position: null, lbPosition: null, lpPair: null };
     }
   }
 }

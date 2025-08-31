@@ -52,6 +52,7 @@
     "@solana/spl-token": "^0.4.13",
     "@solana/web3.js": "^1.98.4",
     "@t3-oss/env-core": "^0.12.0",
+    "@telegraf/entity": "^0.7.0",
     "@types/mime-types": "^2.1.4",
     "@types/qrcode": "^1.5.5",
     "@types/speakeasy": "^2.0.10",

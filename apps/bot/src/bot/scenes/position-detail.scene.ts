@@ -8,6 +8,7 @@ import {
   getPositionCloseConfirmKeyboard,
 } from "../keyboards/position-detail-menu";
 import { MeteoraDlmmPosition } from "@/types/meteora.types";
+import { meteoraPoolService } from "@/services/meteora/pool.service";
 
 type SceneState = {
   positionAddress?: string;
@@ -33,15 +34,17 @@ positionDetailScene.enter(async (ctx) => {
       parse_mode: "Markdown",
     });
 
-    const positionData = await positionService.getPosition(positionAddress);
+    const { position, lbPosition, lpPair } =
+      await positionService.getPosition(positionAddress);
+
     ctx.scene.state = {
-      position: positionData,
+      position: position,
       ...ctx.scene.state,
     };
 
-    console.log("positionData", positionData);
+    console.log("positionData", position);
 
-    if (!positionData) {
+    if (!position) {
       await ctx.telegram.editMessageText(
         ctx.chat?.id,
         loadingMsg.message_id,
@@ -52,7 +55,17 @@ positionDetailScene.enter(async (ctx) => {
       return ctx.scene.leave();
     }
 
-    const message = MessageService.getPositionDetailMessageV1(positionData);
+    // const poolInfo = await meteoraPoolService.getPoolInfo(
+    //   position.pair_address,
+    //   'dlmm'
+    // );
+
+    const message = MessageService.getPositionDetailMessageV1(
+      position,
+      lbPosition,
+      // poolInfo,
+      lpPair
+    );
     const keyboard = getPositionDetailKeyboard(positionAddress);
 
     await ctx.telegram.editMessageText(

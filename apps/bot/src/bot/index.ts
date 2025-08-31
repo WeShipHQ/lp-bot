@@ -1,17 +1,17 @@
-import { Telegraf, Scenes } from "telegraf";
+import { Telegraf, Scenes, session } from "telegraf";
 import { message } from "telegraf/filters";
 import { FastifyInstance } from "fastify";
 import { setupMiddleware } from "./middleware";
 import { registerCommands } from "./commands";
 import {
   messageHandler,
-  inputMessageScene,
-  strategySelectionScene,
-  sideSelectionScene,
-  amountInputScene,
-  customAmountScene,
-  confirmationScene,
-  positionPreviewScene,
+  // inputMessageScene,
+  // strategySelectionScene,
+  // sideSelectionScene,
+  // amountInputScene,
+  // customAmountScene,
+  // confirmationScene,
+  // positionPreviewScene,
 } from "./handlers";
 import { BotContext } from "@/types/bot.types";
 // import {
@@ -22,7 +22,7 @@ import { BotContext } from "@/types/bot.types";
 import { logger } from "@/utils/logger";
 import { positionDetailScene } from "./scenes";
 import { poolDetailScene } from "./scenes/pool-detail.scene";
-import { createPositionScene } from "./scenes/create-position.scene";
+import { createPositionScene } from "./scenes";
 
 export async function setupBotCommands(
   bot: Telegraf<BotContext>,
@@ -30,34 +30,34 @@ export async function setupBotCommands(
 ) {
   setupMiddleware(bot, server);
 
-  const stage = new Scenes.Stage<any>([
-    positionDetailScene,
-    createPositionScene,
-    poolDetailScene,
-    inputMessageScene,
-    strategySelectionScene,
-    sideSelectionScene,
-    amountInputScene,
-    customAmountScene,
-    confirmationScene,
-    positionPreviewScene,
-  ]);
+  const stage = new Scenes.Stage<any>(
+    [
+      positionDetailScene,
+      createPositionScene,
+      poolDetailScene,
+      // inputMessageScene,
+      // strategySelectionScene,
+      // sideSelectionScene,
+      // amountInputScene,
+      // customAmountScene,
+      // confirmationScene,
+      // positionPreviewScene,
+    ],
+    {
+      ttl: 600, // Scene TTL of 10 minutes
+    }
+  );
 
+  bot.use(session());
   bot.use(stage.middleware());
 
+  // bot.on("inline_query", async (ctx) => {
+  //   console.log("inline_query", ctx);
+  // });
+
+  bot.on(message("text"), messageHandler);
+
   registerCommands(bot, server);
-
-  bot.on("inline_query", async (ctx) => {
-    console.log("inline_query", ctx);
-  });
-
-  bot.on(message("text"), async (ctx) => {
-    try {
-      await messageHandler(ctx, server);
-    } catch (error) {
-      logger.error(error, "Error in text handler:");
-    }
-  });
 
   // Register callback query handlers
   // bot.action(

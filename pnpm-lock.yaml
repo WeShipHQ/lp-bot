@@ -177,6 +177,9 @@ importers:
       '@t3-oss/env-core':
         specifier: ^0.12.0
         version: 0.12.0(typescript@5.8.2)(zod@3.24.1)
+      '@telegraf/entity':
+        specifier: ^0.7.0
+        version: 0.7.0
       '@types/mime-types':
         specifier: ^2.1.4
         version: 2.1.4
@@ -3973,13 +3976,18 @@ packages:
       zod: 3.24.1
     dev: false
 
+  /@telegraf/entity@0.7.0:
+    resolution: {integrity: sha512-oHfWw2aWwlRTey6BakLOTjQw6+X+Qbv+LU1yTrAxE02Rc+T4SuT4g/YkGUjZjy+T/YKLWDZWu75fcoWXqkBf7Q==}
+    dependencies:
+      '@telegraf/types': 9.0.0
+    dev: false
+
   /@telegraf/types@7.1.0:
     resolution: {integrity: sha512-kGevOIbpMcIlCDeorKGpwZmdH7kHbqlk/Yj6dEpJMKEQw5lk0KVQY0OLXaCswy8GqlIVLd5625OB+rAntP9xVw==}
     dev: false
 
   /@telegraf/types@9.0.0:
     resolution: {integrity: sha512-K1sVcjEyKPmoqNDPTqoy+Vcpq8pRuy0ZirYmB9ZSexgpeo9f+7ndTrJ6IHCYvh0UOCGuosqYPGWS0O2DbJNnaA==}
-    dev: true
 
   /@tokenizer/token@0.3.0:
     resolution: {integrity: sha512-OvjF+z51L3ov0OyAU0duzsYuvO01PH7x4t6DJx+guahgTnBHkhJdG7soQeTSFLWN3efnHyibZ4Z8l2EuWwJN3A==}
