@@ -1,13 +1,13 @@
 import {
-  formatCurrency,
+  formatPrice,
   formatNumber,
   formatPercentage,
-  formatPrice,
   formatTokenAmount,
   truncateAddress,
 } from "@/bot/utils/formatters";
 import { MeteoraDlmmPosition, MeteoraPoolData } from "@/types/meteora.types";
 import { PortfolioData, PortfolioPosition } from "@/types/portfolio.types";
+import { TokenDisplayData, TokenInfo } from "@/types/token.types";
 import { getPositionStartCommand } from "@/utils/link";
 
 const bold = (s: string) => `**${s}**`;
@@ -55,7 +55,7 @@ export class MessageService {
     solBalance: number,
     usdValue: number
   ): string {
-    let message = `🏦 *Wallet SOL Balance:* ${solBalance.toFixed(3)} SOL (${formatCurrency(usdValue)})\n\n`;
+    let message = `🏦 *Wallet SOL Balance:* ${solBalance.toFixed(3)} SOL (${formatPrice(usdValue)})\n\n`;
     message += `*Wallet Address:*\n`;
     message += `\`${walletAddress}\` (tap to copy)\n\n`;
 
@@ -96,7 +96,7 @@ export class MessageService {
 
     let msg = `*Portfolio Overview*\n\n`;
 
-    msg += `Total Positions: ${totals.total_positions} | Total Deposit: ${bold(formatCurrency(totals.total_current_value_usd))}\n\n`;
+    msg += `Total Positions: ${totals.total_positions} | Total Deposit: ${bold(formatPrice(totals.total_current_value_usd))}\n\n`;
 
     msg += positions
       .map((pos, i) => {
@@ -112,18 +112,18 @@ export class MessageService {
 
         const balance =
           pos.current_x_amount != null && pos.current_y_amount != null
-            ? `• Position Balance: ${bold(formatTokenAmount(pos.current_x_amount, 3))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.current_y_amount, 3))} ${pos.token_y_info.symbol} (${bold(formatCurrency(pos.current_value_usd))})`
-            : `• Position Balance: ${bold(formatCurrency(pos.current_value_usd))}`;
+            ? `• Position Balance: ${bold(formatTokenAmount(pos.current_x_amount, 3))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.current_y_amount, 3))} ${pos.token_y_info.symbol} (${bold(formatPrice(pos.current_value_usd))})`
+            : `• Position Balance: ${bold(formatPrice(pos.current_value_usd))}`;
 
         const unclaimed =
           pos.unclaimed_fees_x != null && pos.unclaimed_fees_y != null
-            ? `• Unclaimed Fees: ${bold(formatTokenAmount(pos.unclaimed_fees_x, 3))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.unclaimed_fees_y, 3))} ${pos.token_y_info.symbol} (${bold(formatCurrency(pos.total_unclaimed_fees_usd))})`
-            : `• Unclaimed Fees: ${bold(formatCurrency(pos.total_unclaimed_fees_usd))}`;
+            ? `• Unclaimed Fees: ${bold(formatTokenAmount(pos.unclaimed_fees_x, 3))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.unclaimed_fees_y, 3))} ${pos.token_y_info.symbol} (${bold(formatPrice(pos.total_unclaimed_fees_usd))})`
+            : `• Unclaimed Fees: ${bold(formatPrice(pos.total_unclaimed_fees_usd))}`;
 
         const claimed =
           pos.claimed_fees_x != null && pos.claimed_fees_y != null
-            ? `• Claimed Fees: ${bold(formatTokenAmount(pos.claimed_fees_x, 3))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.claimed_fees_y, 3))} ${pos.token_y_info.symbol} (${bold(formatCurrency(pos.total_claimed_fees_usd))})\n`
-            : `• Claimed Fees: ${bold(formatCurrency(pos.total_claimed_fees_usd))}\n`;
+            ? `• Claimed Fees: ${bold(formatTokenAmount(pos.claimed_fees_x, 3))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.claimed_fees_y, 3))} ${pos.token_y_info.symbol} (${bold(formatPrice(pos.total_claimed_fees_usd))})\n`
+            : `• Claimed Fees: ${bold(formatPrice(pos.total_claimed_fees_usd))}\n`;
 
         const feeTvlPercent = toPercentNumber(pos.pool_fee_tvl_24h);
         const feeTvl =
@@ -156,21 +156,21 @@ export class MessageService {
     }
 
     if (pos.current_x_amount != null && pos.current_y_amount != null) {
-      msg += `**• Position Balance:** ${bold(formatTokenAmount(pos.current_x_amount, 3))} ${sx} / ${bold(formatTokenAmount(pos.current_y_amount, 3))} ${sy} (${bold(formatCurrency(pos.current_value_usd))})\n`;
+      msg += `**• Position Balance:** ${bold(formatTokenAmount(pos.current_x_amount, 3))} ${sx} / ${bold(formatTokenAmount(pos.current_y_amount, 3))} ${sy} (${bold(formatPrice(pos.current_value_usd))})\n`;
     } else {
-      msg += `**• Position Balance:** ${bold(formatCurrency(pos.current_value_usd))}\n`;
+      msg += `**• Position Balance:** ${bold(formatPrice(pos.current_value_usd))}\n`;
     }
 
     if (pos.unclaimed_fees_x != null && pos.unclaimed_fees_y != null) {
-      msg += `**• Unclaimed Fees:** ${bold(formatTokenAmount(pos.unclaimed_fees_x, 3))} ${sx} / ${bold(formatTokenAmount(pos.unclaimed_fees_y, 3))} ${sy} (${bold(formatCurrency(pos.total_unclaimed_fees_usd))})\n`;
+      msg += `**• Unclaimed Fees:** ${bold(formatTokenAmount(pos.unclaimed_fees_x, 3))} ${sx} / ${bold(formatTokenAmount(pos.unclaimed_fees_y, 3))} ${sy} (${bold(formatPrice(pos.total_unclaimed_fees_usd))})\n`;
     } else {
-      msg += `**• Unclaimed Fees:** ${bold(formatCurrency(pos.total_unclaimed_fees_usd))}\n`;
+      msg += `**• Unclaimed Fees:** ${bold(formatPrice(pos.total_unclaimed_fees_usd))}\n`;
     }
 
     if (pos.claimed_fees_x != null && pos.claimed_fees_y != null) {
-      msg += `**• Claimed Fees:** ${bold(formatTokenAmount(pos.claimed_fees_x, 3))} ${sx} / ${bold(formatTokenAmount(pos.claimed_fees_y, 3))} ${sy} (${bold(formatCurrency(pos.total_claimed_fees_usd))})\n`;
+      msg += `**• Claimed Fees:** ${bold(formatTokenAmount(pos.claimed_fees_x, 3))} ${sx} / ${bold(formatTokenAmount(pos.claimed_fees_y, 3))} ${sy} (${bold(formatPrice(pos.total_claimed_fees_usd))})\n`;
     } else {
-      msg += `**• Claimed Fees:** ${bold(formatCurrency(pos.total_claimed_fees_usd))}\n`;
+      msg += `**• Claimed Fees:** ${bold(formatPrice(pos.total_claimed_fees_usd))}\n`;
     }
 
     const feeTvlPercent = toPercentNumber(pos.pool_fee_tvl_24h);
@@ -213,11 +213,11 @@ export class MessageService {
 
     // Performance Metrics
     message += `📈 **Performance**\n`;
-    message += `💰 **Total Fees Claimed**: ${bold(formatCurrency(position.total_fee_usd_claimed))}\n`;
-    message += `🎁 **Total Rewards Claimed**: ${bold(formatCurrency(position.total_reward_usd_claimed))}\n`;
+    message += `💰 **Total Fees Claimed**: ${bold(formatPrice(position.total_fee_usd_claimed))}\n`;
+    message += `🎁 **Total Rewards Claimed**: ${bold(formatPrice(position.total_reward_usd_claimed))}\n`;
     message += `📊 **24h Fee APY**: ${bold(formatPercentage(position.fee_apy_24h))}\n`;
     message += `📊 **24h Fee APR**: ${bold(formatPercentage(position.fee_apr_24h))}\n`;
-    message += `💵 **Daily Fee Yield**: ${bold(formatCurrency(position.daily_fee_yield))}\n\n`;
+    message += `💵 **Daily Fee Yield**: ${bold(formatPrice(position.daily_fee_yield))}\n\n`;
 
     // Pool Metrics
     // message += `🏊 **Pool Metrics**\n`;
@@ -256,7 +256,7 @@ export class MessageService {
   ): string {
     return (
       `🔍 *Confirm Transfer*\n\n` +
-      `You are about to send *${amount} SOL* (${formatCurrency(usdValue)}) to:\n` +
+      `You are about to send *${amount} SOL* (${formatPrice(usdValue)}) to:\n` +
       `\`${recipientAddress}\`\n\n` +
       `Please confirm this transaction by clicking the button below.`
     );

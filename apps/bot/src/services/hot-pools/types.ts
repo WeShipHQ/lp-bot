@@ -1,8 +1,4 @@
-import {
-  DlmmPoolResponse,
-  DammV1PoolResponse,
-  MeteoraPoolData,
-} from "@/types/token.types";
+import { MeteoraPoolData } from "@/types/meteora.types";
 import { DammV2PoolResponse } from "@/types/trending.types";
 
 export interface HotPoolItem {
@@ -19,19 +15,29 @@ export interface HotPoolItem {
   poolData: MeteoraPoolData;
 }
 
-export type PoolSortCriteria = "apy" | "fee24h" | "fee_tvl_ratio";
+export type PoolSortCriteria = 
+  | "tvl" 
+  | "volume" 
+  | "feetvlratio" 
+  | "lm" 
+  | "feetvlratio30m" 
+  | "feetvlratio1h" 
+  | "feetvlratio2h" 
+  | "feetvlratio4h" 
+  | "feetvlratio12h" 
+  | "volume30m" 
+  | "volume1h" 
+  | "volume2h" 
+  | "volume4h" 
+  | "volume12h";
+
 export type PoolSource = "dlmm" | "dammv1" | "dammv2";
 
 export interface HotPoolFilters {
   sortBy: PoolSortCriteria;
   minTvl: number;
   onlyVerified: boolean;
-  includeUnknown: boolean; 
+  includeUnknown: boolean;
 }
 
-export type {
-  DlmmPoolResponse,
-  DammV1PoolResponse,
-  DammV2PoolResponse,
-  MeteoraPoolData,
-};
+export type { DammV2PoolResponse, MeteoraPoolData };

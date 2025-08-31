@@ -4,12 +4,6 @@ import { inputDetectionService } from "../../services/input-detection.service";
 import { jupiterService } from "../../services/jupiter.service";
 import { meteoraPoolService } from "../../services/meteora/pool.service";
 import {
-  formatTokenDisplayData,
-  formatErrorMessage,
-  formatLoadingMessage,
-  formatPoolInfo,
-} from "../utils/formatters";
-import {
   MeteoraPoolData,
   TokenDisplayData,
   TokenInfo,
@@ -22,6 +16,7 @@ import { message } from "telegraf/filters";
 import { positionService } from "@/services/position.service";
 import { meteoraDlmmService } from "@/services/meteora/dlmm.service";
 import { SCENE_IDS } from "../config/scenes";
+import { MessageService } from "@/services/message.service";
 
 type SceneState = {
   detection: TokenInputDetection;
@@ -35,6 +30,20 @@ type SceneState = {
 export const inputMessageScene = new Scenes.BaseScene<BotContext>(
   SCENE_IDS.TOKEN_INPUT
 );
+
+function formatLoadingMessage(inputType: string): string {
+  const typeMessages = {
+    address: "🔍 Fetching token information...",
+    meteora_damm_v1: "🏊‍♂️ Fetching DAMM v1 pool data...",
+    meteora_damm_v2: "🏊‍♂️ Fetching DAMM v2 pool data...",
+    meteora_dlmm: "🏊‍♂️ Fetching DLMM pool data...",
+  };
+
+  return (
+    typeMessages[inputType as keyof typeof typeMessages] ||
+    "⏳ Processing your request..."
+  );
+}
 
 inputMessageScene.enter(async (ctx) => {
   const detection = (ctx.scene.state as SceneState)
@@ -52,8 +61,7 @@ inputMessageScene.enter(async (ctx) => {
       let responseMessage = "";
 
       if (!tokenInfo) {
-        responseMessage = formatErrorMessage(
-          detection.value,
+        responseMessage = MessageService.getErrorMessage(
           "Token not found or invalid address"
         );
       } else {
@@ -62,7 +70,7 @@ inputMessageScene.enter(async (ctx) => {
         const displayData: TokenDisplayData = {
           token: tokenInfo,
         };
-        responseMessage = formatTokenDisplayData(displayData);
+        responseMessage = MessageService.formatTokenDisplayData(displayData);
       }
 
       await ctx.telegram.editMessageText(
@@ -100,8 +108,7 @@ inputMessageScene.enter(async (ctx) => {
     let responseMessage = "";
 
     if (!poolType) {
-      responseMessage = formatErrorMessage(
-        detection.originalInput,
+      responseMessage = MessageService.getErrorMessage(
         "Invalid Meteora pool URL"
       );
     } else {
@@ -111,13 +118,12 @@ inputMessageScene.enter(async (ctx) => {
       );
 
       if (!poolData) {
-        responseMessage = formatErrorMessage(
-          detection.originalInput,
+        responseMessage = MessageService.getErrorMessage(
           "Pool not found or invalid pool ID"
         );
       } else {
         (ctx.scene.state as SceneState).poolInfo = poolData;
-        responseMessage = formatPoolInfo(poolData);
+        responseMessage = MessageService.formatPoolInfo(poolData);
       }
     }
 

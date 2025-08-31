@@ -25,8 +25,7 @@ export async function trendingHandler(
       state.poolItems || [],
       state.page,
       state.poolSource!,
-      state.sortBy!,
-      ctx.botInfo.username!
+      state.sortBy!
     );
 
     const keyboard = getTrendingKeyboard(
@@ -185,8 +184,7 @@ export async function handleTrendingCallback(
       state.poolItems || [],
       state.page,
       state.poolSource!,
-      state.sortBy!,
-      ctx.botInfo.username!,
+      state.sortBy!
     );
 
     const keyboard = getTrendingKeyboard(

@@ -4,7 +4,6 @@ import { SCENE_IDS } from "../config/scenes";
 import { MessageService } from "@/services/message.service";
 import { MeteoraPoolData } from "@/types/meteora.types";
 import { poolService } from "@/services/pool.service";
-import { formatPoolInfo } from "../utils/formatters";
 import { getPoolInfoKeyboard } from "../keyboards";
 
 type SceneState = {
@@ -48,7 +47,7 @@ poolDetailScene.enter(async (ctx) => {
       return ctx.scene.leave();
     }
 
-    const message = formatPoolInfo(poolData);
+    const message = MessageService.formatPoolInfo(poolData);
     const keyboard = getPoolInfoKeyboard(poolData.pool_address);
 
     await ctx.telegram.editMessageText(
