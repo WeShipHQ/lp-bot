@@ -3,6 +3,9 @@ export interface UserInfo {
   id: string;
   walletAddress?: string;
   telegramUserId?: string;
+  twoFactorEnabled?: boolean;
+  twoFactorSecret?: string;
+  backupCodes?: string[];
 }
 
 export class UserService {
@@ -17,18 +20,54 @@ export class UserService {
       }
 
       const walletAddress = user.customMetadata.walletAddress as string;
+      const twoFactorEnabled = user.customMetadata.twoFactorEnabled as boolean || false;
+      const twoFactorSecret = user.customMetadata.twoFactorSecret as string;
+      const backupCodesString = user.customMetadata.backupCodes as string;
+      const backupCodes = backupCodesString ? JSON.parse(backupCodesString) : [];
 
       const result = {
         id: user.id,
         walletAddress,
         telegramUserId,
+        twoFactorEnabled,
+        twoFactorSecret,
+        backupCodes,
       };
       
-      console.log("🔍 UserService: Found user:", result);
       return result;
     } catch (error) {
       console.error("Error in getUserByTelegramId:", error);
       return null;
+    }
+  }
+
+  /**
+   * Update user's 2FA settings
+   */
+  async updateTwoFactorSettings(
+    userId: string, 
+    twoFactorEnabled: boolean, 
+    twoFactorSecret?: string, 
+    backupCodes?: string[]
+  ): Promise<boolean> {
+    try {
+      const customMetadata: any = {
+        twoFactorEnabled
+      };
+
+      if (twoFactorSecret) {
+        customMetadata.twoFactorSecret = twoFactorSecret;
+      }
+
+      if (backupCodes) {
+        customMetadata.backupCodes = JSON.stringify(backupCodes);
+      }
+
+      await privy.setCustomMetadata(userId, customMetadata);
+      return true;
+    } catch (error) {
+      console.error("Error updating 2FA settings:", error);
+      return false;
     }
   }
 }

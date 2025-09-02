@@ -28,6 +28,12 @@ export function helpCommand(
 /my_positions - View all your positions
 /rebalance - Manual rebalance
 
+*Security Commands:*
+/setup-2fa - Enable Two-Factor Authentication
+/verify-2fa <code> - Verify 2FA setup code
+/2fa-status - Check 2FA status
+/disable-2fa - Disable 2FA (contact support)
+
 *Settings:*
 /auto_rebalance - Toggle auto-rebalancing
 /set_threshold - Set rebalance threshold

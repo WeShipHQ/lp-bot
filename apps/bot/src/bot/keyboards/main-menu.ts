@@ -10,7 +10,10 @@ export function getMainKeyboard(): InlineKeyboardMarkup {
         { text: "💰 Wallet", callback_data: "wallet" },
       ],
       [
+        { text: "🔐 2FA", callback_data: "two_factor_auth" },
         { text: "⚙️ Settings", callback_data: "settings" },
+      ],
+      [
         { text: "❓ Help", callback_data: "help" },
       ],
     ],
