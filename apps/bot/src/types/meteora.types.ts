@@ -204,6 +204,24 @@ export interface MeteoraPoolData {
   farm_active: boolean;
 }
 
+// pool type for display
+export interface MeteoraDlmmPoolDetail extends MeteoraDlmmPool {
+  token_x: {
+    address: string;
+    name: string;
+    symbol: string;
+    icon?: string;
+    decimals: number;
+  };
+  token_y: {
+    address: string;
+    name: string;
+    symbol: string;
+    icon?: string;
+    decimals: number;
+  };
+}
+
 // position
 export interface MeteoraDlmmPosition {
   address: string;

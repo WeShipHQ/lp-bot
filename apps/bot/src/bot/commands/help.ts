@@ -1,3 +1,4 @@
+import DLMM from "@meteora-ag/dlmm";
 import { Telegraf } from "telegraf";
 import { BotContext } from "@/types/bot.types";
 import { FastifyInstance } from "fastify";

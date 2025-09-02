@@ -6,11 +6,6 @@ export class MeteoraPositionService {
   private readonly dammV1ApiUrl = "https://damm-api.meteora.ag";
   private readonly dammV2ApiUrl = "https://dammv2-api.meteora.ag";
 
-  /**
-   * Fetch position information
-   * @param positionAddress - Position address
-   * @returns Promise<MeteoraDlmmPosition>
-   */
   async getDlmmPosition(positionAddress: string): Promise<MeteoraDlmmPosition> {
     try {
       console.log(`[Meteora] Fetching DLMM position: ${positionAddress}`);

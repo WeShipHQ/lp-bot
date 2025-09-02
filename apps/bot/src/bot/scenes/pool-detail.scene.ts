@@ -29,6 +29,7 @@ poolDetailScene.enter(async (ctx) => {
     });
 
     const poolData = await poolService.getPool(poolAddress, "dlmm");
+
     ctx.scene.state = {
       pool: poolData,
       ...ctx.scene.state,

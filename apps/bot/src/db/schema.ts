@@ -18,6 +18,7 @@ export const users = pgTable('User', {
   autoRebalanceEnabled: boolean('autoRebalanceEnabled').notNull().default(true),
   rebalanceThreshold: decimal('rebalanceThreshold', { precision: 5, scale: 2 }).notNull().default('5.00'),
   rebalanceStrategy: rebalanceStrategyEnum('rebalanceStrategy').notNull().default('STANDARD'),
+  balancedPositionBinRange: integer('balancedPositionBinRange').notNull().default(10),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
   updatedAt: timestamp('updatedAt').notNull().defaultNow(),
 });

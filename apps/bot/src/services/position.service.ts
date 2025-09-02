@@ -12,9 +12,10 @@ import {
 } from "@/types/meteora.types";
 import { OPEN_POSITION_FEE } from "@/bot/config/constants";
 import { StrategyType } from "@meteora-ag/dlmm";
+import { poolService } from "./pool.service";
 
 export class PositionService {
-  async createPosition(
+  async createBalancedPosition(
     user: User,
     poolAddress: string,
     depositType: MeteoraCreatePositionStrategy,
@@ -31,9 +32,9 @@ export class PositionService {
       const feeAmount = enteredAmount * (OPEN_POSITION_FEE / 100);
       const amount = enteredAmount - feeAmount;
 
-      const poolInfo = await meteoraPoolService.getPoolInfo(
-        poolAddress,
-        "dlmm"
+      const poolInfo = await poolService.getDLMMPool(
+        poolAddress
+        // "dlmm"
       );
       if (!poolInfo) {
         throw new Error("Pool not found");
@@ -62,11 +63,11 @@ export class PositionService {
       let tokenBAmount = new BN(0);
 
       // Convert 50% SOL to token A (if not SOL)
-      if (poolInfo.token_a_mint !== SOL_MINT) {
+      if (poolInfo.token_x.address !== SOL_MINT) {
         try {
           const orderA = await jupiterService.getOrder({
             inputMint: SOL_MINT,
-            outputMint: poolInfo.token_a_mint,
+            outputMint: poolInfo.token_x.address,
             amount: halfAmountLamports,
             taker: user.walletAddress!,
           });
@@ -104,11 +105,11 @@ export class PositionService {
       }
 
       // Convert 50% SOL to token B (if not SOL)
-      if (poolInfo.token_b_mint !== SOL_MINT) {
+      if (poolInfo.token_y.address !== SOL_MINT) {
         try {
           const orderB = await jupiterService.getOrder({
             inputMint: SOL_MINT,
-            outputMint: poolInfo.token_b_mint,
+            outputMint: poolInfo.token_y.address,
             amount: halfAmountLamports,
             taker: user.walletAddress!,
           });
@@ -145,10 +146,7 @@ export class PositionService {
         tokenBAmount = new BN(halfAmountLamports);
       }
 
-      if (
-        Number(tokenAAmount.toString()) === 0 ||
-        Number(tokenBAmount.toString()) === 0
-      ) {
+      if (tokenAAmount.isZero() || tokenBAmount.isZero()) {
         throw new Error("Failed to convert SOL to token A or token B");
       }
 
@@ -158,7 +156,8 @@ export class PositionService {
           user.walletAddress!,
           tokenAAmount,
           tokenBAmount,
-          strategy
+          strategy,
+          user.balancedPositionBinRange
         );
 
       const transactionId = await WalletService.signAndSendTransaction(
@@ -202,6 +201,97 @@ export class PositionService {
         instructions
       );
 
+      // @ts-expect-error
+      async function swapToSol(positionAddress: string) {
+        const { lbPosition, poolInfo } =
+          await positionService.getPosition(positionAddress);
+        const positionData = lbPosition?.positionData;
+        if (!positionData || !poolInfo) return;
+
+        const totalX = new BN(positionData.totalXAmount).add(positionData.feeX);
+        const totalY = new BN(positionData.totalYAmount).add(positionData.feeY);
+
+        console.log("totalX", totalX.toString());
+        console.log("totalY", totalY.toString());
+
+        if (poolInfo.mint_x !== SOL_MINT) {
+          // swap x -> SOL
+          const orderA = await jupiterService.getOrder({
+            inputMint: poolInfo.token_x.address,
+            outputMint: SOL_MINT,
+            amount: totalX.toString(),
+            taker: user.walletAddress!,
+          });
+
+          const swapTxStr = orderA.transaction;
+          console.log("swapTxStr", swapTxStr);
+          if (!swapTxStr) {
+            throw new Error("Failed to get swap transaction");
+          }
+          const swapTx = jupiterService.getOrderTransaction(swapTxStr);
+
+          const { signedTransaction } = await WalletService.signTransaction(
+            user,
+            swapTx
+          );
+
+          const executeA = await jupiterService.executeOrder({
+            requestId: orderA.requestId,
+            signedTransaction: Buffer.from(
+              signedTransaction.serialize()
+            ).toString("base64"),
+          });
+          console.log("executeA", executeA);
+
+          if (executeA.status === "Failed") {
+            throw new Error(
+              `Failed to convert SOL to token A: ${executeA.error}`
+            );
+          }
+        }
+
+        if (poolInfo.mint_y !== SOL_MINT) {
+          // swap y -> SOL
+          const orderB = await jupiterService.getOrder({
+            inputMint: poolInfo.token_y.address,
+            outputMint: SOL_MINT,
+            amount: totalY.toString(),
+            taker: user.walletAddress!,
+          });
+          console.log("orderB", orderB);
+
+          const swapTxStr = orderB.transaction;
+          if (!swapTxStr) {
+            throw new Error("Failed to get swap transaction");
+          }
+          const swapTx = jupiterService.getOrderTransaction(swapTxStr);
+
+          const { signedTransaction } = await WalletService.signTransaction(
+            user,
+            swapTx
+          );
+
+          const executeB = await jupiterService.executeOrder({
+            requestId: orderB.requestId,
+            signedTransaction: Buffer.from(
+              signedTransaction.serialize()
+            ).toString("base64"),
+          });
+
+          console.log("executeB", executeB);
+
+          if (executeB.status === "Failed") {
+            throw new Error(
+              `Failed to convert SOL to token B: ${executeB.error}`
+            );
+          }
+        }
+      }
+
+      setTimeout(() => {
+        swapToSol(position.address);
+      }, 2000);
+
       return {
         success: true,
         transactionId,
@@ -220,22 +310,21 @@ export class PositionService {
     try {
       const position =
         await meteoraPositionService.getDlmmPosition(positionAddress);
+      const poolInfo = await poolService.getDLMMPool(position.pair_address);
 
-      const { lpPair, lbPosition } = await meteoraDlmmService.getPosition(
+      const { lbPosition } = await meteoraDlmmService.getPosition(
         positionAddress,
         position.pair_address
       );
-      console.log("lp", lbPosition);
+      // console.log("lp pos", lbPosition);
 
-      console.log("lp", lpPair);
-
-      return { position, lbPosition, lpPair };
+      return { position, lbPosition, poolInfo };
     } catch (error) {
       console.error(
         `[Meteora] Error fetching DLMM position ${positionAddress}:`,
         error
       );
-      return { position: null, lbPosition: null, lpPair: null };
+      return { position: null, lbPosition: null, poolInfo: null };
     }
   }
 }

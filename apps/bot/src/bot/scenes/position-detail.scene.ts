@@ -8,7 +8,6 @@ import {
   getPositionCloseConfirmKeyboard,
 } from "../keyboards/position-detail-menu";
 import { MeteoraDlmmPosition } from "@/types/meteora.types";
-import { meteoraPoolService } from "@/services/meteora/pool.service";
 
 type SceneState = {
   positionAddress?: string;
@@ -34,7 +33,7 @@ positionDetailScene.enter(async (ctx) => {
       parse_mode: "Markdown",
     });
 
-    const { position, lbPosition, lpPair } =
+    const { position, lbPosition, poolInfo } =
       await positionService.getPosition(positionAddress);
 
     ctx.scene.state = {
@@ -42,9 +41,7 @@ positionDetailScene.enter(async (ctx) => {
       ...ctx.scene.state,
     };
 
-    console.log("positionData", position);
-
-    if (!position) {
+    if (!position || !poolInfo) {
       await ctx.telegram.editMessageText(
         ctx.chat?.id,
         loadingMsg.message_id,
@@ -55,16 +52,10 @@ positionDetailScene.enter(async (ctx) => {
       return ctx.scene.leave();
     }
 
-    // const poolInfo = await meteoraPoolService.getPoolInfo(
-    //   position.pair_address,
-    //   'dlmm'
-    // );
-
     const message = MessageService.getPositionDetailMessageV1(
       position,
       lbPosition,
-      // poolInfo,
-      lpPair
+      poolInfo
     );
     const keyboard = getPositionDetailKeyboard(positionAddress);
 
@@ -232,16 +223,21 @@ positionDetailScene.action(/^pos_refresh_(.+)$/, async (ctx) => {
   const positionAddress = ctx.match[1];
 
   try {
-    const positionData = await positionService.getPosition(positionAddress);
+    const { position, lbPosition, poolInfo } =
+      await positionService.getPosition(positionAddress);
 
-    if (!positionData) {
+    if (!position || !lbPosition || !poolInfo) {
       await ctx.reply(
         MessageService.getErrorMessage("Position not found or failed to load")
       );
       return;
     }
 
-    const message = MessageService.getPositionDetailMessageV1(positionData);
+    const message = MessageService.getPositionDetailMessageV1(
+      position,
+      lbPosition,
+      poolInfo
+    );
     const keyboard = getPositionDetailKeyboard(positionAddress);
 
     await ctx.editMessageText(message, {

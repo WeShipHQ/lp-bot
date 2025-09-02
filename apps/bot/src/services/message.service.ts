@@ -6,11 +6,17 @@ import {
   truncateAddress,
 } from "@/bot/utils/formatters";
 import { bold, code, link } from "@/bot/utils/text-formatters";
-import { MeteoraDlmmPosition, MeteoraPoolData } from "@/types/meteora.types";
+import {
+  MeteoraDlmmPool,
+  MeteoraDlmmPoolDetail,
+  MeteoraDlmmPosition,
+  MeteoraPoolData,
+} from "@/types/meteora.types";
 import { PortfolioData, PortfolioPosition } from "@/types/portfolio.types";
 import { TokenDisplayData, TokenInfo } from "@/types/token.types";
 import { getPositionStartCommand } from "@/utils/link";
 import { LbPair, LbPosition } from "@meteora-ag/dlmm";
+import { escapers } from "@telegraf/entity";
 import { BN } from "bn.js";
 
 // const bold = (s: string) => `**${s}**`;
@@ -200,51 +206,65 @@ export class MessageService {
   static getPositionDetailMessageV1(
     position: MeteoraDlmmPosition,
     lbPosition: LbPosition,
-    lpPair: LbPair
+    poolInfo: MeteoraDlmmPoolDetail
   ): string {
-    // const verifiedEmoji = poolInfo.tokens_verified ? "✅" : "⚠️";
-    // const farmEmoji = poolInfo.has_farm
-    //   ? poolInfo.farm_active
-    //     ? "🚜✅"
-    //     : "🚜⏸️"
-    //   : "";
+    const meteoraUrl = link(
+      "Meteora",
+      `https://www.meteora.ag/dlmm/${poolInfo.address}`
+    );
 
-    function truncateAddress(address: string, start = 4, end = 4): string {
-      if (address.length <= start + end) return address;
-      return `${address.slice(0, start)}...${address.slice(-end)}`;
-    }
+    let message = `*${poolInfo.name}* | ${meteoraUrl} \n\n`;
 
-    let message = `*Position Details*\n\n`;
+    const totalXAmount = `${Number(lbPosition.positionData.totalXAmount) / 10 ** Number(poolInfo.token_x.decimals)} ${poolInfo.token_x.symbol}`;
+    const totalYAmount = `${Number(lbPosition.positionData.totalYAmount) / 10 ** Number(poolInfo.token_y.decimals)} ${poolInfo.token_y.symbol}`;
 
-    message += `*${lpPair.baseKey}* | ${link("Meteora", `https://www.meteora.ag/dlmm/${lpPair.baseKey.toBase58()}`)} \n\n`;
+    const positionBinData = lbPosition.positionData.positionBinData;
+    const startBin = positionBinData[0];
+    const lastBin = positionBinData.slice(-1)[0];
 
-    // Position Info
-    // message += `🎯 **Position**: \`${truncateAddress(position.address)}\`\n`;
-    // message += `🏊‍♂️ **Pool**: ${poolInfo.pool_name} ${farmEmoji}\n`;
-    // message += `📍 **Pool Address**: \`${this.truncateAddress(poolInfo.pool_address)}\`\n`;
-    // message += `👤 **Owner**: \`${this.truncateAddress(position.owner)}\`\n\n`;
+    const startPrice = startBin.pricePerToken;
+    const endPrice = lastBin.pricePerToken;
 
-    // Performance Metrics
-    // const tokenXBalance = new BN(lbPosition.positionData.totalXAmount).div(
-    //   new BN(10 ** Number(poolInfo.))
+    // console.log("feeX", lbPosition.positionData.feeX.toString());
+    // console.log("feeY", lbPosition.positionData.feeY.toString());
+    // console.log("rewardOne", lbPosition.positionData.rewardOne.toString());
+    // console.log("rewardTwo", lbPosition.positionData.rewardTwo.toString());
+    // console.log(
+    //   "totalClaimedFeeXAmount",
+    //   lbPosition.positionData.totalClaimedFeeXAmount.toString()
+    // );
+    // console.log(
+    //   "totalClaimedFeeYAmount",
+    //   lbPosition.positionData.totalClaimedFeeYAmount.toString()
+    // );
+    // console.log(
+    //   "feeXExcludeTransferFee",
+    //   lbPosition.positionData.feeXExcludeTransferFee.toString()
+    // );
+    // console.log(
+    //   "feeYExcludeTransferFee",
+    //   lbPosition.positionData.feeYExcludeTransferFee.toString()
+    // );
+    // console.log(
+    //   "rewardOneExcludeTransferFee",
+    //   lbPosition.positionData.rewardOneExcludeTransferFee.toString()
+    // );
+    // console.log(
+    //   "rewardTwoExcludeTransferFee",
+    //   lbPosition.positionData.rewardTwoExcludeTransferFee.toString()
+    // );
+    // console.log(
+    //   "totalXAmountExcludeTransferFee",
+    //   lbPosition.positionData.totalXAmountExcludeTransferFee.toString()
+    // );
+    // console.log(
+    //   "totalYAmountExcludeTransferFee",
+    //   lbPosition.positionData.totalYAmountExcludeTransferFee.toString()
     // );
 
-    message += `Position Balance: *${lbPosition.positionData.totalXAmount} JLP / 0.049 SOL ($--)*`;
-    message += `💰 **Total Fees Claimed**: ${bold(formatPrice(position.total_fee_usd_claimed))}\n`;
-    message += `🎁 **Total Rewards Claimed**: ${bold(formatPrice(position.total_reward_usd_claimed))}\n`;
-    message += `📊 **24h Fee APY**: ${bold(formatPercentage(position.fee_apy_24h))}\n`;
-    message += `📊 **24h Fee APR**: ${bold(formatPercentage(position.fee_apr_24h))}\n`;
-    message += `💵 **Daily Fee Yield**: ${bold(formatPrice(position.daily_fee_yield))}\n\n`;
-
-    // Pool Metrics
-    // message += `🏊 **Pool Metrics**\n`;
-    // message += `💹 **Pool APR**: ${bold(formatPercentage(poolInfo.apr))}\n`;
-    // message += `💰 **TVL**: ${bold(formatCurrency(poolInfo.tvl))}\n`;
-    // message += `📈 **24h Volume**: ${bold(formatCurrency(poolInfo.volume24h))}\n`;
-    // message += `💸 **24h Fees**: ${bold(formatCurrency(poolInfo.fee24h))}\n\n`;
-
-    // Pool Type
-    // message += `🔧 **Pool Type**: ${poolType.toUpperCase()}\n`;
+    message += `Net Profit: NA \n`;
+    message += `Position Balance: *${totalXAmount} / ${totalYAmount}*\n`;
+    message += `Position Range: *${formatNumber(startPrice, { maxDecimals: 6 })} - ${formatNumber(endPrice, { maxDecimals: 6 })} ${poolInfo.token_x.symbol}/${poolInfo.token_y.symbol}*\n`;
 
     return message;
   }

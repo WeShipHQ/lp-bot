@@ -1,10 +1,11 @@
-import { MeteoraPoolType } from "@/types/bot.types";
-import { MeteoraPoolData } from "../types/token.types";
+import type {
+  MeteoraDlmmPoolDetail,
+  MeteoraPoolData,
+  MeteoraPoolType,
+} from "@/types/meteora.types";
 import { meteoraPoolService } from "./meteora/pool.service";
+import { jupiterService } from "./jupiter.service";
 
-/**
- * Service for discovering pools for tokens
- */
 export class PoolService {
   /**
    * Find Meteora pools that contain the specified token
@@ -139,6 +140,48 @@ export class PoolService {
     } catch (error) {
       console.error(
         `[Meteora] Error fetching pool ${poolAddress} with type ${poolType}:`,
+        error
+      );
+      return null;
+    }
+  }
+
+  // for now we mainly support DLMM so we only fetch DLMM pool
+  // we need create an abstract interface for all pool types later
+  async getDLMMPool(
+    poolAddress: string
+  ): Promise<MeteoraDlmmPoolDetail | null> {
+    try {
+      const pool = await meteoraPoolService.getDlmmPoolInfo(poolAddress);
+      const [mintX, mintY] = await Promise.all([
+        jupiterService.getTokenInfo(pool.mint_x),
+        jupiterService.getTokenInfo(pool.mint_y),
+      ]);
+
+      if (!mintX || !mintY) {
+        return null;
+      }
+
+      return {
+        ...pool,
+        token_x: {
+          address: pool.mint_x,
+          name: mintX.name,
+          symbol: mintX.symbol,
+          icon: mintX.icon,
+          decimals: mintX.decimals,
+        },
+        token_y: {
+          address: pool.mint_y,
+          name: mintY.name,
+          symbol: mintY.symbol,
+          icon: mintY.icon,
+          decimals: mintY.decimals,
+        },
+      };
+    } catch (error) {
+      console.error(
+        `[Meteora] Error fetching DLMM pool ${poolAddress}:`,
         error
       );
       return null;

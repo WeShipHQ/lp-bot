@@ -53,7 +53,8 @@ export class MeteoraDlmmService {
     userPublicKey: string,
     totalXAmount: BN,
     totalYAmount: BN,
-    strategy: StrategyType
+    strategy: StrategyType,
+    rangeInterval: number
   ): Promise<{
     instructions: TransactionInstruction[];
     signers: Keypair[];
@@ -74,8 +75,8 @@ export class MeteoraDlmmService {
       `[DLMM] Active bin ID: ${activeBin.binId}, Price: ${activeBinPricePerToken}`
     );
 
-    const minBinId = activeBin.binId - TOTAL_RANGE_INTERVAL;
-    const maxBinId = activeBin.binId + TOTAL_RANGE_INTERVAL;
+    const minBinId = activeBin.binId - rangeInterval;
+    const maxBinId = activeBin.binId + rangeInterval;
 
     if (totalXAmount.isZero() && totalYAmount.isZero()) {
       throw new Error("Invalid amount");
@@ -107,14 +108,76 @@ export class MeteoraDlmmService {
     };
   }
 
-  async getPriceRange(poolAddress: string): Promise<{
+  async getPriceRange(poolAddress: string, rangeInterval: number): Promise<{
     fromPrice: string;
     toPrice: string;
   }> {
     const dlmmPool = await this.createInstance(poolAddress);
     const activeBin = await dlmmPool.getActiveBin();
-    const fromBinId = activeBin.binId - 20;
-    const toBinId = activeBin.binId + 20;
+    const fromBinId = activeBin.binId - rangeInterval;
+    const toBinId = activeBin.binId + rangeInterval;
+
+    const fromPriceLamport = await getPriceOfBinByBinId(
+      fromBinId,
+      dlmmPool.lbPair.binStep
+    );
+
+    const toPriceLamport = await getPriceOfBinByBinId(
+      toBinId,
+      dlmmPool.lbPair.binStep
+    );
+
+    const fromPrice = dlmmPool.fromPricePerLamport(Number(fromPriceLamport));
+    const toPrice = dlmmPool.fromPricePerLamport(Number(toPriceLamport));
+
+    return {
+      fromPrice,
+      toPrice,
+    };
+  }
+
+  async getPriceRangeForBalancedPosition(
+    poolAddress: string,
+    rangeInterval: number
+  ): Promise<{
+    fromPrice: string;
+    toPrice: string;
+  }> {
+    const dlmmPool = await this.createInstance(poolAddress);
+    const activeBin = await dlmmPool.getActiveBin();
+    const fromBinId = activeBin.binId - rangeInterval;
+    const toBinId = activeBin.binId + rangeInterval;
+
+    const fromPriceLamport = await getPriceOfBinByBinId(
+      fromBinId,
+      dlmmPool.lbPair.binStep
+    );
+
+    const toPriceLamport = await getPriceOfBinByBinId(
+      toBinId,
+      dlmmPool.lbPair.binStep
+    );
+
+    const fromPrice = dlmmPool.fromPricePerLamport(Number(fromPriceLamport));
+    const toPrice = dlmmPool.fromPricePerLamport(Number(toPriceLamport));
+
+    return {
+      fromPrice,
+      toPrice,
+    };
+  }
+
+   async getPriceRangeForSingleSidedPosition(
+    poolAddress: string,
+    rangeInterval: number
+  ): Promise<{
+    fromPrice: string;
+    toPrice: string;
+  }> {
+    const dlmmPool = await this.createInstance(poolAddress);
+    const activeBin = await dlmmPool.getActiveBin();
+    const fromBinId = activeBin.binId - rangeInterval;
+    const toBinId = activeBin.binId + rangeInterval;
 
     const fromPriceLamport = await getPriceOfBinByBinId(
       fromBinId,
