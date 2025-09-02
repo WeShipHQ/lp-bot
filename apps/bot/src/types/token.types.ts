@@ -144,3 +144,39 @@ export interface TokenInputDetection {
   value: string; // token address or pool id
   originalInput: string;
 }
+
+// pricing
+export enum PricingTokenPriority {
+  HIGH = "HIGH_PRIORITY", // Volatile meme coins, trending tokens
+  MEDIUM = "MEDIUM_PRIORITY", // SOL, USDC, JUP, major tokens
+  LOW = "LOW_PRIORITY", // Stable, rarely accessed tokens
+}
+
+export interface PricingTokenConfig {
+  address: string;
+  symbol: string;
+  priority: PricingTokenPriority;
+  updateInterval: number; // in seconds
+}
+
+export interface CachedPrice {
+  price: TokenPrice;
+  timestamp: number;
+  priority: PricingTokenPriority;
+}
+
+export interface TokenPrice {
+  id: string;
+  timestamp: number;
+  price: number;
+  blockId: number;
+  decimals: number;
+  priceChange24h: number;
+}
+
+export interface PriceRequest {
+  tokenAddress: string;
+  resolve: (price: TokenPrice | null) => void;
+  reject: (error: Error) => void;
+  timestamp: number;
+}

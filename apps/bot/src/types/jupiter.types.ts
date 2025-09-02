@@ -58,7 +58,7 @@ export interface SwapEvent {
 }
 
 export interface JupiterExecuteResponse {
-  status: 'Success' | 'Failed';
+  status: "Success" | "Failed";
   signature: string;
   slot?: string;
   code: number;
@@ -85,3 +85,13 @@ export interface SwapResult {
   outputAmount?: string;
   swapEvents?: SwapEvent[];
 }
+
+export type JupiterPricesResponse = Record<
+  string,
+  {
+    usdPrice: number;
+    blockId: number;
+    decimals: number;
+    priceChange24h: number;
+  }
+>;
