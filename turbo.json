@@ -3,25 +3,51 @@
   "ui": "tui",
   "tasks": {
     "build": {
-      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*",
+        "src/**/*",
+        "tsconfig.json",
+        "tsup.config.ts"
+      ],
       "dependsOn": ["^build"],
       "outputs": [
-        "build/**",
-        ".vercel/**",
         "dist/**",
+        ".vercel/**",
+        "build/**",
         ".next/**",
         "!.next/cache/**"
-      ]
+      ],
+      "cache": true
     },
     "test": {
+      "inputs": [
+        "src/**/*",
+        "**/*.test.*",
+        "**/*.spec.*",
+        "jest.config.*",
+        "vitest.config.*"
+      ],
       "outputs": ["coverage/**"],
-      "dependsOn": []
+      "dependsOn": ["^build"],
+      "cache": true
     },
     "lint": {
-      "dependsOn": ["^build", "^lint"]
+      "inputs": [
+        "src/**/*",
+        "eslint.config.*",
+        ".eslintrc.*"
+      ],
+      "dependsOn": ["^build"],
+      "cache": true
     },
     "check-types": {
-      "dependsOn": ["^build", "^check-types"]
+      "inputs": [
+        "src/**/*",
+        "tsconfig.json"
+      ],
+      "dependsOn": ["^build"],
+      "cache": true
     },
     "dev": {
       "dependsOn": ["^build"],

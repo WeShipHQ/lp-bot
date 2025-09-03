@@ -3,13 +3,17 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
+    "build:bot": "turbo run build --filter=@weship/bot",
     "clean": "turbo run clean",
     "dev": "turbo run dev",
     "dev:bot": "turbo run dev --filter=@weship/bot",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "lint": "turbo run lint",
+    "lint:fix": "turbo run lint:fix",
     "test": "turbo run test",
-    "check-types": "turbo run check-types"
+    "test:bot": "turbo run test --filter=@weship/bot",
+    "check-types": "turbo run check-types",
+    "type-check": "turbo run check-types"
   },
   "devDependencies": {
     "prettier": "^3.6.0",
@@ -17,6 +21,7 @@
   },
   "packageManager": "pnpm@8.15.6",
   "engines": {
-    "node": ">=18"
+    "node": ">=22",
+    "pnpm": ">=8.15.6"
   }
 }
