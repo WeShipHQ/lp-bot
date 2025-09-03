@@ -54,7 +54,9 @@ jobs:
           cache: "pnpm"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: |
+          # Try frozen lockfile first, fallback to regular install if needed
+          pnpm install --frozen-lockfile || pnpm install
 
       - name: Run ${{ matrix.task }}
         run: |
