@@ -198,12 +198,12 @@ export const rebalanceEventsRelations = relations(
 export const referralsRelations = relations(referrals, ({ one, many }) => ({
   referrer: one(users, {
     fields: [referrals.referrerId],
-    references: [users.telegramId], // Reference telegramId instead of id
+    references: [users.telegramId], 
     relationName: "referrer",
   }),
   referred: one(users, {
     fields: [referrals.referredId],
-    references: [users.telegramId], // Reference telegramId instead of id
+    references: [users.telegramId], 
     relationName: "referred",
   }),
   points: many(points),
@@ -212,7 +212,7 @@ export const referralsRelations = relations(referrals, ({ one, many }) => ({
 export const pointsRelations = relations(points, ({ one }) => ({
   user: one(users, {
     fields: [points.userId],
-    references: [users.telegramId], // Reference telegramId instead of id
+    references: [users.telegramId], 
   }),
   referral: one(referrals, {
     fields: [points.referralId],
