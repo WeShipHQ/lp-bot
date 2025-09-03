@@ -2,17 +2,17 @@ import { generateAuthorizationSignature } from "@privy-io/server-auth/wallet-api
 import { CONFIG } from "../config";
 import { generateRecipientKeypair } from "../bot/utils/hpke-keygen";
 import { decryptHPKEMessage } from "../bot/utils/hpke-decrypt";
-
 export interface WalletExportResult {
   privateKey: string;
 }
 
+export interface TransferSolParams {
+  walletId: string;
+  recipientAddress: string;
+  amount: number;
+}
+
 export class WalletService {
-  /**
-   * Export and decrypt wallet from Privy
-   * @param walletId - The Privy wallet ID to export
-   * @returns Decrypted wallet information
-   */
   static async exportAndDecryptWallet(walletId: string): Promise<WalletExportResult> {
     try {
       // 1. Generate keypair for HPKE encryption
