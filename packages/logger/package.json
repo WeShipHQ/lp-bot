@@ -29,7 +29,7 @@
     "test": "jest"
   },
   "jest": {
-    "preset": "@repo/jest-presets/node"
+    "preset": "@weship/jest-presets/node"
   },
   "devDependencies": {
     "@jest/globals": "^29.7.0",
