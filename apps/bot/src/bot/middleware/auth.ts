@@ -5,6 +5,7 @@ import { CONFIG } from "../../config";
 import { BotContext } from "@/types/bot.types";
 import { User } from "@/db";
 import { createUser, findUserByTelegramId } from "@/db/queries";
+import { userSyncService } from "../../services/user-sync.service";
 
 export function authMiddleware(
   server: FastifyInstance
@@ -12,6 +13,7 @@ export function authMiddleware(
   return async (ctx, next) => {
     if (!ctx.from) return;
     const telegramUserId = ctx.from.id.toString();
+    const username = ctx.from.username;
 
     try {
       let user = await privy.getUserByTelegramUserId(telegramUserId);
@@ -44,7 +46,9 @@ export function authMiddleware(
           walletId,
         });
 
-        server.log.info(`New user registered: ${telegramUserId} with wallet: ${walletAddress}`);
+        server.log.info(
+          `New user registered: ${telegramUserId} with wallet: ${walletAddress}`
+        );
       } else {
         walletAddress = user.customMetadata?.walletAddress as string;
         walletId = user.customMetadata?.walletId as string;
@@ -59,6 +63,15 @@ export function authMiddleware(
           });
         }
       }
+
+      // Sync user to local database
+      await userSyncService.syncUser({
+        id: user.id,
+        telegramId: telegramUserId,
+        username,
+        walletAddress,
+        walletId,
+      });
 
       ctx.user = dbUser;
 

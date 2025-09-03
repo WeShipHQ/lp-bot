@@ -8,6 +8,7 @@ import { trendingCommand } from "./trending";
 import { twoFactorAuthCommand } from "./two-factor-auth";
 import { walletCommand } from "./wallet";
 import { generateImageCommand } from "./genarate-images";
+import { referralCommand } from "./referral";
 import { settingsCommand } from "./settings";
 
 
@@ -19,5 +20,6 @@ export function registerCommands(bot: Telegraf<BotContext>, server: FastifyInsta
   trendingCommand(bot, server);
   twoFactorAuthCommand(bot, server);
   generateImageCommand(bot, server);
+  referralCommand(bot, server);
   settingsCommand(bot, server);
 }
