@@ -1,0 +1,32 @@
+[build]
+# Use Dockerfile for custom build process
+builder = "dockerfile"
+dockerfilePath = "Dockerfile"
+
+# Watch patterns for auto-deploy triggers
+watchPatterns = [
+  "apps/bot/**",
+  "packages/**",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  "turbo.json"
+]
+
+[deploy]
+# Production deployment settings
+numReplicas = 1
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
+
+[env]
+# Production environment variables
+NODE_ENV = "production"
+PORT = "3000"
+
+[healthcheck]
+# Health check configuration for load balancer
+path = "/health"
+interval = 30
+timeout = 10
+retries = 3

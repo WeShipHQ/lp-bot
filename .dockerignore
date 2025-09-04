@@ -1,0 +1,81 @@
+# Dependencies and build artifacts
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build outputs
+dist
+build
+.next
+.vercel
+.turbo
+
+# Environment and configuration files
+.env*
+!.env.example
+
+# Logs and runtime data
+logs
+*.log
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Test and coverage files
+test
+tests
+**/*.test.*
+**/*.spec.*
+__tests__
+coverage
+*.lcov
+
+# Development and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Git and documentation
+.git
+.gitignore
+README.md
+CHANGELOG.md
+LICENSE
+docs
+
+# CI/CD and deployment
+.github
+.gitlab-ci.yml
+.travis.yml
+.circleci
+railway.toml
+
+# OS and temporary files
+.DS_Store
+Thumbs.db
+tmp
+temp
+*.tmp
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Database files (development only)
+prisma/dev.db*
+prisma/migrations
+
+# API app (only need bot)
+apps/api
+
+# Other workspace apps
+apps/web
+apps/admin

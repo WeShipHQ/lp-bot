@@ -89,6 +89,21 @@ async function deleteMessageSafely(
   }
 }
 
+// Delete message by id but never let it break the flow.
+async function deleteMessageByIdSafely(
+  context: BotContext,
+  messageId: number,
+  logger?: FastifyBaseLogger
+): Promise<void> {
+  try {
+    await context.deleteMessage(messageId);
+  } catch (err) {
+    if (!isIgnorableTelegramError(err)) {
+      logger?.warn({ err }, "deleteMessage by id failed");
+    }
+  }
+}
+
 // Always try to answer callback to stop the spinner; ignore benign errors.
 async function answerCallbackSafely(
   context: BotContext,
@@ -182,13 +197,19 @@ export async function portfolioHandler(
   ctx: BotContext,
   _server: FastifyInstance
 ) {
-  await ctx.reply("Loading Portfolio...", { parse_mode: "Markdown" });
+  const loadingMessage = await ctx.reply("Loading Portfolio...", {
+    parse_mode: "Markdown",
+  });
+
+  const loadingMessageId = (loadingMessage as { message_id: number })
+    .message_id;
 
   const portfolioResponse = await PortfolioService.getUserPortfolio(
     ctx.user.walletAddress!
   );
 
   if (!portfolioResponse.success || !portfolioResponse.data) {
+    await deleteMessageByIdSafely(ctx, loadingMessageId);
     await ctx.reply(`❌ ${portfolioResponse.message}`);
     return;
   }
@@ -196,6 +217,7 @@ export async function portfolioHandler(
   const portfolioData = portfolioResponse.data;
   setPortfolio(ctx, portfolioData);
 
+  await deleteMessageByIdSafely(ctx, loadingMessageId);
   await ctx.reply(MessageService.getPortfolioOverviewMessage(portfolioData), {
     parse_mode: "Markdown",
     ...DISABLE_LINK_PREVIEW,
