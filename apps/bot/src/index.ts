@@ -8,13 +8,34 @@ import { pathToFileURL } from "node:url";
 async function init() {
   const fastify = Fastify({
     logger: {
-      level: CONFIG.LOG_LEVEL,
-      transport: {
-        target: "pino-pretty",
-        options: {
-          colorize: true,
-          translateTime: "HH:MM:ss.l",
-        },
+      level:
+        CONFIG.LOG_LEVEL ||
+        (CONFIG.NODE_ENV === "production" ? "warn" : "debug"),
+      transport:
+        CONFIG.NODE_ENV === "development"
+          ? {
+              target: "pino-pretty",
+              options: {
+                colorize: true,
+                translateTime: "SYS:standard",
+                ignore: "pid,hostname",
+              },
+            }
+          : undefined,
+      redact: ["headers.authorization"],
+      serializers: {
+        req: (req) => ({
+          method: req.method,
+          url: req.url,
+          headers: req.headers,
+          hostname: req.hostname,
+          remoteAddress: req.ip,
+          remotePort: req.socket?.remotePort,
+        }),
+        res: (res) => ({
+          statusCode: res.statusCode,
+          headers: res.getHeaders ? res.getHeaders() : res.headers,
+        }),
       },
     },
     genReqId: function (req) {
@@ -35,8 +56,9 @@ async function init() {
     closePromises: [],
   });
 
-  gracefulServer.on(GracefulServer.READY, () => {
+  gracefulServer.on(GracefulServer.READY, async () => {
     fastify.log.info("Server is ready");
+    await fastify.bot.launch({ dropPendingUpdates: true });
   });
 
   gracefulServer.on(GracefulServer.SHUTTING_DOWN, () => {
@@ -63,4 +85,3 @@ if (
 ) {
   void init();
 }
-

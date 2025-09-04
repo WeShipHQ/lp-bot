@@ -1,4 +1,5 @@
-import { DammV1PoolResponse } from "./token.types";
+import { PoolSortCriteria } from "@/services/hot-pools/types";
+import { MeteoraDammV1PoolResponse } from "./meteora.types";
 
 export interface PairItem {
   address: string;
@@ -100,14 +101,14 @@ export interface TrendingPageState {
   messageId?: number;
   displayMode?: "tokens" | "pools";
   poolSource?: "dlmm" | "dammv1" | "dammv2";
-  sortBy?: "apy" | "fee24h" | "fee_tvl_ratio";
+  sortBy?: PoolSortCriteria;
 }
 export interface DammV1SearchResponse {
   status?: number;
   total?: number;
   pages?: number;
   current_page?: number;
-  data: DammV1PoolResponse[];
+  data: MeteoraDammV1PoolResponse[];
 }
 export interface DammV2PoolResponse {
   data: never[];

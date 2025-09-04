@@ -15,9 +15,9 @@ export class DammV2Source {
     filters: HotPoolFilters
   ): Promise<HotPoolItem[]> {
     const orderBy =
-      filters.sortBy === "apy"
+      filters.sortBy === "tvl"
         ? "apr"
-        : filters.sortBy === "fee24h"
+        : filters.sortBy === 'feetvlratio'
           ? "fee24h"
           : "fee_tvl_ratio";
 

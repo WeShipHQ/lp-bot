@@ -1,103 +1,148 @@
-import { JupiterToken, TokenInfo } from "../types/token.types";
+import { JupiterTokenInfo } from "@/types/jupiter.types";
+import {
+  JupiterOrderRequest,
+  JupiterOrderResponse,
+  JupiterExecuteRequest,
+  JupiterExecuteResponse,
+} from "../types/jupiter.types";
+import { VersionedTransaction } from "@solana/web3.js";
+import { api } from "@/bot/utils/http-client.util";
 
 export class JupiterService {
   private readonly baseUrl = "https://lite-api.jup.ag";
-  private readonly maxRetries = 3;
-  private readonly retryDelay = 1000;
-  
-  private tokenInfoCache = new Map<string, { data: any; timestamp: number }>();
-  private readonly CACHE_TTL = 1 * 60 * 1000; 
+  private readonly tokenBaseUrl = "https://lite-api.jup.ag/tokens/v2";
+  // private readonly maxRetries = 3;
+  // private readonly retryDelay = 1000;
 
-  /**
-   * Fetch token information by address
-   * @param tokenAddress - Solana token address
-   * @returns Promise<TokenInfo | null>
-   */
-  async getTokenInfo(tokenAddress: string): Promise<TokenInfo | null> {
-    // Check cache first
-    const cachedToken = this.tokenInfoCache.get(tokenAddress);
-    const now = Date.now();
-    
-    if (cachedToken && (now - cachedToken.timestamp) < this.CACHE_TTL) {
-      return cachedToken.data;
-    }
-    
-    let lastError: Error | null = null;
+  // private tokenInfoCache = new Map<string, { data: any; timestamp: number }>();
+  // private readonly CACHE_TTL = 1 * 60 * 1000;
 
-    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
-      try {
-        if (attempt > 1) {
-          console.log(`[Jupiter] Retrying token info for: ${tokenAddress} (attempt ${attempt})`);
-        }
+  // async getTokenInfo(tokenAddress: string): Promise<JupiterTokenInfo | null> {
+  //   // Check cache first
+  //   const cachedToken = this.tokenInfoCache.get(tokenAddress);
+  //   const now = Date.now();
 
-        const searchResponse = await fetch(
-          `${this.baseUrl}/tokens/v2/search?query=${tokenAddress}`
-        );
+  //   if (cachedToken && now - cachedToken.timestamp < this.CACHE_TTL) {
+  //     return cachedToken.data;
+  //   }
 
-        if (!searchResponse.ok) {
-          throw new Error(`HTTP error! status: ${searchResponse.status}`);
-        }
+  //   let lastError: Error | null = null;
 
-        const tokens: JupiterToken[] = await searchResponse.json();
+  //   for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
+  //     try {
+  //       if (attempt > 1) {
+  //         console.log(
+  //           `[Jupiter] Retrying token info for: ${tokenAddress} (attempt ${attempt})`
+  //         );
+  //       }
 
-        if (!tokens || tokens.length === 0) {
-          return null;
-        }
+  //       const searchResponse = await fetch(
+  //         `${this.baseUrl}/tokens/v2/search?query=${tokenAddress}`
+  //       );
 
-        const token = tokens.find((t) => t.id === tokenAddress) || tokens[0];
-        const tokenInfo = this.mapJupiterTokenToTokenInfo(token);
-        
-        // Cache the result
-        this.tokenInfoCache.set(tokenAddress, {
-          data: tokenInfo,
-          timestamp: now
-        });
+  //       if (!searchResponse.ok) {
+  //         throw new Error(`HTTP error! status: ${searchResponse.status}`);
+  //       }
 
-        return tokenInfo;
-      } catch (error) {
-        lastError = error as Error;
-        console.error(`[Jupiter] API error for ${tokenAddress}:`, error);
+  //       const tokens: JupiterToken[] = await searchResponse.json();
 
-        if (attempt < this.maxRetries) {
-          await this.delay(this.retryDelay * Math.pow(2, attempt - 1)); 
-        }
+  //       if (!tokens || tokens.length === 0) {
+  //         return null;
+  //       }
+
+  //       const token = tokens.find((t) => t.id === tokenAddress) || tokens[0];
+  //       const tokenInfo = this.mapJupiterTokenToTokenInfo(token);
+
+  //       // Cache the result
+  //       this.tokenInfoCache.set(tokenAddress, {
+  //         data: tokenInfo,
+  //         timestamp: now,
+  //       });
+
+  //       return tokenInfo;
+  //     } catch (error) {
+  //       lastError = error as Error;
+  //       console.error(`[Jupiter] API error for ${tokenAddress}:`, error);
+
+  //       if (attempt < this.maxRetries) {
+  //         await this.delay(this.retryDelay * Math.pow(2, attempt - 1));
+  //       }
+  //     }
+  //   }
+
+  //   throw new Error(`Failed to fetch token information: ${lastError?.message}`);
+  // }
+
+  async getTokenInfo(poolAddress: string): Promise<JupiterTokenInfo | null> {
+    try {
+      console.log(`[Jupiter] Fetching token info for: ${poolAddress}`);
+
+      const response = await api.getWithRetry<JupiterTokenInfo[]>(
+        `${this.tokenBaseUrl}/search?query=${poolAddress}`
+      );
+
+      if (response.length === 0) {
+        return null;
       }
+
+      return response[0];
+    } catch (error) {
+      console.error(
+        `[Jupiter] Error fetching token info ${poolAddress}:`,
+        error
+      );
+      throw error;
     }
-    
-    throw new Error(`Failed to fetch token information: ${lastError?.message}`);
   }
 
-  /**
-   * Search for tokens by symbol or name
-   * @param query - Search query
-   * @returns Promise<TokenInfo[]>
-   */
-  async searchTokens(query: string): Promise<TokenInfo[]> {
+  async getTokenPairInfo(
+    tokenX: string,
+    tokenY: string
+  ): Promise<{
+    tokenX: JupiterTokenInfo;
+    tokenY: JupiterTokenInfo;
+  }> {
+    try {
+      console.log(`[Jupiter] Fetching token info for: ${tokenX}, ${tokenY}`);
+
+      const response = await api.getWithRetry<JupiterTokenInfo[]>(
+        `${this.tokenBaseUrl}/search?query=${tokenX},${tokenY}`
+      );
+
+      if (response.length !== 2) {
+        throw new Error(
+          `[Jupiter] Error fetching token info ${tokenX}, ${tokenY}`
+        );
+      }
+
+      return {
+        tokenX: response[0],
+        tokenY: response[1],
+      };
+    } catch (error) {
+      console.error(
+        `[Jupiter] Error fetching token info ${tokenX}, ${tokenY}:`,
+        error
+      );
+      throw error;
+    }
+  }
+
+  async searchTokens(query: string): Promise<JupiterTokenInfo[]> {
     try {
       console.log(`[Jupiter] Searching tokens for: ${query}`);
 
-      const searchResponse = await fetch(
-        `${this.baseUrl}/tokens/v2/search?query=${encodeURIComponent(query)}`
+      const response = await api.getWithRetry<JupiterTokenInfo[]>(
+        `${this.tokenBaseUrl}/search?query=${query}`
       );
 
-      if (!searchResponse.ok) {
-        throw new Error(`HTTP error! status: ${searchResponse.status}`);
-      }
-
-      const tokens: JupiterToken[] = await searchResponse.json();
-
-      return tokens.map((token) => this.mapJupiterTokenToTokenInfo(token));
+      return response;
     } catch (error) {
       console.error(`[Jupiter] Error searching tokens for ${query}:`, error);
       return [];
     }
   }
 
-  /**
-   * Get token price by address
-   * @param tokenAddress - Solana token address
-   * @returns Promise<number | null>
-   */
   async getTokenPrice(tokenAddress: string): Promise<number | null> {
     try {
       const tokenInfo = await this.getTokenInfo(tokenAddress);
@@ -111,98 +156,213 @@ export class JupiterService {
     }
   }
 
-  /**
-   * Get multiple token prices
-   * @param tokenAddresses - Array of token addresses
-   * @returns Promise<Record<string, number>>
-   */
-  async getTokenPrices(
-    tokenAddresses: string[]
-  ): Promise<Record<string, number>> {
-    console.log(
-      `[Jupiter] Fetching prices for ${tokenAddresses.length} tokens`
-    );
+  // async getTokenPrices(
+  //   tokenAddresses: string[]
+  // ): Promise<Record<string, number>> {
+  //   console.log(
+  //     `[Jupiter] Fetching prices for ${tokenAddresses.length} tokens`
+  //   );
 
-    const prices: Record<string, number> = {};
+  //   const prices: Record<string, number> = {};
 
-    // Process tokens in batches to avoid overwhelming the API
-    const batchSize = 5;
-    for (let i = 0; i < tokenAddresses.length; i += batchSize) {
-      const batch = tokenAddresses.slice(i, i + batchSize);
+  //   // Process tokens in batches to avoid overwhelming the API
+  //   const batchSize = 5;
+  //   for (let i = 0; i < tokenAddresses.length; i += batchSize) {
+  //     const batch = tokenAddresses.slice(i, i + batchSize);
 
-      const batchPromises = batch.map(async (address) => {
-        try {
-          const price = await this.getTokenPrice(address);
-          if (price !== null) {
-            prices[address] = price;
-          }
-        } catch (error) {
-          console.error(
-            `[Jupiter] Error fetching price for ${address}:`,
-            error
-          );
-        }
+  //     const batchPromises = batch.map(async (address) => {
+  //       try {
+  //         const price = await this.getTokenPrice(address);
+  //         if (price !== null) {
+  //           prices[address] = price;
+  //         }
+  //       } catch (error) {
+  //         console.error(
+  //           `[Jupiter] Error fetching price for ${address}:`,
+  //           error
+  //         );
+  //       }
+  //     });
+
+  //     await Promise.all(batchPromises);
+
+  //     // Add delay between batches
+  //     if (i + batchSize < tokenAddresses.length) {
+  //       await this.delay(500);
+  //     }
+  //   }
+
+  //   return prices;
+  // }
+
+  // async validateToken(tokenAddress: string): Promise<boolean> {
+  //   try {
+  //     console.log(`[Jupiter] Validating token: ${tokenAddress}`);
+
+  //     const tokenInfo = await this.getTokenInfo(tokenAddress);
+  //     return tokenInfo !== null;
+  //   } catch (error) {
+  //     console.error(`[Jupiter] Error validating token ${tokenAddress}:`, error);
+  //     return false;
+  //   }
+  // }
+
+  // private mapJupiterTokenToTokenInfo(
+  //   jupiterToken: JupiterToken
+  // ): JupiterTokenInfo {
+  //   return {
+  //     address: jupiterToken.id,
+  //     name: jupiterToken.name,
+  //     symbol: jupiterToken.symbol,
+  //     icon: jupiterToken.icon,
+  //     decimals: jupiterToken.decimals,
+  //     price: jupiterToken.usdPrice || 0,
+  //     priceChange24h: jupiterToken.stats24h?.priceChange || 0,
+  //     marketCap: jupiterToken.mcap || 0,
+  //     volume24h:
+  //       (jupiterToken.stats24h?.buyVolume || 0) +
+  //       (jupiterToken.stats24h?.sellVolume || 0),
+  //     liquidity: jupiterToken.liquidity || 0,
+  //     isVerified: jupiterToken.isVerified || false,
+  //     source: "jupiter",
+  //   };
+  // }
+
+  async getOrder(params: JupiterOrderRequest): Promise<JupiterOrderResponse> {
+    try {
+      console.log(
+        `[Jupiter] Creating order for ${params.amount} ${params.inputMint} -> ${params.outputMint}`
+      );
+
+      const queryParams = new URLSearchParams({
+        inputMint: params.inputMint,
+        outputMint: params.outputMint,
+        amount: params.amount,
+        ...(params.taker && { taker: params.taker }),
+        ...(params.referralAccount && {
+          referralAccount: params.referralAccount,
+        }),
+        ...(params.referralFee && {
+          referralFee: params.referralFee.toString(),
+        }),
       });
 
-      await Promise.all(batchPromises);
+      const response = await fetch(
+        `${this.baseUrl}/ultra/v1/order?${queryParams}`
+      );
 
-      // Add delay between batches
-      if (i + batchSize < tokenAddresses.length) {
-        await this.delay(500);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
-    }
 
-    return prices;
-  }
+      const orderResponse: JupiterOrderResponse = await response.json();
+      console.log(
+        `[Jupiter] Order created successfully with requestId: ${orderResponse.requestId}`
+      );
 
-  /**
-   * Validate token address and check if it exists
-   * @param tokenAddress - Token address to validate
-   * @returns Promise<boolean>
-   */
-  async validateToken(tokenAddress: string): Promise<boolean> {
-    try {
-      console.log(`[Jupiter] Validating token: ${tokenAddress}`);
-
-      const tokenInfo = await this.getTokenInfo(tokenAddress);
-      return tokenInfo !== null;
+      return orderResponse;
     } catch (error) {
-      console.error(`[Jupiter] Error validating token ${tokenAddress}:`, error);
-      return false;
+      console.error(`[Jupiter] Error creating order:`, error);
+      throw new Error(
+        `Failed to create swap order: ${(error as Error).message}`
+      );
     }
   }
 
-  /**
-   * Map Jupiter API token response to our TokenInfo interface
-   * @param jupiterToken - Token data from Jupiter API
-   * @returns TokenInfo
-   */
-  private mapJupiterTokenToTokenInfo(jupiterToken: JupiterToken): TokenInfo {
-    return {
-      address: jupiterToken.id,
-      name: jupiterToken.name,
-      symbol: jupiterToken.symbol,
-      icon: jupiterToken.icon,
-      decimals: jupiterToken.decimals,
-      price: jupiterToken.usdPrice || 0,
-      priceChange24h: jupiterToken.stats24h?.priceChange || 0,
-      marketCap: jupiterToken.mcap || 0,
-      volume24h:
-        (jupiterToken.stats24h?.buyVolume || 0) +
-        (jupiterToken.stats24h?.sellVolume || 0),
-      liquidity: jupiterToken.liquidity || 0,
-      isVerified: jupiterToken.isVerified || false,
-      source: "jupiter",
-    };
+  async executeOrder(
+    executeRequest: JupiterExecuteRequest
+  ): Promise<JupiterExecuteResponse> {
+    try {
+      console.log(
+        `[Jupiter] Executing order with requestId: ${executeRequest.requestId}`
+      );
+
+      const response = await fetch(`${this.baseUrl}/ultra/v1/execute`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(executeRequest),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const executeResponse: JupiterExecuteResponse = await response.json();
+
+      if (executeResponse.status === "Success") {
+        console.log(
+          `[Jupiter] Swap executed successfully: ${executeResponse.signature}`
+        );
+      } else {
+        console.error(
+          `[Jupiter] Swap execution failed:`,
+          executeResponse.error
+        );
+      }
+
+      return executeResponse;
+    } catch (error) {
+      console.error(`[Jupiter] Error executing order:`, error);
+      throw new Error(
+        `Failed to execute swap order: ${(error as Error).message}`
+      );
+    }
   }
 
-  /**
-   * Utility method to add delay
-   * @param ms - Milliseconds to delay
-   */
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  getOrderTransaction(transactionStr: string): VersionedTransaction {
+    const transaction = VersionedTransaction.deserialize(
+      Buffer.from(transactionStr, "base64")
+    );
+    return transaction;
   }
+
+  // async createSwap(params: SwapParams) {
+  //   try {
+  //     console.log(
+  //       `[Jupiter] Starting swap process: ${params.amount} ${params.inputMint} -> ${params.outputMint}`
+  //     );
+
+  //     const orderResponse = await this.getOrder({
+  //       inputMint: params.inputMint,
+  //       outputMint: params.outputMint,
+  //       amount: params.amount,
+  //       taker: params.taker,
+  //       referralAccount: params.referralAccount,
+  //       referralFee: params.referralFee,
+  //     });
+
+  //     return {
+  //       orderResponse,
+  //       execute: async (signedTransaction: string): Promise<SwapResult> => {
+  //         try {
+  //           const executeResponse = await this.executeOrder({
+  //             signedTransaction,
+  //             requestId: orderResponse.requestId,
+  //           });
+
+  //           return {
+  //             success: executeResponse.status === "Success",
+  //             signature: executeResponse.signature,
+  //             error: executeResponse.error,
+  //             inputAmount: executeResponse.inputAmountResult,
+  //             outputAmount: executeResponse.outputAmountResult,
+  //             swapEvents: executeResponse.swapEvents,
+  //           };
+  //         } catch (error) {
+  //           return {
+  //             success: false,
+  //             error: (error as Error).message,
+  //           };
+  //         }
+  //       },
+  //     };
+  //   } catch (error) {
+  //     console.error(`[Jupiter] Error in swap process:`, error);
+  //     throw error;
+  //   }
+  // }
 }
 
 export const jupiterService = new JupiterService();

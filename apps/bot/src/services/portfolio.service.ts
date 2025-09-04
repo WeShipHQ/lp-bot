@@ -1,7 +1,7 @@
 import { Connection, PublicKey } from "@solana/web3.js";
 import DLMM, { PositionInfo } from "@meteora-ag/dlmm";
 import { jupiterService } from "./jupiter.service";
-import { meteoraService } from "./meteora.service";
+import { meteoraPoolService } from "./meteora/pool.service";
 import {
   DlmmClaimFee,
   DlmmClaimReward,
@@ -10,7 +10,6 @@ import {
   PortfolioResult,
   PortfolioTotals,
 } from "@/types/portfolio.types";
-import { CONFIG } from "@/config";
 import { db } from "@/db";
 import {
   users as usersTable,
@@ -20,6 +19,7 @@ import {
 } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
+import { meteoraDlmmService } from "./meteora/dlmm.service";
 
 // Numeric helpers (data-layer)
 const fromRawAmount = (raw?: string | bigint | number, decimals = 0) =>
@@ -55,19 +55,17 @@ const sumDepositsWithdrawalsInUsd = (arr: DlmmDepositWithdraw[]) =>
   );
 
 export class PortfolioService {
-  private static connection = new Connection(CONFIG.SOLANA.RPC_URL);
-
   static async getUserPortfolio(
     walletAddress: string
   ): Promise<PortfolioResult> {
     try {
-      const dlmm = (DLMM as any).default || DLMM;
       const owner = new PublicKey(walletAddress);
 
-      const map: Map<string, PositionInfo> =
-        await dlmm.getAllLbPairPositionsByUser(this.connection, owner);
+      const userPositions =
+        await meteoraDlmmService.getAllLbPairPositionsByUser(owner);
 
-      const positionsRaw = await this.mapDlmmPositionsToPortfolio(map);
+      const positionsRaw =
+        await this.mapDlmmPositionsToPortfolio(userPositions);
 
       const positions = await this.annotatePositionsWithDbTracking(
         positionsRaw,
@@ -108,7 +106,8 @@ export class PortfolioService {
         data: { walletAddress, positions, totals },
         message: "Portfolio loaded successfully",
       };
-    } catch {
+    } catch (error) {
+      console.error(error);
       return {
         success: false,
         message: "Failed to load portfolio. Please try again.",
@@ -122,12 +121,12 @@ export class PortfolioService {
     const out: PortfolioPosition[] = [];
     const poolCache = new Map<
       string,
-      Awaited<ReturnType<typeof meteoraService.getDlmmPoolInfo>>
+      Awaited<ReturnType<typeof meteoraPoolService.getDlmmPoolInfo>>
     >();
 
     const getPool = async (pool: string) => {
       if (!poolCache.has(pool))
-        poolCache.set(pool, await meteoraService.getDlmmPoolInfo(pool));
+        poolCache.set(pool, await meteoraPoolService.getDlmmPoolInfo(pool));
       return poolCache.get(pool);
     };
 
@@ -156,6 +155,7 @@ export class PortfolioService {
           ? poolInfo.fee_tvl_ratio
           : undefined;
 
+      // @ts-expect-error
       for (const pos of (info.lbPairPositionsData ?? []) as Array<{
         publicKey: PublicKey;
         version: number;
@@ -199,10 +199,10 @@ export class PortfolioService {
           unclaimed_fees_x * xPrice + unclaimed_fees_y * yPrice;
 
         const [claimedFees, deposits, withdraws, rewards] = await Promise.all([
-          meteoraService.getPositionClaimFees(addr),
-          meteoraService.getPositionDeposits(addr),
-          meteoraService.getPositionWithdraws(addr),
-          meteoraService.getPositionClaimRewards(addr),
+          meteoraPoolService.getPositionClaimFees(addr),
+          meteoraPoolService.getPositionDeposits(addr),
+          meteoraPoolService.getPositionWithdraws(addr),
+          meteoraPoolService.getPositionClaimRewards(addr),
         ]);
         const claimed_usd_api =
           sumClaimFeesInUsd(claimedFees) + sumRewardsInUsd(rewards);
