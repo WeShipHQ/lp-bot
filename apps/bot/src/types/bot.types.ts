@@ -12,6 +12,13 @@ interface TransferState {
   decimals?: number;
 }
 
+interface TwoFactorVerificationState {
+  action: "export_private_key" | "transfer" | "other";
+  step: "waiting_for_code" | "verified";
+  attempts?: number;
+  maxAttempts?: number;
+}
+
 export interface BotContext extends Context {
   user: {
     id: string;
@@ -21,5 +28,6 @@ export interface BotContext extends Context {
   };
   session?: {
     transferState?: TransferState;
+    twoFactorVerification?: TwoFactorVerificationState;
   };
 }

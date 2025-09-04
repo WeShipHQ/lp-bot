@@ -5,6 +5,8 @@ import { MessageService } from "../../services/message.service";
 import { WalletService } from "../../services/wallet.service";
 import { BotContext } from "@/types/bot.types";
 import { jupiterService } from "../../services/jupiter.service";
+import { userService } from "../../services/user.service";
+import { twoFactorAuthService } from "../../services/two-factor-auth.service";
 
 export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
   try {
@@ -15,7 +17,7 @@ export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
 
     const user = ctx.user;
 
-    if (!user.walletAddress) {
+    if (!user.walletAddress || user.walletAddress.trim() === "") {
       try {
         await ctx.reply("⏳ **Wallet Still Creating**\n\nYour wallet is being set up. Please wait a moment and try again.\n\nIf this persists, please contact support.", {
           parse_mode: "Markdown"
@@ -283,6 +285,104 @@ export async function handleTransferInput(ctx: BotContext, _server: FastifyInsta
   }
 }
 
+export async function handleTwoFactorInput(ctx: BotContext, _server: FastifyInstance) {
+  try {
+    const messageText = ctx.message && 'text' in ctx.message ? ctx.message.text : undefined;
+
+    // Check if we're in 2FA verification state
+    if (ctx.session?.twoFactorVerification?.step !== "waiting_for_code") {
+      return false;
+    }
+
+    if (!messageText) {
+      await ctx.reply(MessageService.getErrorMessage("Please enter your 6-digit authentication code or type /cancel to cancel."));
+      return true;
+    }
+
+    if (messageText.toLowerCase() === '/cancel') {
+      delete ctx.session?.twoFactorVerification;
+      await ctx.reply("✅ 2FA verification cancelled.");
+      return true;
+    }
+
+    const verificationState = ctx.session?.twoFactorVerification;
+    if (!verificationState) {
+      return false;
+    }
+
+    // Verify 2FA code and handle result
+    const isValid = await verifyTwoFactorCode(ctx, messageText.trim());
+    if (isValid && verificationState.action === "export_private_key") {
+      await handleWalletExport(ctx);
+    }
+
+    return true;
+  } catch (error) {
+    console.error("2FA verification error:", error);
+    await ctx.reply(MessageService.getErrorMessage("Error verifying 2FA code. Please try again."));
+    return true;
+  }
+}
+
+async function verifyTwoFactorCode(ctx: BotContext, code: string): Promise<boolean> {
+  const verificationState = ctx.session?.twoFactorVerification;
+  if (!verificationState) return false;
+
+  // Get user's 2FA secret
+  const userInfo = await userService.getUserByTelegramId(ctx.user?.telegramUserId as string);
+  if (!userInfo?.twoFactorSecret) {
+    await ctx.reply(MessageService.getErrorMessage("2FA not properly configured. Please contact support."));
+    delete ctx.session?.twoFactorVerification;
+    return false;
+  }
+
+  // Verify the 2FA code
+  const verification = twoFactorAuthService.verifyToken(userInfo.twoFactorSecret, code);
+
+  if (verification.isValid) {
+    // 2FA verification successful
+    delete ctx.session?.twoFactorVerification;
+    return true;
+  } else {
+    // Invalid code - handle attempts
+    verificationState.attempts = (verificationState.attempts || 0) + 1;
+    const remainingAttempts = (verificationState.maxAttempts || 3) - verificationState.attempts;
+
+    if (remainingAttempts <= 0) {
+      delete ctx.session?.twoFactorVerification;
+      await ctx.reply(MessageService.getTwoFactorTooManyAttemptsMessage(), {
+        parse_mode: "Markdown"
+      });
+    } else {
+      await ctx.reply(MessageService.getTwoFactorInvalidCodeWithAttemptsMessage(remainingAttempts), {
+        parse_mode: "Markdown"
+      });
+    }
+    
+    return false;
+  }
+}
+
+async function handleWalletExport(ctx: BotContext) {
+  try {
+    
+    const walletData = await WalletService.exportAndDecryptWallet(ctx.user?.walletId as string);
+    
+    
+    const exportMessage = MessageService.getWalletExportMessage(
+      ctx.user?.walletAddress as string,
+      walletData.privateKey
+    );
+    
+    await ctx.reply(exportMessage, {
+      parse_mode: "Markdown"
+    });
+  } catch (error) {
+    console.error("Export wallet error:", error);
+    await ctx.reply(MessageService.getErrorMessage("Failed to export wallet. Please try again."));
+  }
+}
+
 export async function handleWalletCallback(ctx: BotContext, _server: FastifyInstance) {
   try {
     const callbackData = ctx.callbackQuery && 'data' in ctx.callbackQuery 
@@ -461,38 +561,100 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
 
       case "export_private_key":
         try {
-          if (ctx.user?.walletId) {
-            const walletId = ctx.user.walletId;
-            
-            await ctx.answerCbQuery("🔐 Exporting wallet...");
-            
+          await ctx.answerCbQuery("🔐 Checking export status...");
+          
+          if (!ctx.user?.walletId) {
+            await ctx.reply(MessageService.getErrorMessage("No wallet ID found to export"));
+            return;
+          }
 
-            
-            const walletData = await WalletService.exportAndDecryptWallet(walletId);
-            
-                          const exportMessage = MessageService.getWalletExportMessage(
-                ctx.user?.walletAddress as string,
-                walletData.privateKey
-              );
-            
-            await ctx.reply(exportMessage, {
+          // Get user info
+          const userInfo = await userService.getUserByTelegramId(ctx.user.telegramUserId);
+          
+          // If user has never exported private key before, show warning and ask for confirmation
+          if (!userInfo?.hasExportedPrivateKey) {
+            await ctx.reply(MessageService.getFirstTimeExportWarningMessage(), {
+              parse_mode: "Markdown",
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    { text: "✅ Yes, Export Private Key", callback_data: "confirm_first_export" },
+                    { text: "❌ Cancel", callback_data: "cancel_export" }
+                  ]
+                ]
+              }
+            });
+            return;
+          }
+
+          // If user has exported before, check 2FA
+          if (!userInfo?.twoFactorEnabled) {
+            await ctx.reply(MessageService.getTwoFactorRequiredForExportMessage(), {
               parse_mode: "Markdown"
             });
-            
-            await ctx.answerCbQuery("✅ Wallet exported successfully");
-          } else {
-            await ctx.answerCbQuery("❌ No wallet ID found to export");
+            return;
           }
-        } catch (error) {
-          console.error("Export wallet error:", error);
-          await ctx.answerCbQuery("❌ Failed to export wallet");
-          await ctx.reply("❌ *Export Failed*\n\nUnable to export wallet. Please try again later.", {
+
+          // User has 2FA enabled, request verification code
+          ctx.session = {
+            ...ctx.session,
+            twoFactorVerification: {
+              action: "export_private_key",
+              step: "waiting_for_code",
+              attempts: 0,
+              maxAttempts: 3
+            }
+          };
+
+          await ctx.reply(MessageService.getTwoFactorVerificationRequiredMessage(), {
             parse_mode: "Markdown"
           });
+          
+        } catch (error) {
+          console.error("Export wallet error:", error);
+          await ctx.answerCbQuery("❌ Failed to check export status");
+          await ctx.reply(MessageService.getErrorMessage("Error checking export status. Please try again."));
         }
         break;
 
-      case "confirm_transfer":
+      case "confirm_first_export":
+        try {
+          await ctx.answerCbQuery("🔐 Exporting private key...");
+          
+          if (!ctx.user?.walletId) {
+            await ctx.reply(MessageService.getErrorMessage("No wallet ID found to export"));
+            return;
+          }
+
+          // Export the private key
+          await handleWalletExport(ctx);
+          
+          // Mark as exported
+          await userService.markPrivateKeyExported(ctx.user.id);
+          
+          // Show reminder about future 2FA requirement
+          await ctx.reply(MessageService.getFirstTimeExportSuccessMessage(), {
+            parse_mode: "Markdown"
+          });
+          
+        } catch (error) {
+          console.error("First export error:", error);
+          await ctx.answerCbQuery("❌ Failed to export private key");
+          await ctx.reply(MessageService.getErrorMessage("Error exporting private key. Please try again."));
+        }
+        break;
+
+      case "cancel_export":
+        try {
+          await ctx.answerCbQuery("✅ Export cancelled");
+          await ctx.reply(MessageService.getExportCancelledMessage());
+        } catch (error) {
+          console.error("Cancel export error:", error);
+          await ctx.reply(MessageService.getErrorMessage("Error cancelling export."));
+        }
+        break;
+
+      case "confirm_transfer": {
         let processingMessage: any;
         try {
           await ctx.answerCbQuery("⏳ Processing transfer...");
@@ -594,6 +756,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
           ), { parse_mode: "Markdown" });
         }
         break;
+      }
         
       case "cancel_transfer":
         try {

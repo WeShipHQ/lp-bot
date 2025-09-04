@@ -32,4 +32,5 @@ export function startCommand(
       await ctx.reply(MessageService.getErrorMessage());
     }
   });
+
 }
