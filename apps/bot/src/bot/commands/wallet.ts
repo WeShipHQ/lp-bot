@@ -1,7 +1,7 @@
 import { Telegraf } from "telegraf";
 import { message } from "telegraf/filters";
 import { FastifyInstance } from "fastify";
-import { walletHandler, handleWalletCallback, handleTransferInput } from "../handlers";
+import { walletHandler, handleWalletCallback, handleTransferInput, handleTwoFactorInput } from "../handlers";
 import { BotContext } from "@/types/bot.types";
 
 export function walletCommand(
@@ -16,13 +16,20 @@ export function walletCommand(
   
   bot.on(message("text"), async (ctx, next) => {
     try {
-      const handled = await handleTransferInput(ctx, server);
-      if (!handled) {
+      // Check 2FA input first
+      const twoFactorHandled = await handleTwoFactorInput(ctx, server);
+      if (twoFactorHandled) {
+        return;
+      }
+      
+      // Then check transfer input
+      const transferHandled = await handleTransferInput(ctx, server);
+      if (!transferHandled) {
         await next();
       }
     } catch (error) {
       if (error instanceof Error && !error.message.includes("not in transfer mode")) {
-        console.error("Error in transfer handler:", error);
+        console.error("Error in wallet text handler:", error);
       }
       await next();
     }

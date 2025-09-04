@@ -5,6 +5,8 @@ import { MessageService } from "../../services/message.service";
 import { WalletService } from "../../services/wallet.service";
 import { BotContext } from "@/types/bot.types";
 import { jupiterService } from "../../services/jupiter.service";
+import { userService } from "../../services/user.service";
+import { twoFactorAuthService } from "../../services/two-factor-auth.service";
 
 export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
   try {
@@ -283,6 +285,97 @@ export async function handleTransferInput(ctx: BotContext, _server: FastifyInsta
   }
 }
 
+export async function handleTwoFactorInput(ctx: BotContext, _server: FastifyInstance) {
+  try {
+    const messageText = ctx.message && 'text' in ctx.message ? ctx.message.text : undefined;
+
+    // Check if we're in 2FA verification state
+    if (ctx.session?.twoFactorVerification?.step !== "waiting_for_code") {
+      return false;
+    }
+
+    if (!messageText) {
+      await ctx.reply(MessageService.getErrorMessage("Please enter your 6-digit authentication code or type /cancel to cancel."));
+      return true;
+    }
+
+    if (messageText.toLowerCase() === '/cancel') {
+      delete ctx.session?.twoFactorVerification;
+      await ctx.reply("✅ 2FA verification cancelled.");
+      return true;
+    }
+
+    const verificationState = ctx.session?.twoFactorVerification;
+    if (!verificationState) {
+      return false;
+    }
+
+    // Get user's 2FA secret
+    const userInfo = await userService.getUserByTelegramId(ctx.user?.telegramUserId as string);
+    if (!userInfo?.twoFactorSecret) {
+      await ctx.reply(MessageService.getErrorMessage("2FA not properly configured. Please contact support."));
+      delete ctx.session?.twoFactorVerification;
+      return true;
+    }
+
+    // Verify the 2FA code
+    const verification = twoFactorAuthService.verifyToken(userInfo.twoFactorSecret, messageText.trim());
+
+    if (verification.isValid) {
+      // 2FA verification successful
+      delete ctx.session?.twoFactorVerification;
+
+      if (verificationState.action === "export_private_key") {
+        // Proceed with wallet export
+        try {
+          const walletData = await WalletService.exportAndDecryptWallet(ctx.user?.walletId as string);
+          
+          const exportMessage = MessageService.getWalletExportMessage(
+            ctx.user?.walletAddress as string,
+            walletData.privateKey
+          );
+          
+          await ctx.reply(exportMessage, {
+            parse_mode: "Markdown"
+          });
+        } catch (error) {
+          console.error("Export wallet error:", error);
+          await ctx.reply(MessageService.getErrorMessage("Failed to export wallet. Please try again."));
+        }
+      }
+      
+      return true;
+    } else {
+      // Invalid code
+      verificationState.attempts = (verificationState.attempts || 0) + 1;
+      const remainingAttempts = (verificationState.maxAttempts || 3) - verificationState.attempts;
+
+      if (remainingAttempts <= 0) {
+        delete ctx.session?.twoFactorVerification;
+        await ctx.reply(
+          "❌ **Too Many Failed Attempts**\n\n" +
+          "You have exceeded the maximum number of attempts. Please try again later.",
+          { parse_mode: "Markdown" }
+        );
+      } else {
+        await ctx.reply(
+          `❌ **Invalid Authentication Code**\n\n` +
+          `Please check your Google Authenticator app and try again.\n\n` +
+          `🔄 Attempts remaining: ${remainingAttempts}\n` +
+          `Type \`/cancel\` to cancel this operation.`,
+          { parse_mode: "Markdown" }
+        );
+      }
+      
+      return true;
+    }
+  } catch (error) {
+    console.error("2FA verification error:", error);
+    await ctx.reply(MessageService.getErrorMessage("Error verifying 2FA code. Please try again."));
+    return true;
+  }
+}
+
 export async function handleWalletCallback(ctx: BotContext, _server: FastifyInstance) {
   try {
     const callbackData = ctx.callbackQuery && 'data' in ctx.callbackQuery 
@@ -461,34 +554,54 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
 
       case "export_private_key":
         try {
-          if (ctx.user?.walletId) {
-            const walletId = ctx.user.walletId;
-            
-            await ctx.answerCbQuery("🔐 Exporting wallet...");
-            
-
-            
-            const walletData = await WalletService.exportAndDecryptWallet(walletId);
-            
-                          const exportMessage = MessageService.getWalletExportMessage(
-                ctx.user?.walletAddress as string,
-                walletData.privateKey
-              );
-            
-            await ctx.reply(exportMessage, {
-              parse_mode: "Markdown"
-            });
-            
-            await ctx.answerCbQuery("✅ Wallet exported successfully");
-          } else {
-            await ctx.answerCbQuery("❌ No wallet ID found to export");
+          await ctx.answerCbQuery("🔐 Checking 2FA status...");
+          
+          if (!ctx.user?.walletId) {
+            await ctx.reply(MessageService.getErrorMessage("No wallet ID found to export"));
+            return;
           }
+
+          // Check if user has 2FA enabled
+          const userInfo = await userService.getUserByTelegramId(ctx.user.telegramUserId);
+          
+          if (!userInfo?.twoFactorEnabled) {
+            await ctx.reply(
+              "🔐 **2FA Required for Wallet Export**\n\n" +
+              "For security reasons, you must enable Two-Factor Authentication before exporting your private key.\n\n" +
+              "Please use the command `/twoFactor` to setup 2FA first.\n\n" +
+              "⚠️ **Why 2FA is required:**\n" +
+              "• Protects your private key from unauthorized access\n" +
+              "• Adds an extra layer of security\n" +
+              "• Required for sensitive operations",
+              { parse_mode: "Markdown" }
+            );
+            return;
+          }
+
+          // User has 2FA enabled, request verification code
+          ctx.session = {
+            ...ctx.session,
+            twoFactorVerification: {
+              action: "export_private_key",
+              step: "waiting_for_code",
+              attempts: 0,
+              maxAttempts: 3
+            }
+          };
+
+          await ctx.reply(
+            "🔐 **2FA Verification Required**\n\n" +
+            "Please enter your 6-digit authentication code from Google Authenticator:\n\n" +
+            "⏰ The code expires in 30 seconds\n" +
+            "🔄 You have 3 attempts remaining\n\n" +
+            "Type `/cancel` to cancel this operation.",
+            { parse_mode: "Markdown" }
+          );
+          
         } catch (error) {
           console.error("Export wallet error:", error);
-          await ctx.answerCbQuery("❌ Failed to export wallet");
-          await ctx.reply("❌ *Export Failed*\n\nUnable to export wallet. Please try again later.", {
-            parse_mode: "Markdown"
-          });
+          await ctx.answerCbQuery("❌ Failed to check 2FA status");
+          await ctx.reply(MessageService.getErrorMessage("Error checking 2FA status. Please try again."));
         }
         break;
 
