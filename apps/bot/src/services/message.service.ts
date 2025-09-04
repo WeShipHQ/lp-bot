@@ -327,4 +327,141 @@ export class MessageService {
       `View on Solscan: https://solscan.io/tx/${signature}`
     );
   }
+
+  // 2FA Messages
+  static getTwoFactorMenuMessage(): string {
+    return (
+      "🔐 **Two-Factor Authentication**\n\n" +
+      "Choose an option below to manage your 2FA settings:\n\n" +
+      "• **Setup 2FA** - Enable Two-Factor Authentication\n" +
+      "• **Check Status** - View your current 2FA status\n" +
+      "• **Disable 2FA** - Disable 2FA (contact support required)"
+    );
+  }
+
+  static getTwoFactorAlreadyEnabledMessage(): string {
+    return (
+      "⚠️ **Two-Factor Authentication is already enabled!**\n\n" +
+      "If you want to reset your 2FA, please contact support."
+    );
+  }
+
+  static getTwoFactorNotEnabledMessage(): string {
+    return (
+      "ℹ️ **Two-Factor Authentication is not enabled**\n\n" +
+      "Use `/setup-2fa` to enable 2FA for your account."
+    );
+  }
+
+  static getTwoFactorSetupMessage(): string {
+    return (
+      "🔐 **Two-Factor Authentication Setup**\n\n" +
+      "**Step 1:** Install Authenticator App on your phone\n\n" +
+      "**Step 2:** Scan this QR code with Authenticator App:\n\n" +
+      "**Step 3:** Enter the 6-digit code from your authenticator app\n\n" +
+      "⚠️ **Important:**\n" +
+      "• Keep your phone secure\n" +
+      "• Don't share your authenticator app\n" +
+      "• Contact support if you lose access\n\n"
+    );
+  }
+
+  static getTwoFactorReadyToVerifyMessage(): string {
+    return (
+      "🔐 **Ready to Verify 2FA!**\n\n" +
+      "Please enter the 6-digit code from your Authenticator App app.\n\n" +
+      "**Example:** `123456`\n\n" +
+      "Just type the code and send it as a message."
+    );
+  }
+
+  static getTwoFactorEnabledSuccessMessage(): string {
+    return (
+      "✅ **Two-Factor Authentication Enabled Successfully!**\n\n" +
+      "🔐 Your account is now protected with 2FA\n" +
+      "📱 Use Authenticator App for future logins\n\n" +
+      "⚠️ **Important Reminders:**\n" +
+      "• Keep your phone secure\n" +
+      "• Don't share your authenticator app\n" +
+      "• Contact support if you lose access"
+    );
+  }
+
+  static getTwoFactorInvalidCodeMessage(): string {
+    return (
+      "❌ **Invalid verification code!**\n\n" +
+      "Please check your Authenticator App app and try again.\n" +
+      "Make sure the code is current and entered correctly."
+    );
+  }
+
+  static getTwoFactorNoSetupInProgressMessage(): string {
+    return (
+      "❌ **No 2FA setup in progress!**\n\n" +
+      "Please click the 🔐 2FA button and setup 2FA first."
+    );
+  }
+
+  static getTwoFactorDisableMessage(): string {
+    return (
+      "⚠️ **Disable Two-Factor Authentication**\n\n" +
+      "This will remove 2FA protection from your account.\n\n" +
+      "**To disable 2FA, please contact support** with:\n" +
+      "• Your account verification\n" +
+      "• Reason for disabling 2FA\n\n" +
+      "For security reasons, 2FA cannot be disabled through the bot."
+    );
+  }
+
+  static getTwoFactorStatusMessage(isEnabled: boolean): string {
+    const status = isEnabled ? "✅ Enabled" : "❌ Disabled";
+    const statusColor = isEnabled ? "🟢" : "🔴";
+    
+    return (
+      `🔐 **Two-Factor Authentication Status**\n\n` +
+      `${statusColor} **Status:** ${status}\n\n` +
+      `**Security Tips:**\n` +
+      `• Keep your phone secure\n` +
+      `• Use a secure authenticator app\n` +
+      `• Don't share your 2FA codes`
+    );
+  }
+
+  static getTwoFactorRequiredForExportMessage(): string {
+    return (
+      "🔐 **2FA Required for Wallet Export**\n\n" +
+      "For security reasons, you must enable Two-Factor Authentication before exporting your private key.\n\n" +
+      "Please use the command `/twoFactor` to setup 2FA first.\n\n" +
+      "⚠️ **Why 2FA is required:**\n" +
+      "• Protects your private key from unauthorized access\n" +
+      "• Adds an extra layer of security\n" +
+      "• Required for sensitive operations"
+    );
+  }
+
+  static getTwoFactorVerificationRequiredMessage(): string {
+    return (
+      "🔐 **2FA Verification Required**\n\n" +
+      "Please enter your 6-digit authentication code from Authenticator App:\n\n" +
+      "⏰ The code expires in 30 seconds\n" +
+      "🔄 You have 3 attempts remaining\n\n" +
+      "Type `/cancel` to cancel this operation."
+    );
+  }
+
+  static getTwoFactorTooManyAttemptsMessage(): string {
+    return (
+      "❌ **Too Many Failed Attempts**\n\n" +
+      "You have exceeded the maximum number of attempts. Please try again later."
+    );
+  }
+
+  static getTwoFactorInvalidCodeWithAttemptsMessage(remainingAttempts: number): string {
+    return (
+      `❌ **Invalid Authentication Code**\n\n` +
+      `Please check your Authenticator App app and try again.\n\n` +
+      `🔄 Attempts remaining: ${remainingAttempts}\n` +
+      `Type \`/cancel\` to cancel this operation.`
+    );
+  }
 }

@@ -3,7 +3,6 @@
 
 interface Temp2FAData {
   secret: string;
-  backupCodes: string[];
   timestamp: number;
 }
 
@@ -14,10 +13,9 @@ class TempStoreService {
   /**
    * Store temporary 2FA data for a user
    */
-  setTemp2FAData(userId: string, secret: string, backupCodes: string[]): void {
+  setTemp2FAData(userId: string, secret: string): void {
     this.store.set(userId, {
       secret,
-      backupCodes,
       timestamp: Date.now()
     });
   }
@@ -25,7 +23,7 @@ class TempStoreService {
   /**
    * Get temporary 2FA data for a user
    */
-  getTemp2FAData(userId: string): { secret: string; backupCodes: string[] } | null {
+  getTemp2FAData(userId: string): { secret: string } | null {
     const data = this.store.get(userId);
     
     if (!data) {
@@ -39,8 +37,7 @@ class TempStoreService {
     }
 
     return {
-      secret: data.secret,
-      backupCodes: data.backupCodes
+      secret: data.secret
     };
   }
 

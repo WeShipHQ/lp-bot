@@ -47,8 +47,7 @@ export class UserService {
   async updateTwoFactorSettings(
     userId: string, 
     twoFactorEnabled: boolean, 
-    twoFactorSecret?: string, 
-    backupCodes?: string[]
+    twoFactorSecret?: string
   ): Promise<boolean> {
     try {
       const customMetadata: any = {
@@ -57,10 +56,6 @@ export class UserService {
 
       if (twoFactorSecret) {
         customMetadata.twoFactorSecret = twoFactorSecret;
-      }
-
-      if (backupCodes) {
-        customMetadata.backupCodes = JSON.stringify(backupCodes);
       }
 
       await privy.setCustomMetadata(userId, customMetadata);

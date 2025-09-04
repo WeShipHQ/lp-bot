@@ -4,7 +4,6 @@ import * as QRCode from 'qrcode';
 export interface TwoFactorSetup {
   secret: string;
   qrCodeUrl: string;
-  backupCodes: string[];
 }
 
 export interface TwoFactorVerification {
@@ -13,7 +12,7 @@ export interface TwoFactorVerification {
 }
 
 export class TwoFactorAuthService {
-  private readonly issuer = 'Panda LP Bot';
+  private readonly issuer = 'WeShip LP Bot';
   private readonly algorithm = 'sha1';
   private readonly digits = 6;
   private readonly period = 30;
@@ -21,7 +20,7 @@ export class TwoFactorAuthService {
   /**
    * Generate a new 2FA secret and QR code for setup
    * @param userId - User ID to associate with the secret
-   * @returns TwoFactorSetup object with secret, QR code, and backup codes
+   * @returns TwoFactorSetup object with secret and QR code
    */
   async generateSecret(userId: string): Promise<TwoFactorSetup> {
     try {
@@ -35,13 +34,9 @@ export class TwoFactorAuthService {
       // Generate QR code URL
       const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url!);
 
-      // Generate backup codes (8 codes of 8 characters each)
-      const backupCodes = this.generateBackupCodes(8);
-
       return {
         secret: secret.base32!,
-        qrCodeUrl,
-        backupCodes
+        qrCodeUrl
       };
     } catch (error) {
       console.error('Error generating 2FA secret:', error);
@@ -79,50 +74,6 @@ export class TwoFactorAuthService {
     }
   }
 
-  /**
-   * Generate backup codes for account recovery
-   * @param count - Number of backup codes to generate
-   * @returns Array of backup codes
-   */
-  private generateBackupCodes(count: number): string[] {
-    const codes: string[] = [];
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    
-    for (let i = 0; i < count; i++) {
-      let code = '';
-      for (let j = 0; j < 8; j++) {
-        code += chars.charAt(Math.floor(Math.random() * chars.length));
-      }
-      codes.push(code);
-    }
-    
-    return codes;
-  }
-
-  /**
-   * Verify a backup code
-   * @param backupCode - The backup code to verify
-   * @param userBackupCodes - User's stored backup codes
-   * @returns boolean indicating if the backup code is valid
-   */
-  verifyBackupCode(backupCode: string, userBackupCodes: string[]): boolean {
-    const index = userBackupCodes.indexOf(backupCode.toUpperCase());
-    if (index !== -1) {
-      // Remove used backup code
-      userBackupCodes.splice(index, 1);
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * Generate a new set of backup codes
-   * @param count - Number of backup codes to generate
-   * @returns Array of new backup codes
-   */
-  generateNewBackupCodes(count: number = 8): string[] {
-    return this.generateBackupCodes(count);
-  }
 
   /**
    * Get the current TOTP token for a secret (for testing purposes)
