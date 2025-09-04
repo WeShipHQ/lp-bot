@@ -201,15 +201,15 @@ export async function portfolioHandler(
     parse_mode: "Markdown",
   });
 
+  const loadingMessageId = (loadingMessage as { message_id: number })
+    .message_id;
+
   const portfolioResponse = await PortfolioService.getUserPortfolio(
     ctx.user.walletAddress!
   );
 
   if (!portfolioResponse.success || !portfolioResponse.data) {
-    await deleteMessageByIdSafely(
-      ctx,
-      (loadingMessage as { message_id: number }).message_id
-    );
+    await deleteMessageByIdSafely(ctx, loadingMessageId);
     await ctx.reply(`❌ ${portfolioResponse.message}`);
     return;
   }
@@ -217,10 +217,7 @@ export async function portfolioHandler(
   const portfolioData = portfolioResponse.data;
   setPortfolio(ctx, portfolioData);
 
-  await deleteMessageByIdSafely(
-    ctx,
-    (loadingMessage as { message_id: number }).message_id
-  );
+  await deleteMessageByIdSafely(ctx, loadingMessageId);
   await ctx.reply(MessageService.getPortfolioOverviewMessage(portfolioData), {
     parse_mode: "Markdown",
     ...DISABLE_LINK_PREVIEW,
