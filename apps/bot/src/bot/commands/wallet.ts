@@ -12,7 +12,7 @@ export function walletCommand(
   
   bot.action("wallet", (ctx) => walletHandler(ctx, server));
   
-  bot.action(/^transfer_all_sol|transfer_x_sol|transfer_all_tokens|transfer_x_tokens|export_private_key|close_wallet|refresh_wallet|confirm_transfer|cancel_transfer$/, (ctx) => handleWalletCallback(ctx, server));
+  bot.action(/^transfer_all_sol|transfer_x_sol|transfer_all_tokens|transfer_x_tokens|export_private_key|close_wallet|refresh_wallet|confirm_transfer|cancel_transfer|confirm_first_export|cancel_export$/, (ctx) => handleWalletCallback(ctx, server));
   
   bot.on(message("text"), async (ctx, next) => {
     try {

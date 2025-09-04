@@ -365,7 +365,9 @@ async function verifyTwoFactorCode(ctx: BotContext, code: string): Promise<boole
 
 async function handleWalletExport(ctx: BotContext) {
   try {
+    
     const walletData = await WalletService.exportAndDecryptWallet(ctx.user?.walletId as string);
+    
     
     const exportMessage = MessageService.getWalletExportMessage(
       ctx.user?.walletAddress as string,
@@ -559,16 +561,33 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
 
       case "export_private_key":
         try {
-          await ctx.answerCbQuery("🔐 Checking 2FA status...");
+          await ctx.answerCbQuery("🔐 Checking export status...");
           
           if (!ctx.user?.walletId) {
             await ctx.reply(MessageService.getErrorMessage("No wallet ID found to export"));
             return;
           }
 
-          // Check if user has 2FA enabled
+          // Get user info
           const userInfo = await userService.getUserByTelegramId(ctx.user.telegramUserId);
           
+          // If user has never exported private key before, show warning and ask for confirmation
+          if (!userInfo?.hasExportedPrivateKey) {
+            await ctx.reply(MessageService.getFirstTimeExportWarningMessage(), {
+              parse_mode: "Markdown",
+              reply_markup: {
+                inline_keyboard: [
+                  [
+                    { text: "✅ Yes, Export Private Key", callback_data: "confirm_first_export" },
+                    { text: "❌ Cancel", callback_data: "cancel_export" }
+                  ]
+                ]
+              }
+            });
+            return;
+          }
+
+          // If user has exported before, check 2FA
           if (!userInfo?.twoFactorEnabled) {
             await ctx.reply(MessageService.getTwoFactorRequiredForExportMessage(), {
               parse_mode: "Markdown"
@@ -593,12 +612,49 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
           
         } catch (error) {
           console.error("Export wallet error:", error);
-          await ctx.answerCbQuery("❌ Failed to check 2FA status");
-          await ctx.reply(MessageService.getErrorMessage("Error checking 2FA status. Please try again."));
+          await ctx.answerCbQuery("❌ Failed to check export status");
+          await ctx.reply(MessageService.getErrorMessage("Error checking export status. Please try again."));
         }
         break;
 
-      case "confirm_transfer":
+      case "confirm_first_export":
+        try {
+          await ctx.answerCbQuery("🔐 Exporting private key...");
+          
+          if (!ctx.user?.walletId) {
+            await ctx.reply(MessageService.getErrorMessage("No wallet ID found to export"));
+            return;
+          }
+
+          // Export the private key
+          await handleWalletExport(ctx);
+          
+          // Mark as exported
+          await userService.markPrivateKeyExported(ctx.user.id);
+          
+          // Show reminder about future 2FA requirement
+          await ctx.reply(MessageService.getFirstTimeExportSuccessMessage(), {
+            parse_mode: "Markdown"
+          });
+          
+        } catch (error) {
+          console.error("First export error:", error);
+          await ctx.answerCbQuery("❌ Failed to export private key");
+          await ctx.reply(MessageService.getErrorMessage("Error exporting private key. Please try again."));
+        }
+        break;
+
+      case "cancel_export":
+        try {
+          await ctx.answerCbQuery("✅ Export cancelled");
+          await ctx.reply(MessageService.getExportCancelledMessage());
+        } catch (error) {
+          console.error("Cancel export error:", error);
+          await ctx.reply(MessageService.getErrorMessage("Error cancelling export."));
+        }
+        break;
+
+      case "confirm_transfer": {
         let processingMessage: any;
         try {
           await ctx.answerCbQuery("⏳ Processing transfer...");
@@ -700,6 +756,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
           ), { parse_mode: "Markdown" });
         }
         break;
+      }
         
       case "cancel_transfer":
         try {

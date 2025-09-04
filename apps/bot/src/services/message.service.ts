@@ -464,4 +464,30 @@ export class MessageService {
       `Type \`/cancel\` to cancel this operation.`
     );
   }
+
+  // Export Private Key Messages
+  static getFirstTimeExportWarningMessage(): string {
+    return (
+      "⚠️ **First Time Export Warning**\n\n" +
+      "This is your first time exporting your private key. For security reasons:\n\n" +
+      "• This export will be allowed without 2FA verification\n" +
+      "• **All future exports will require 2FA verification**\n" +
+      "• Please ensure you have 2FA enabled for future security\n\n" +
+      "Do you want to proceed with the export?"
+    );
+  }
+
+  static getFirstTimeExportSuccessMessage(): string {
+    return (
+      "✅ **Private Key Exported Successfully!**\n\n" +
+      "⚠️ **Important Security Reminder:**\n" +
+      "• All future exports will require 2FA verification\n" +
+      "• Please enable 2FA in `/twoFactor` for better security\n" +
+      "• Keep your private key secure and never share it"
+    );
+  }
+
+  static getExportCancelledMessage(): string {
+    return "✅ Private key export cancelled.";
+  }
 }
