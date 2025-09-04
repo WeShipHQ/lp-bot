@@ -4,6 +4,7 @@ import type {
   StrategyType,
 } from "@meteora-ag/dlmm";
 import type { PublicKey } from "@solana/web3.js";
+import { TokenInfo } from "./token.types";
 
 export type MeteoraStrategyTypeKey = keyof typeof StrategyType;
 export type MeteoraPoolType = "damm_v1" | "damm_v2" | "dlmm";
@@ -202,24 +203,6 @@ export interface MeteoraPoolData {
   tokens_verified: boolean;
   has_farm: boolean;
   farm_active: boolean;
-}
-
-// pool type for display
-export interface MeteoraDlmmPoolDetail extends MeteoraDlmmPool {
-  token_x: {
-    address: string;
-    name: string;
-    symbol: string;
-    icon?: string;
-    decimals: number;
-  };
-  token_y: {
-    address: string;
-    name: string;
-    symbol: string;
-    icon?: string;
-    decimals: number;
-  };
 }
 
 // position

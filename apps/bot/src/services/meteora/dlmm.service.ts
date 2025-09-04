@@ -14,7 +14,6 @@ import {
 import BN from "bn.js";
 import { meteoraPoolService } from "../meteora/pool.service";
 import { CONFIG } from "@/config";
-import { TOTAL_RANGE_INTERVAL } from "@/bot/config/constants";
 
 export interface DepositAmountCalculation {
   tokenXAmount: BN;
@@ -108,7 +107,10 @@ export class MeteoraDlmmService {
     };
   }
 
-  async getPriceRange(poolAddress: string, rangeInterval: number): Promise<{
+  async getPriceRange(
+    poolAddress: string,
+    rangeInterval: number
+  ): Promise<{
     fromPrice: string;
     toPrice: string;
   }> {
@@ -167,7 +169,7 @@ export class MeteoraDlmmService {
     };
   }
 
-   async getPriceRangeForSingleSidedPosition(
+  async getPriceRangeForSingleSidedPosition(
     poolAddress: string,
     rangeInterval: number
   ): Promise<{

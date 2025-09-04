@@ -1,5 +1,5 @@
 import { InlineKeyboardMarkup } from "@telegraf/types";
-import { MeteoraPoolData } from "../../types/token.types";
+import { MeteoraPoolData } from "@/types/meteora.types";
 
 export function getPoolSelectionKeyboard(
   pools: MeteoraPoolData[]

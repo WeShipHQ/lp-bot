@@ -1,5 +1,4 @@
 import { meteoraDlmmService } from "./meteora/dlmm.service";
-import { meteoraPoolService } from "./meteora/pool.service";
 import { jupiterService } from "./jupiter.service";
 import BN from "bn.js";
 import { WalletService } from "./wallet.service";
@@ -32,10 +31,7 @@ export class PositionService {
       const feeAmount = enteredAmount * (OPEN_POSITION_FEE / 100);
       const amount = enteredAmount - feeAmount;
 
-      const poolInfo = await poolService.getDLMMPool(
-        poolAddress
-        // "dlmm"
-      );
+      const poolInfo = await poolService.getPoolV2(poolAddress);
       if (!poolInfo) {
         throw new Error("Pool not found");
       }
@@ -63,11 +59,11 @@ export class PositionService {
       let tokenBAmount = new BN(0);
 
       // Convert 50% SOL to token A (if not SOL)
-      if (poolInfo.token_x.address !== SOL_MINT) {
+      if (poolInfo.tokenA.address !== SOL_MINT) {
         try {
           const orderA = await jupiterService.getOrder({
             inputMint: SOL_MINT,
-            outputMint: poolInfo.token_x.address,
+            outputMint: poolInfo.tokenA.address,
             amount: halfAmountLamports,
             taker: user.walletAddress!,
           });
@@ -105,11 +101,11 @@ export class PositionService {
       }
 
       // Convert 50% SOL to token B (if not SOL)
-      if (poolInfo.token_y.address !== SOL_MINT) {
+      if (poolInfo.tokenB.address !== SOL_MINT) {
         try {
           const orderB = await jupiterService.getOrder({
             inputMint: SOL_MINT,
-            outputMint: poolInfo.token_y.address,
+            outputMint: poolInfo.tokenB.address,
             amount: halfAmountLamports,
             taker: user.walletAddress!,
           });
@@ -214,10 +210,10 @@ export class PositionService {
         console.log("totalX", totalX.toString());
         console.log("totalY", totalY.toString());
 
-        if (poolInfo.mint_x !== SOL_MINT) {
+        if (poolInfo.tokenA.address !== SOL_MINT) {
           // swap x -> SOL
           const orderA = await jupiterService.getOrder({
-            inputMint: poolInfo.token_x.address,
+            inputMint: poolInfo.tokenA.address,
             outputMint: SOL_MINT,
             amount: totalX.toString(),
             taker: user.walletAddress!,
@@ -250,10 +246,10 @@ export class PositionService {
           }
         }
 
-        if (poolInfo.mint_y !== SOL_MINT) {
+        if (poolInfo.tokenB.address !== SOL_MINT) {
           // swap y -> SOL
           const orderB = await jupiterService.getOrder({
-            inputMint: poolInfo.token_y.address,
+            inputMint: poolInfo.tokenB.address,
             outputMint: SOL_MINT,
             amount: totalY.toString(),
             taker: user.walletAddress!,
@@ -310,7 +306,7 @@ export class PositionService {
     try {
       const position =
         await meteoraPositionService.getDlmmPosition(positionAddress);
-      const poolInfo = await poolService.getDLMMPool(position.pair_address);
+      const poolInfo = await poolService.getPoolV2(position.pair_address);
 
       const { lbPosition } = await meteoraDlmmService.getPosition(
         positionAddress,

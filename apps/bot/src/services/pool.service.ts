@@ -1,12 +1,15 @@
-import type {
-  MeteoraDlmmPoolDetail,
-  MeteoraPoolData,
-  MeteoraPoolType,
-} from "@/types/meteora.types";
+import type { MeteoraPoolData, MeteoraPoolType } from "@/types/meteora.types";
 import { meteoraPoolService } from "./meteora/pool.service";
-import { jupiterService } from "./jupiter.service";
+import { TokenAdapter } from "@/adapters/token.adapter";
+import { Pool } from "@/types/pool.types";
+import { MeteoraApiService } from "./meteora/meteora-api.service";
+import { MeteoraAdapter } from "./meteora/meteora.adapter";
 
 export class PoolService {
+  private meteoraApiService = new MeteoraApiService();
+  private tokenAdapter = new TokenAdapter();
+  private meteoraAdapter = new MeteoraAdapter();
+
   /**
    * Find Meteora pools that contain the specified token
    * @param tokenAddress - Token address to search for
@@ -146,47 +149,41 @@ export class PoolService {
     }
   }
 
+  async getPoolV2(poolAddress: string): Promise<Pool> {
+    // for now we mainly support DLMM so we only fetch DLMM pool
+    const dlmmPool = await this.meteoraApiService.getDlmmPool(poolAddress);
+    return this.meteoraAdapter.transformDlmmPool(dlmmPool);
+  }
+
   // for now we mainly support DLMM so we only fetch DLMM pool
   // we need create an abstract interface for all pool types later
-  async getDLMMPool(
-    poolAddress: string
-  ): Promise<MeteoraDlmmPoolDetail | null> {
-    try {
-      const pool = await meteoraPoolService.getDlmmPoolInfo(poolAddress);
-      const [mintX, mintY] = await Promise.all([
-        jupiterService.getTokenInfo(pool.mint_x),
-        jupiterService.getTokenInfo(pool.mint_y),
-      ]);
+  // async getDLMMPool(
+  //   poolAddress: string
+  // ): Promise<MeteoraDlmmPoolDetail | null> {
+  //   try {
+  //     const pool = await meteoraPoolService.getDlmmPoolInfo(poolAddress);
+  //     const [mintX, mintY] = await Promise.all([
+  //       jupiterService.getTokenInfo(pool.mint_x),
+  //       jupiterService.getTokenInfo(pool.mint_y),
+  //     ]);
 
-      if (!mintX || !mintY) {
-        return null;
-      }
+  //     if (!mintX || !mintY) {
+  //       return null;
+  //     }
 
-      return {
-        ...pool,
-        token_x: {
-          address: pool.mint_x,
-          name: mintX.name,
-          symbol: mintX.symbol,
-          icon: mintX.icon,
-          decimals: mintX.decimals,
-        },
-        token_y: {
-          address: pool.mint_y,
-          name: mintY.name,
-          symbol: mintY.symbol,
-          icon: mintY.icon,
-          decimals: mintY.decimals,
-        },
-      };
-    } catch (error) {
-      console.error(
-        `[Meteora] Error fetching DLMM pool ${poolAddress}:`,
-        error
-      );
-      return null;
-    }
-  }
+  //     return {
+  //       ...pool,
+  //       token_x: this.tokenAdapter.transformToken(mintX),
+  //       token_y: this.tokenAdapter.transformToken(mintY),
+  //     };
+  //   } catch (error) {
+  //     console.error(
+  //       `[Meteora] Error fetching DLMM pool ${poolAddress}:`,
+  //       error
+  //     );
+  //     return null;
+  //   }
+  // }
 }
 
 export const poolService = new PoolService();

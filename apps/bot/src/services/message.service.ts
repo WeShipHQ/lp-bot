@@ -8,10 +8,11 @@ import {
 import { bold, code, link } from "@/bot/utils/text-formatters";
 import {
   MeteoraDlmmPool,
-  MeteoraDlmmPoolDetail,
+  // MeteoraDlmmPoolDetail,
   MeteoraDlmmPosition,
   MeteoraPoolData,
 } from "@/types/meteora.types";
+import { Pool } from "@/types/pool.types";
 import { PortfolioData, PortfolioPosition } from "@/types/portfolio.types";
 import { TokenDisplayData, TokenInfo } from "@/types/token.types";
 import { getPositionStartCommand } from "@/utils/link";
@@ -206,7 +207,7 @@ export class MessageService {
   static getPositionDetailMessageV1(
     position: MeteoraDlmmPosition,
     lbPosition: LbPosition,
-    poolInfo: MeteoraDlmmPoolDetail
+    poolInfo: Pool
   ): string {
     const meteoraUrl = link(
       "Meteora",
@@ -215,8 +216,8 @@ export class MessageService {
 
     let message = `*${poolInfo.name}* | ${meteoraUrl} \n\n`;
 
-    const totalXAmount = `${Number(lbPosition.positionData.totalXAmount) / 10 ** Number(poolInfo.token_x.decimals)} ${poolInfo.token_x.symbol}`;
-    const totalYAmount = `${Number(lbPosition.positionData.totalYAmount) / 10 ** Number(poolInfo.token_y.decimals)} ${poolInfo.token_y.symbol}`;
+    const totalXAmount = `${Number(lbPosition.positionData.totalXAmount) / 10 ** Number(poolInfo.tokenA.decimals)} ${poolInfo.tokenA.symbol}`;
+    const totalYAmount = `${Number(lbPosition.positionData.totalYAmount) / 10 ** Number(poolInfo.tokenB.decimals)} ${poolInfo.tokenB.symbol}`;
 
     const positionBinData = lbPosition.positionData.positionBinData;
     const startBin = positionBinData[0];
@@ -264,7 +265,7 @@ export class MessageService {
 
     message += `Net Profit: NA \n`;
     message += `Position Balance: *${totalXAmount} / ${totalYAmount}*\n`;
-    message += `Position Range: *${formatNumber(startPrice, { maxDecimals: 6 })} - ${formatNumber(endPrice, { maxDecimals: 6 })} ${poolInfo.token_x.symbol}/${poolInfo.token_y.symbol}*\n`;
+    message += `Position Range: *${formatNumber(startPrice, { maxDecimals: 6 })} - ${formatNumber(endPrice, { maxDecimals: 6 })} ${poolInfo.tokenA.symbol}/${poolInfo.tokenB.symbol}*\n`;
 
     return message;
   }

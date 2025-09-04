@@ -2,10 +2,7 @@ import { Scenes, Markup } from "telegraf";
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
 import { MessageService } from "@/services/message.service";
-import {
-  MeteoraCreatePositionStrategy,
-  MeteoraDlmmPoolDetail,
-} from "@/types/meteora.types";
+import { MeteoraCreatePositionStrategy } from "@/types/meteora.types";
 import { poolService } from "@/services/pool.service";
 import { jupiterService } from "@/services/jupiter.service";
 import { meteoraDlmmService } from "@/services/meteora/dlmm.service";
@@ -16,6 +13,7 @@ import { message } from "telegraf/filters";
 import { BUFFER_AMOUNT, OPEN_POSITION_FEE } from "../config/constants";
 import { solanaService } from "@/services/solana.service";
 import { positionService } from "@/services/position.service";
+import { Pool } from "@/types/pool.types";
 
 type WizardState = {
   step?:
@@ -30,7 +28,7 @@ type WizardState = {
     | "price_change_selection"
     | "confirm";
   poolAddress?: string;
-  poolData?: MeteoraDlmmPoolDetail;
+  poolData?: Pool;
   strategy?: MeteoraCreatePositionStrategy;
   depositMethod?: "sol_auto_convert" | "single_sided";
   selectedToken?: string;
@@ -55,20 +53,20 @@ async function getTokenBalance(
 }
 
 function generateProgressMessage(
-  poolData: MeteoraDlmmPoolDetail,
+  poolData: Pool,
   state: WizardState,
   currentStep: string,
   guide?: string
 ): string {
   const { poolData: _p, ...rest } = state;
   (console.log("state: ", rest), _p?.liquidity);
-  const verifiedEmoji = poolData.is_verified ? "✅" : "⚠️";
+  const verifiedEmoji = poolData.isVerified ? "✅" : "⚠️";
 
   let message =
     `*${poolData.name}* ${verifiedEmoji}\n` +
-    `Pool Price: *${formatNumber(poolData.current_price)} ${poolData.token_x.symbol}/${poolData.token_y.symbol}*\n` +
+    `Pool Price: *${formatNumber(poolData.currentPrice)} ${poolData.tokenA.symbol}/${poolData.tokenB.symbol}*\n` +
     `TVL: *$${formatNumber(poolData.liquidity)}*\n` +
-    `Fee/TVL: *${formatPercentage(poolData.fee_tvl_ratio.hour_24)}*\n`;
+    `Fee/TVL: *${formatPercentage(poolData.feeTvlRatio.hour24)}*\n`;
 
   const hasSelected =
     state.strategy ||
@@ -99,9 +97,9 @@ function generateProgressMessage(
     // Selected Token (for single-sided)
     if (state.depositMethod === "single_sided" && state.selectedToken) {
       const tokenName =
-        state.selectedToken === poolData.token_x.address
-          ? poolData.token_x.symbol
-          : poolData.token_y.symbol;
+        state.selectedToken === poolData.tokenA.address
+          ? poolData.tokenA.symbol
+          : poolData.tokenB.symbol;
       message += `Token: *${tokenName}*\n`;
     }
 
@@ -163,7 +161,7 @@ function generatePositionSummary(
     autoRebalancing,
   } = state;
 
-  const verifiedEmoji = poolData?.is_verified ? "✅" : "⚠️";
+  const verifiedEmoji = poolData?.isVerified ? "✅" : "⚠️";
 
   let message =
     `*Position Summary*\n\n` + `Pool: *${poolData?.name}* ${verifiedEmoji}\n`;
@@ -172,9 +170,9 @@ function generatePositionSummary(
 
   if (depositMethod === "single_sided") {
     const tokenName =
-      selectedToken === poolData!.token_x.address
-        ? poolData!.token_x.symbol
-        : poolData!.token_y.symbol;
+      selectedToken === poolData!.tokenA.address
+        ? poolData!.tokenA.symbol
+        : poolData!.tokenB.symbol;
     message += `Deposit Method: *Single-sided (${tokenName})*\n`;
     if (percentage) {
       message += `Amount: *${percentage}% of token balance*\n`;
@@ -186,8 +184,8 @@ function generatePositionSummary(
     message += `Amount: *${amount} SOL*\n`;
   }
 
-  message += `Position Range: *${formatNumber(preview.rangeMin, { maxDecimals: 6 })} - ${formatNumber(preview.rangeMax, { maxDecimals: 6 })} ${poolData?.token_y.symbol} / ${poolData?.token_x.symbol}*\n`;
-  message += `Tokens: *${formatNumber(preview.tokenAAmount, { maxDecimals: 6 })} ${poolData?.token_x.symbol} / ${formatNumber(preview.tokenBAmount, { maxDecimals: 6 })} ${poolData?.token_y.symbol}*\n`;
+  message += `Position Range: *${formatNumber(preview.rangeMin, { maxDecimals: 6 })} - ${formatNumber(preview.rangeMax, { maxDecimals: 6 })} ${poolData?.tokenB.symbol} / ${poolData?.tokenA.symbol}*\n`;
+  message += `Tokens: *${formatNumber(preview.tokenAAmount, { maxDecimals: 6 })} ${poolData?.tokenA.symbol} / ${formatNumber(preview.tokenBAmount, { maxDecimals: 6 })} ${poolData?.tokenB.symbol}*\n`;
 
   if (depositMethod === "sol_auto_convert") {
     message += `Auto-rebalancing: *${autoRebalancing === "yes" ? "Enabled" : "Disabled"}*\n\n`;
@@ -201,29 +199,29 @@ function generatePositionSummary(
 // Add this function before the createPositionScene definition
 async function getPoolTokenBalances(
   walletAddress: string,
-  poolData: MeteoraDlmmPoolDetail
+  poolData: Pool
 ): Promise<{ tokenABalance: number; tokenBBalance: number }> {
   let tokenABalance = 0;
   let tokenBBalance = 0;
 
   // Get Token A balance
-  if (poolData.token_x.address === SOL_MINT) {
+  if (poolData.tokenA.address === SOL_MINT) {
     tokenABalance = await solanaService.getBalance(walletAddress);
   } else {
     const result = await solanaService.getTokenBalance(
       walletAddress,
-      poolData.token_x.address
+      poolData.tokenA.address
     );
     tokenABalance = result.balance;
   }
 
   // Get Token B balance
-  if (poolData.token_y.address === SOL_MINT) {
+  if (poolData.tokenB.address === SOL_MINT) {
     tokenBBalance = await solanaService.getBalance(walletAddress);
   } else {
     const result = await solanaService.getTokenBalance(
       walletAddress,
-      poolData.token_y.address
+      poolData.tokenB.address
     );
     tokenBBalance = result.balance;
   }
@@ -246,7 +244,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         return ctx.scene.leave();
       }
 
-      const poolData = await poolService.getDLMMPool(poolAddress);
+      const poolData = await poolService.getPoolV2(poolAddress);
       if (!poolData) {
         await ctx.reply(MessageService.getErrorMessage("Pool not found"));
         return ctx.scene.leave();
@@ -346,8 +344,8 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       "Choose Token",
       "Select which token you want to deposit for single-sided liquidity provision.\n\n" +
         "Current token balances:\t" +
-        `*${poolData.token_x.symbol}*: ${formatNumber(tokenABalance, { maxDecimals: 6 })} ${poolData.token_x.symbol}\t|\t` +
-        `*${poolData.token_y.symbol}*: ${formatNumber(tokenBBalance, { maxDecimals: 6 })} ${poolData.token_y.symbol}`
+        `*${poolData.tokenA.symbol}*: ${formatNumber(tokenABalance, { maxDecimals: 6 })} ${poolData.tokenA.symbol}\t|\t` +
+        `*${poolData.tokenB.symbol}*: ${formatNumber(tokenBBalance, { maxDecimals: 6 })} ${poolData.tokenB.symbol}`
     );
 
     (ctx.scene.state as WizardState).step = "token_selection";
@@ -357,12 +355,12 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       ...Markup.inlineKeyboard([
         [
           Markup.button.callback(
-            `${poolData.token_x.symbol}`,
-            `token:${poolData.token_x.address}`
+            `${poolData.tokenA.symbol}`,
+            `token:${poolData.tokenA.address}`
           ),
           Markup.button.callback(
-            `${poolData.token_y.symbol}`,
-            `token:${poolData.token_y.address}`
+            `${poolData.tokenB.symbol}`,
+            `token:${poolData.tokenB.address}`
           ),
         ],
         [
@@ -403,8 +401,8 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       "*Convert from SOL*: Enter SOL amount to convert to selected token\n" +
         "*From Token Balance*: Use existing token balance with percentage selection\n\n" +
         "Current token balances:\t" +
-        `*${formatNumber(tokenABalance, { maxDecimals: 6 })} ${poolData.token_x.symbol}*\t|\t` +
-        `*${formatNumber(tokenBBalance, { maxDecimals: 6 })} ${poolData.token_y.symbol}*`
+        `*${formatNumber(tokenABalance, { maxDecimals: 6 })} ${poolData.tokenA.symbol}*\t|\t` +
+        `*${formatNumber(tokenBBalance, { maxDecimals: 6 })} ${poolData.tokenB.symbol}*`
     );
 
     (ctx.scene.state as WizardState).step = "deposit_source";
@@ -453,9 +451,9 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         selectedToken
       );
       const tokenSymbol =
-        selectedToken === poolData.token_x.address
-          ? poolData.token_x.symbol
-          : poolData.token_y.symbol;
+        selectedToken === poolData.tokenA.address
+          ? poolData.tokenA.symbol
+          : poolData.tokenB.symbol;
 
       const message = generateProgressMessage(
         poolData!,
@@ -774,8 +772,8 @@ createPositionScene.action(/token:(.+)/, async (ctx, next) => {
 
   const tokenName =
     ctx.match[1] === "A"
-      ? state.poolData!.token_x.symbol
-      : state.poolData!.token_y.symbol;
+      ? state.poolData!.tokenA.symbol
+      : state.poolData!.tokenB.symbol;
   const message = generateProgressMessage(
     state.poolData!,
     state,
@@ -1114,7 +1112,7 @@ createPositionScene.command("cancel", async (ctx) => {
 
 // utils
 export async function calculateTokenDistributionForBalancedPosition(
-  poolInfo: MeteoraDlmmPoolDetail,
+  poolInfo: Pool,
   enteredAmount: number
 ) {
   const feeAmount = enteredAmount * (OPEN_POSITION_FEE / 100);
@@ -1129,31 +1127,31 @@ export async function calculateTokenDistributionForBalancedPosition(
 
   try {
     // Calculate token A amount
-    if (poolInfo.token_x.address === SOL_MINT) {
+    if (poolInfo.tokenA.address === SOL_MINT) {
       tokenAAmount = halfAmount;
     } else {
       const orderResponseA = await jupiterService.getOrder({
         inputMint: SOL_MINT,
-        outputMint: poolInfo.token_x.address,
+        outputMint: poolInfo.tokenA.address,
         amount: halfAmountLamports,
       });
       tokenAAmount =
         parseInt(orderResponseA.outAmount) /
-        Math.pow(10, poolInfo.token_x.decimals);
+        Math.pow(10, poolInfo.tokenA.decimals);
     }
 
     // Calculate token B amount
-    if (poolInfo.token_y.address === SOL_MINT) {
+    if (poolInfo.tokenB.address === SOL_MINT) {
       tokenBAmount = halfAmount;
     } else {
       const orderResponseB = await jupiterService.getOrder({
         inputMint: SOL_MINT,
-        outputMint: poolInfo.token_y.address,
+        outputMint: poolInfo.tokenB.address,
         amount: halfAmountLamports,
       });
       tokenBAmount =
         parseInt(orderResponseB.outAmount) /
-        Math.pow(10, poolInfo.token_y.decimals);
+        Math.pow(10, poolInfo.tokenB.decimals);
     }
   } catch (error) {
     console.error("Error getting Jupiter quotes:", error);

@@ -10,7 +10,6 @@ import {
   PortfolioResult,
   PortfolioTotals,
 } from "@/types/portfolio.types";
-import { CONFIG } from "@/config";
 import { db } from "@/db";
 import {
   users as usersTable,

@@ -1,64 +1,64 @@
-import { MeteoraPoolData } from "./meteora.types";
+import type { MeteoraPoolData } from "./meteora.types";
 
-// Jupiter API Types
-export interface JupiterTokenStats {
-  priceChange: number;
-  liquidityChange: number;
-  volumeChange: number;
-  buyVolume: number;
-  sellVolume: number;
-  buyOrganicVolume: number;
-  sellOrganicVolume: number;
-  numBuys: number;
-  numSells: number;
-  numTraders: number;
-  numOrganicBuyers: number;
-  numNetBuyers: number;
-}
+// // Jupiter API Types
+// export interface JupiterTokenStats {
+//   priceChange: number;
+//   liquidityChange: number;
+//   volumeChange: number;
+//   buyVolume: number;
+//   sellVolume: number;
+//   buyOrganicVolume: number;
+//   sellOrganicVolume: number;
+//   numBuys: number;
+//   numSells: number;
+//   numTraders: number;
+//   numOrganicBuyers: number;
+//   numNetBuyers: number;
+// }
 
-export interface JupiterTokenAudit {
-  mintAuthorityDisabled: boolean;
-  freezeAuthorityDisabled: boolean;
-  topHoldersPercentage: number;
-}
+// export interface JupiterTokenAudit {
+//   mintAuthorityDisabled: boolean;
+//   freezeAuthorityDisabled: boolean;
+//   topHoldersPercentage: number;
+// }
 
-export interface JupiterTokenFirstPool {
-  id: string;
-  createdAt: string;
-}
+// export interface JupiterTokenFirstPool {
+//   id: string;
+//   createdAt: string;
+// }
 
-export interface JupiterToken {
-  id: string;
-  name: string;
-  symbol: string;
-  icon: string;
-  decimals: number;
-  circSupply: number;
-  totalSupply: number;
-  tokenProgram: string;
-  firstPool: JupiterTokenFirstPool;
-  holderCount: number;
-  audit: JupiterTokenAudit;
-  organicScore: number;
-  organicScoreLabel: string;
-  isVerified: boolean;
-  cexes: Array<string>;
-  tags: Array<string>;
-  fdv: number;
-  mcap: number;
-  usdPrice: number;
-  priceBlockId: number;
-  liquidity: number;
-  stats5m: JupiterTokenStats;
-  stats1h: JupiterTokenStats;
-  stats6h: JupiterTokenStats;
-  stats24h: JupiterTokenStats;
-  ctLikes: number;
-  smartCtLikes: number;
-  updatedAt: string;
-}
+// export interface JupiterToken {
+//   id: string;
+//   name: string;
+//   symbol: string;
+//   icon: string;
+//   decimals: number;
+//   circSupply: number;
+//   totalSupply: number;
+//   tokenProgram: string;
+//   firstPool: JupiterTokenFirstPool;
+//   holderCount: number;
+//   audit: JupiterTokenAudit;
+//   organicScore: number;
+//   organicScoreLabel: string;
+//   isVerified: boolean;
+//   cexes: Array<string>;
+//   tags: Array<string>;
+//   fdv: number;
+//   mcap: number;
+//   usdPrice: number;
+//   priceBlockId: number;
+//   liquidity: number;
+//   stats5m: JupiterTokenStats;
+//   stats1h: JupiterTokenStats;
+//   stats6h: JupiterTokenStats;
+//   stats24h: JupiterTokenStats;
+//   ctLikes: number;
+//   smartCtLikes: number;
+//   updatedAt: string;
+// }
 
-export type JupiterTokenSearchResponse = Array<JupiterToken>;
+// export type JupiterTokenSearchResponse = Array<JupiterToken>;
 
 // Meteora Pool Types
 // export interface MeteoraPoolData {
@@ -109,13 +109,16 @@ export type JupiterTokenSearchResponse = Array<JupiterToken>;
 //   data: MeteoraPoolData;
 // }
 
-// Unified Token Info
-export interface TokenInfo {
+export interface Token {
   address: string;
-  name: string;
   symbol: string;
-  icon?: string;
+  name: string;
   decimals: number;
+  logoUri?: string;
+}
+
+// Unified Token Info
+export interface TokenInfo extends Token {
   price: number;
   priceChange24h: number;
   marketCap: number;
@@ -125,13 +128,21 @@ export interface TokenInfo {
   source: "jupiter" | "meteora";
 }
 
+export interface TokenPrice {
+  id: string;
+  timestamp: number;
+  price: number;
+  blockId: number;
+  decimals: number;
+  priceChange24h: number;
+}
+
 export interface TokenDisplayData {
   token: TokenInfo;
   poolInfo?: MeteoraPoolData;
   error?: string;
 }
 
-// Updated Input Detection Types
 export type TokenInputType =
   | "address"
   | "meteora_damm_v1"
@@ -145,7 +156,7 @@ export interface TokenInputDetection {
   originalInput: string;
 }
 
-// pricing
+// pricing service
 export enum PricingTokenPriority {
   HIGH = "HIGH_PRIORITY", // Volatile meme coins, trending tokens
   MEDIUM = "MEDIUM_PRIORITY", // SOL, USDC, JUP, major tokens
@@ -163,15 +174,6 @@ export interface CachedPrice {
   price: TokenPrice;
   timestamp: number;
   priority: PricingTokenPriority;
-}
-
-export interface TokenPrice {
-  id: string;
-  timestamp: number;
-  price: number;
-  blockId: number;
-  decimals: number;
-  priceChange24h: number;
 }
 
 export interface PriceRequest {
