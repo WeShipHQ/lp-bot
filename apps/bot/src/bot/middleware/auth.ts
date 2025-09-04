@@ -105,8 +105,8 @@ export function authMiddleware(
         const customMetadata = user.customMetadata ?? {};
         walletAddress = customMetadata.walletAddress ?? "";
         walletId = customMetadata.walletId ?? "";
-        // If user exists but has no wallet, create one
-        if (!walletAddress || !walletId) {
+        
+        if (!walletAddress || !walletId || walletAddress.trim() === "" || walletId.trim() === "") {
           const wallet = await privy.walletApi.createWallet({
             chainType: "solana",
             ownerId: CONFIG.PRIVY.PRIVY_AUTH_ID,
@@ -133,7 +133,6 @@ export function authMiddleware(
         walletId,
         telegramUserId,
       };
-
 
       userCache.set(telegramUserId, {
         user,
