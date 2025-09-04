@@ -34,6 +34,7 @@ export interface BotContext extends Context {
     twoFactorVerification?: TwoFactorVerificationState;
   };
   scene: any;
+  startPayload?: string;
 }
 
 // TODO move to a suiable folder

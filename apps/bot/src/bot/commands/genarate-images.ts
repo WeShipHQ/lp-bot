@@ -49,7 +49,7 @@ export function generateImageCommand(bot: Telegraf<BotContext>, server: FastifyI
       else if (/^\s*-/.test(highlightedText)) highlightedTextColor = "#FF2D2D";
 
       // ====== Tạo poster ======
-  const posterBuffer = await generateWeisheepPoster({
+      const posterBuffer = await generateWeisheepPoster({
         highlightedText,
         tradingPair,
         totalValueLocked,
@@ -79,7 +79,7 @@ export function generateImageCommand(bot: Telegraf<BotContext>, server: FastifyI
         disable_web_page_preview: true,
       });
 
-  await (telegramContext as any).replyWithPhoto({ source: posterBuffer });
+      await (telegramContext as any).replyWithPhoto({ source: posterBuffer });
     } catch (error) {
       server.log.error("[weisheep] error:", error);
       await (telegramContext as any).reply(

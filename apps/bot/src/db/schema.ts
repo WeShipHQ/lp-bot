@@ -36,6 +36,11 @@ export const rebalanceStrategyEnum = pgEnum("RebalanceStrategy", [
   "STANDARD",
   "DIP_PROTECTION",
 ]);
+export const pointTypeEnum = pgEnum("PointType", [
+  "REFERRAL_BONUS",
+  "FEE_EARNING",
+  "ACTIVITY_REWARD",
+]);
 
 // Tables
 export const users = pgTable("User", {
@@ -124,10 +129,37 @@ export const rebalanceEvents = pgTable("RebalanceEvent", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 });
 
+export const referrals = pgTable("Referral", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  referrerId: text("referrerId").notNull(),
+  referredId: text("referredId").notNull(),
+  referralCode: text("referralCode").notNull(),
+  status: text("status").notNull().default("ACTIVE"),
+  feesEarned: decimal("feesEarned", { precision: 20, scale: 8 })
+    .notNull()
+    .default("0"),
+  pointsEarned: integer("pointsEarned").notNull().default(0),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+});
+
+export const points = pgTable("Points", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: text("userId").notNull(),
+  amount: integer("amount").notNull(),
+  type: pointTypeEnum("type").notNull(),
+  description: text("description"),
+  referralId: uuid("referralId").references(() => referrals.id),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   wallets: many(wallets),
   positions: many(positions),
+  referrals: many(referrals, { relationName: "referrer" }),
+  referredBy: many(referrals, { relationName: "referred" }),
+  points: many(points),
 }));
 
 export const walletsRelations = relations(wallets, ({ one }) => ({
@@ -163,6 +195,31 @@ export const rebalanceEventsRelations = relations(
   })
 );
 
+export const referralsRelations = relations(referrals, ({ one, many }) => ({
+  referrer: one(users, {
+    fields: [referrals.referrerId],
+    references: [users.telegramId], 
+    relationName: "referrer",
+  }),
+  referred: one(users, {
+    fields: [referrals.referredId],
+    references: [users.telegramId], 
+    relationName: "referred",
+  }),
+  points: many(points),
+}));
+
+export const pointsRelations = relations(points, ({ one }) => ({
+  user: one(users, {
+    fields: [points.userId],
+    references: [users.telegramId], 
+  }),
+  referral: one(referrals, {
+    fields: [points.referralId],
+    references: [referrals.id],
+  }),
+}));
+
 // Export types
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -174,6 +231,10 @@ export type Transaction = typeof transactions.$inferSelect;
 export type NewTransaction = typeof transactions.$inferInsert;
 export type RebalanceEvent = typeof rebalanceEvents.$inferSelect;
 export type NewRebalanceEvent = typeof rebalanceEvents.$inferInsert;
+export type Referral = typeof referrals.$inferSelect;
+export type NewReferral = typeof referrals.$inferInsert;
+export type Points = typeof points.$inferSelect;
+export type NewPoints = typeof points.$inferInsert;
 
 // Export enum types
 export type StrategyType = (typeof strategyTypeEnum.enumValues)[number];
@@ -183,3 +244,4 @@ export type TransactionStatus =
   (typeof transactionStatusEnum.enumValues)[number];
 export type RebalanceStrategy =
   (typeof rebalanceStrategyEnum.enumValues)[number];
+export type PointType = (typeof pointTypeEnum.enumValues)[number];

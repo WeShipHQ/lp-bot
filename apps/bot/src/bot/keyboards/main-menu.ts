@@ -9,9 +9,10 @@ export function getMainKeyboard(): InlineKeyboardMarkup {
         { text: "💰 Wallet", callback_data: "wallet" },
       ],
       [
+        { text: "🧧 Referral", callback_data: "referral" },
         { text: "⚙️ Settings", callback_data: "settings" },
-        { text: "❓ Help", callback_data: "help" },
       ],
+      [{ text: "❓ Help", callback_data: "help" }],
     ],
   };
 }
