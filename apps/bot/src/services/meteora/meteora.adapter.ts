@@ -49,7 +49,27 @@ export class MeteoraAdapter {
         hour4: apiData.fee_tvl_ratio.hour_4,
         min30: apiData.fee_tvl_ratio.min_30,
       },
-      metadata: {},
+      meteora: {
+        hide: apiData.hide,
+        isBlacklisted: apiData.is_blacklisted,
+        baseFeePercentage: apiData.base_fee_percentage,
+        binStep: apiData.bin_step,
+        cumulativeFeeVolume: apiData.cumulative_fee_volume,
+        cumulativeTradeVolume: apiData.cumulative_trade_volume,
+        farmApr: apiData.farm_apr,
+        farmApy: apiData.farm_apy,
+        launchpad: apiData.launchpad,
+        maxFeePercentage: apiData.max_fee_percentage,
+        protocolFeePercentage: apiData.protocol_fee_percentage,
+        reserveX: apiData.reserve_x,
+        reserveXAmount: apiData.reserve_x_amount,
+        reserveY: apiData.reserve_y,
+        reserveYAmount: apiData.reserve_y_amount,
+        rewardMintX: apiData.reward_mint_x,
+        rewardMintY: apiData.reward_mint_y,
+        tags: apiData.tags,
+        todayFees: apiData.today_fees,
+      },
     };
   }
 

@@ -12,7 +12,7 @@ import {
   MeteoraDlmmPosition,
   MeteoraPoolData,
 } from "@/types/meteora.types";
-import { Pool } from "@/types/pool.types";
+import { Pool, PoolDex } from "@/types/pool.types";
 import { PortfolioData, PortfolioPosition } from "@/types/portfolio.types";
 import { TokenDisplayData, TokenInfo } from "@/types/token.types";
 import { getPositionStartCommand } from "@/utils/link";

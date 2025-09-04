@@ -1,5 +1,10 @@
 import { escapers, serialiseWith } from "@telegraf/entity";
-import type { Serialiser, Node, Message, TextMessage } from "@telegraf/entity/types/types";
+import type {
+  Serialiser,
+  Node,
+  Message,
+  TextMessage,
+} from "@telegraf/entity/types/types";
 // import type { TGInboxSettings } from "src/settings";
 // import type { MsgChannel, MsgNonChannel } from "src/type";
 
@@ -24,7 +29,7 @@ export function bold(text: string | number): string {
  */
 export function italic(text: string | number): string {
   const str = typeof text === "number" ? text.toString() : text;
-  return `_${escapeMarkdown(str)}_`;
+  return `_${str}_`;
 }
 
 /**
@@ -79,7 +84,7 @@ export function spoiler(text: string | number): string {
  * Link formatting
  */
 export function link(text: string, url: string): string {
-  return `[${escapeMarkdown(text)}](${url})`;
+  return `[${text}](${url})`;
 }
 
 /**
@@ -320,7 +325,6 @@ export function card(
   return parts.join("\n");
 }
 
-
 const markdownSerialiser: Serialiser = (match: string, node?: Node) => {
   switch (node?.type) {
     case "bold":
@@ -364,6 +368,8 @@ const markdownSerialiser: Serialiser = (match: string, node?: Node) => {
 export function toMarkdownV2(msg: TextMessage, settings: any): string {
   // @ts-expect-error
   if (settings.remove_formatting) return msg.text ?? msg.caption ?? "";
-  const selectedEscaper = settings.markdown_escaper ? escapers.MarkdownV2 : escapers.HTML;
+  const selectedEscaper = settings.markdown_escaper
+    ? escapers.MarkdownV2
+    : escapers.HTML;
   return serialiseWith(markdownSerialiser, selectedEscaper)(msg as Message);
 }

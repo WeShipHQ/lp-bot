@@ -113,19 +113,7 @@ importers:
         version: 1.7.4
       '@langchain/community':
         specifier: ^0.3.27
-<<<<<<< HEAD
-<<<<<<< HEAD
-        version: 0.3.27(@browserbasehq/stagehand@1.14.0)(@ibm-cloud/watsonx-ai@1.6.10)(@langchain/core@0.3.36)(@langchain/google-genai@0.1.9)(@langchain/groq@0.1.3)(@langchain/ollama@0.2.0)(@neondatabase/serverless@1.0.1)(axios@1.11.0)(ibm-cloud-sdk-core@5.4.2)(openai@5.12.2)(pg@8.16.3)(ws@7.5.10)
-=======
-<<<<<<< HEAD
-        version: 0.3.27(@browserbasehq/stagehand@1.14.0)(@ibm-cloud/watsonx-ai@1.6.10)(@langchain/core@0.3.36)(@langchain/google-genai@0.1.9)(@langchain/groq@0.1.3)(@langchain/ollama@0.2.0)(@neondatabase/serverless@1.0.1)(axios@1.11.0)(ibm-cloud-sdk-core@5.4.2)(openai@5.12.2)(pg@8.16.3)(ws@8.18.3)
-=======
-        version: 0.3.27(@browserbasehq/stagehand@1.14.0)(@ibm-cloud/watsonx-ai@1.6.10)(@langchain/core@0.3.36)(@langchain/google-genai@0.1.9)(@langchain/groq@0.1.3)(@langchain/ollama@0.2.0)(@neondatabase/serverless@1.0.1)(axios@1.11.0)(ibm-cloud-sdk-core@5.4.2)(ioredis@5.7.0)(openai@5.12.2)(pg@8.16.3)(ws@8.18.3)
->>>>>>> 2509565 (feat: deposit flow)
->>>>>>> 17a5afd (feat: deposit flow)
-=======
         version: 0.3.27(@browserbasehq/stagehand@1.14.0)(@ibm-cloud/watsonx-ai@1.6.10)(@langchain/core@0.3.36)(@langchain/google-genai@0.1.9)(@langchain/groq@0.1.3)(@langchain/ollama@0.2.0)(@neondatabase/serverless@1.0.1)(axios@1.11.0)(ibm-cloud-sdk-core@5.4.2)(ioredis@5.7.0)(openai@5.12.2)(pg@8.16.3)(ws@7.5.10)
->>>>>>> 6ff59a8 (feat: handle create position)
       '@langchain/core':
         specifier: ^0.3.36
         version: 0.3.36(openai@5.12.2)
@@ -158,7 +146,7 @@ importers:
         version: 1.7.0(fastestsmallesttextencoderdecoder@1.0.22)(typescript@5.8.2)
       '@napi-rs/canvas':
         specifier: ^0.1.77
-        version: 0.1.77
+        version: 0.1.78
       '@prisma/adapter-neon':
         specifier: ^6.5.0
         version: 6.5.0(@neondatabase/serverless@1.0.1)
@@ -183,18 +171,15 @@ importers:
       '@types/mime-types':
         specifier: ^2.1.4
         version: 2.1.4
-<<<<<<< HEAD
       '@types/qrcode':
         specifier: ^1.5.5
         version: 1.5.5
       '@types/speakeasy':
         specifier: ^2.0.10
         version: 2.0.10
-=======
       bn.js:
         specifier: ^5.2.2
         version: 5.2.2
->>>>>>> 17a5afd (feat: deposit flow)
       bottleneck:
         specifier: ^2.19.5
         version: 2.19.5
@@ -274,9 +259,6 @@ importers:
       '@types/pg':
         specifier: ^8.11.11
         version: 8.11.11
-      '@types/qrcode':
-        specifier: ^1.5.5
-        version: 1.5.5
       '@types/supertest':
         specifier: ^6.0.3
         version: 6.0.3
@@ -2188,19 +2170,7 @@ packages:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.4
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-  /@langchain/community@0.3.27(@browserbasehq/stagehand@1.14.0)(@ibm-cloud/watsonx-ai@1.6.10)(@langchain/core@0.3.36)(@langchain/google-genai@0.1.9)(@langchain/groq@0.1.3)(@langchain/ollama@0.2.0)(@neondatabase/serverless@1.0.1)(axios@1.11.0)(ibm-cloud-sdk-core@5.4.2)(openai@5.12.2)(pg@8.16.3)(ws@7.5.10):
-=======
-<<<<<<< HEAD
-  /@langchain/community@0.3.27(@browserbasehq/stagehand@1.14.0)(@ibm-cloud/watsonx-ai@1.6.10)(@langchain/core@0.3.36)(@langchain/google-genai@0.1.9)(@langchain/groq@0.1.3)(@langchain/ollama@0.2.0)(@neondatabase/serverless@1.0.1)(axios@1.11.0)(ibm-cloud-sdk-core@5.4.2)(openai@5.12.2)(pg@8.16.3)(ws@8.18.3):
-=======
-  /@langchain/community@0.3.27(@browserbasehq/stagehand@1.14.0)(@ibm-cloud/watsonx-ai@1.6.10)(@langchain/core@0.3.36)(@langchain/google-genai@0.1.9)(@langchain/groq@0.1.3)(@langchain/ollama@0.2.0)(@neondatabase/serverless@1.0.1)(axios@1.11.0)(ibm-cloud-sdk-core@5.4.2)(ioredis@5.7.0)(openai@5.12.2)(pg@8.16.3)(ws@8.18.3):
->>>>>>> 2509565 (feat: deposit flow)
->>>>>>> 17a5afd (feat: deposit flow)
-=======
   /@langchain/community@0.3.27(@browserbasehq/stagehand@1.14.0)(@ibm-cloud/watsonx-ai@1.6.10)(@langchain/core@0.3.36)(@langchain/google-genai@0.1.9)(@langchain/groq@0.1.3)(@langchain/ollama@0.2.0)(@neondatabase/serverless@1.0.1)(axios@1.11.0)(ibm-cloud-sdk-core@5.4.2)(ioredis@5.7.0)(openai@5.12.2)(pg@8.16.3)(ws@7.5.10):
->>>>>>> 6ff59a8 (feat: handle create position)
     resolution: {integrity: sha512-YdVDysg/k4LiRJgtGo5IHlrtAMsWK5o7/WtgUGsyABAfKNAcFY2dBV5NClbEwS2GuE4Ll8TC3PxSWIctH42oeg==}
     engines: {node: '>=18'}
     peerDependencies:
@@ -2845,48 +2815,22 @@ packages:
       - supports-color
     dev: false
 
-<<<<<<< HEAD
-  /@napi-rs/canvas-android-arm64@0.1.77:
-    resolution: {integrity: sha512-jC8YX0rbAnu9YrLK1A52KM2HX9EDjrJSCLVuBf9Dsov4IC6GgwMLS2pwL9GFLJnSZBFgdwnA84efBehHT9eshA==}
-    engines: {node: '>= 10'}
-    cpu: [arm64]
-    os: [android]
-    requiresBuild: true
-    dev: false
-    optional: true
-
-  /@napi-rs/canvas-darwin-arm64@0.1.77:
-    resolution: {integrity: sha512-VFaCaCgAV0+hPwXajDIiHaaGx4fVCuUVYp/CxCGXmTGz699ngIEBx3Sa2oDp0uk3X+6RCRLueb7vD44BKBiPIg==}
-    engines: {node: '>= 10'}
-=======
   /@msgpackr-extract/msgpackr-extract-darwin-arm64@3.0.3:
     resolution: {integrity: sha512-QZHtlVgbAdy2zAqNA9Gu1UpIuI8Xvsd1v8ic6B2pZmeFnFcMWiPLfWXh7TVw4eGEZ/C9TH281KwhVoeQUKbyjw==}
->>>>>>> 17a5afd (feat: deposit flow)
     cpu: [arm64]
     os: [darwin]
     requiresBuild: true
     dev: false
     optional: true
 
-<<<<<<< HEAD
-  /@napi-rs/canvas-darwin-x64@0.1.77:
-    resolution: {integrity: sha512-uD2NSkf6I4S3o0POJDwweK85FE4rfLNA2N714MgiEEMMw5AmupfSJGgpYzcyEXtPzdaca6rBfKcqNvzR1+EyLQ==}
-    engines: {node: '>= 10'}
-=======
   /@msgpackr-extract/msgpackr-extract-darwin-x64@3.0.3:
     resolution: {integrity: sha512-mdzd3AVzYKuUmiWOQ8GNhl64/IoFGol569zNRdkLReh6LRLHOXxU4U8eq0JwaD8iFHdVGqSy4IjFL4reoWCDFw==}
->>>>>>> 17a5afd (feat: deposit flow)
     cpu: [x64]
     os: [darwin]
     requiresBuild: true
     dev: false
     optional: true
 
-<<<<<<< HEAD
-  /@napi-rs/canvas-linux-arm-gnueabihf@0.1.77:
-    resolution: {integrity: sha512-03GxMMZGhHRQxiA4gyoKT6iQSz8xnA6T9PAfg/WNJnbkVMFZG782DwUJUb39QIZ1uE1euMCPnDgWAJ092MmgJQ==}
-    engines: {node: '>= 10'}
-=======
   /@msgpackr-extract/msgpackr-extract-linux-arm64@3.0.3:
     resolution: {integrity: sha512-YxQL+ax0XqBJDZiKimS2XQaf+2wDGVa1enVRGzEvLLVFeqa5kx2bWbtcSXgsxjQB7nRqqIGFIcLteF/sHeVtQg==}
     cpu: [arm64]
@@ -2897,16 +2841,66 @@ packages:
 
   /@msgpackr-extract/msgpackr-extract-linux-arm@3.0.3:
     resolution: {integrity: sha512-fg0uy/dG/nZEXfYilKoRe7yALaNmHoYeIoJuJ7KJ+YyU2bvY8vPv27f7UKhGRpY6euFYqEVhxCFZgAUNQBM3nw==}
->>>>>>> 17a5afd (feat: deposit flow)
     cpu: [arm]
     os: [linux]
     requiresBuild: true
     dev: false
     optional: true
 
-<<<<<<< HEAD
-  /@napi-rs/canvas-linux-arm64-gnu@0.1.77:
-    resolution: {integrity: sha512-ZO+d2gRU9JU1Bb7SgJcJ1k9wtRMCpSWjJAJ+2phhu0Lw5As8jYXXXmLKmMTGs1bOya2dBMYDLzwp7KS/S/+aCA==}
+  /@msgpackr-extract/msgpackr-extract-linux-x64@3.0.3:
+    resolution: {integrity: sha512-cvwNfbP07pKUfq1uH+S6KJ7dT9K8WOE4ZiAcsrSes+UY55E/0jLYc+vq+DO7jlmqRb5zAggExKm0H7O/CBaesg==}
+    cpu: [x64]
+    os: [linux]
+    requiresBuild: true
+    dev: false
+    optional: true
+
+  /@msgpackr-extract/msgpackr-extract-win32-x64@3.0.3:
+    resolution: {integrity: sha512-x0fWaQtYp4E6sktbsdAqnehxDgEc/VwM7uLsRCYWaiGu0ykYdZPiS8zCWdnjHwyiumousxfBm4SO31eXqwEZhQ==}
+    cpu: [x64]
+    os: [win32]
+    requiresBuild: true
+    dev: false
+    optional: true
+
+  /@napi-rs/canvas-android-arm64@0.1.78:
+    resolution: {integrity: sha512-N1ikxztjrRmh8xxlG5kYm1RuNr8ZW1EINEDQsLhhuy7t0pWI/e7SH91uFVLZKCMDyjel1tyWV93b5fdCAi7ggw==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [android]
+    requiresBuild: true
+    dev: false
+    optional: true
+
+  /@napi-rs/canvas-darwin-arm64@0.1.78:
+    resolution: {integrity: sha512-FA3aCU3G5yGc74BSmnLJTObnZRV+HW+JBTrsU+0WVVaNyVKlb5nMvYAQuieQlRVemsAA2ek2c6nYtHh6u6bwFw==}
+    engines: {node: '>= 10'}
+    cpu: [arm64]
+    os: [darwin]
+    requiresBuild: true
+    dev: false
+    optional: true
+
+  /@napi-rs/canvas-darwin-x64@0.1.78:
+    resolution: {integrity: sha512-xVij69o9t/frixCDEoyWoVDKgE3ksLGdmE2nvBWVGmoLu94MWUlv2y4Qzf5oozBmydG5Dcm4pRHFBM7YWa1i6g==}
+    engines: {node: '>= 10'}
+    cpu: [x64]
+    os: [darwin]
+    requiresBuild: true
+    dev: false
+    optional: true
+
+  /@napi-rs/canvas-linux-arm-gnueabihf@0.1.78:
+    resolution: {integrity: sha512-aSEXrLcIpBtXpOSnLhTg4jPsjJEnK7Je9KqUdAWjc7T8O4iYlxWxrXFIF8rV8J79h5jNdScgZpAUWYnEcutR3g==}
+    engines: {node: '>= 10'}
+    cpu: [arm]
+    os: [linux]
+    requiresBuild: true
+    dev: false
+    optional: true
+
+  /@napi-rs/canvas-linux-arm64-gnu@0.1.78:
+    resolution: {integrity: sha512-dlEPRX1hLGKaY3UtGa1dtkA1uGgFITn2mDnfI6YsLlYyLJQNqHx87D1YTACI4zFCUuLr/EzQDzuX+vnp9YveVg==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
@@ -2914,8 +2908,8 @@ packages:
     dev: false
     optional: true
 
-  /@napi-rs/canvas-linux-arm64-musl@0.1.77:
-    resolution: {integrity: sha512-S1KtnP1+nWs2RApzNkdNf8X4trTLrHaY7FivV61ZRaL8NvuGOkSkKa+gWN2iedIGFEDz6gecpl/JAUSewwFXYg==}
+  /@napi-rs/canvas-linux-arm64-musl@0.1.78:
+    resolution: {integrity: sha512-TsCfjOPZtm5Q/NO1EZHR5pwDPSPjPEttvnv44GL32Zn1uvudssjTLbvaG1jHq81Qxm16GTXEiYLmx4jOLZQYlg==}
     engines: {node: '>= 10'}
     cpu: [arm64]
     os: [linux]
@@ -2923,8 +2917,8 @@ packages:
     dev: false
     optional: true
 
-  /@napi-rs/canvas-linux-riscv64-gnu@0.1.77:
-    resolution: {integrity: sha512-A4YIKFYUwDtrSzCtdCAO5DYmRqlhCVKHdpq0+dBGPnIEhOQDFkPBTfoTAjO3pjlEnorlfKmNMOH21sKQg2esGA==}
+  /@napi-rs/canvas-linux-riscv64-gnu@0.1.78:
+    resolution: {integrity: sha512-+cpTTb0GDshEow/5Fy8TpNyzaPsYb3clQIjgWRmzRcuteLU+CHEU/vpYvAcSo7JxHYPJd8fjSr+qqh+nI5AtmA==}
     engines: {node: '>= 10'}
     cpu: [riscv64]
     os: [linux]
@@ -2932,22 +2926,8 @@ packages:
     dev: false
     optional: true
 
-  /@napi-rs/canvas-linux-x64-gnu@0.1.77:
-    resolution: {integrity: sha512-Lt6Sef5l0+5O1cSZ8ysO0JI+x+rSrqZyXs5f7+kVkCAOVq8X5WTcDVbvWvEs2aRhrWTp5y25Jf2Bn+3IcNHOuQ==}
-    engines: {node: '>= 10'}
-=======
-  /@msgpackr-extract/msgpackr-extract-linux-x64@3.0.3:
-    resolution: {integrity: sha512-cvwNfbP07pKUfq1uH+S6KJ7dT9K8WOE4ZiAcsrSes+UY55E/0jLYc+vq+DO7jlmqRb5zAggExKm0H7O/CBaesg==}
->>>>>>> 17a5afd (feat: deposit flow)
-    cpu: [x64]
-    os: [linux]
-    requiresBuild: true
-    dev: false
-    optional: true
-
-<<<<<<< HEAD
-  /@napi-rs/canvas-linux-x64-musl@0.1.77:
-    resolution: {integrity: sha512-NiNFvC+D+omVeJ3IjYlIbyt/igONSABVe9z0ZZph29epHgZYu4eHwV9osfpRt1BGGOAM8LkFrHk4LBdn2EDymA==}
+  /@napi-rs/canvas-linux-x64-gnu@0.1.78:
+    resolution: {integrity: sha512-wxRcvKfvYBgtrO0Uy8OmwvjlnTcHpY45LLwkwVNIWHPqHAsyoTyG/JBSfJ0p5tWRzMOPDCDqdhpIO4LOgXjeyg==}
     engines: {node: '>= 10'}
     cpu: [x64]
     os: [linux]
@@ -2955,38 +2935,40 @@ packages:
     dev: false
     optional: true
 
-  /@napi-rs/canvas-win32-x64-msvc@0.1.77:
-    resolution: {integrity: sha512-fP6l0hZiWykyjvpZTS3sI46iib8QEflbPakNoUijtwyxRuOPTTBfzAWZUz5z2vKpJJ/8r305wnZeZ8lhsBHY5A==}
+  /@napi-rs/canvas-linux-x64-musl@0.1.78:
+    resolution: {integrity: sha512-vQFOGwC9QDP0kXlhb2LU1QRw/humXgcbVp8mXlyBqzc/a0eijlLF9wzyarHC1EywpymtS63TAj8PHZnhTYN6hg==}
     engines: {node: '>= 10'}
-=======
-  /@msgpackr-extract/msgpackr-extract-win32-x64@3.0.3:
-    resolution: {integrity: sha512-x0fWaQtYp4E6sktbsdAqnehxDgEc/VwM7uLsRCYWaiGu0ykYdZPiS8zCWdnjHwyiumousxfBm4SO31eXqwEZhQ==}
->>>>>>> 17a5afd (feat: deposit flow)
+    cpu: [x64]
+    os: [linux]
+    requiresBuild: true
+    dev: false
+    optional: true
+
+  /@napi-rs/canvas-win32-x64-msvc@0.1.78:
+    resolution: {integrity: sha512-/eKlTZBtGUgpRKalzOzRr6h7KVSuziESWXgBcBnXggZmimwIJWPJlEcbrx5Tcwj8rPuZiANXQOG9pPgy9Q4LTQ==}
+    engines: {node: '>= 10'}
     cpu: [x64]
     os: [win32]
     requiresBuild: true
     dev: false
     optional: true
 
-<<<<<<< HEAD
-  /@napi-rs/canvas@0.1.77:
-    resolution: {integrity: sha512-N9w2DkEKE1AXGp3q55GBOP6BEoFrqChDiFqJtKViTpQCWNOSVuMz7LkoGehbnpxtidppbsC36P0kCZNqJKs29w==}
+  /@napi-rs/canvas@0.1.78:
+    resolution: {integrity: sha512-YaBHJvT+T1DoP16puvWM6w46Lq3VhwKIJ8th5m1iEJyGh7mibk5dT7flBvMQ1EH1LYmMzXJ+OUhu+8wQ9I6u7g==}
     engines: {node: '>= 10'}
     optionalDependencies:
-      '@napi-rs/canvas-android-arm64': 0.1.77
-      '@napi-rs/canvas-darwin-arm64': 0.1.77
-      '@napi-rs/canvas-darwin-x64': 0.1.77
-      '@napi-rs/canvas-linux-arm-gnueabihf': 0.1.77
-      '@napi-rs/canvas-linux-arm64-gnu': 0.1.77
-      '@napi-rs/canvas-linux-arm64-musl': 0.1.77
-      '@napi-rs/canvas-linux-riscv64-gnu': 0.1.77
-      '@napi-rs/canvas-linux-x64-gnu': 0.1.77
-      '@napi-rs/canvas-linux-x64-musl': 0.1.77
-      '@napi-rs/canvas-win32-x64-msvc': 0.1.77
+      '@napi-rs/canvas-android-arm64': 0.1.78
+      '@napi-rs/canvas-darwin-arm64': 0.1.78
+      '@napi-rs/canvas-darwin-x64': 0.1.78
+      '@napi-rs/canvas-linux-arm-gnueabihf': 0.1.78
+      '@napi-rs/canvas-linux-arm64-gnu': 0.1.78
+      '@napi-rs/canvas-linux-arm64-musl': 0.1.78
+      '@napi-rs/canvas-linux-riscv64-gnu': 0.1.78
+      '@napi-rs/canvas-linux-x64-gnu': 0.1.78
+      '@napi-rs/canvas-linux-x64-musl': 0.1.78
+      '@napi-rs/canvas-win32-x64-msvc': 0.1.78
     dev: false
 
-=======
->>>>>>> 17a5afd (feat: deposit flow)
   /@neondatabase/serverless@1.0.1:
     resolution: {integrity: sha512-O6yC5TT0jbw86VZVkmnzCZJB0hfxBl0JJz6f+3KHoZabjb/X08r9eFA+vuY06z1/qaovykvdkrXYq3SPUuvogA==}
     engines: {node: '>=19.0.0'}
@@ -4892,13 +4874,12 @@ packages:
     resolution: {integrity: sha512-uAZ8x6r6S3aUM9rbHGVOIsR15U/ZSc82b3ymnCPsT45Gk1DDvhDPdIgB5MrhirZWt+5K0EEPQH985kNqZgNPFw==}
     dev: false
 
-<<<<<<< HEAD
-  /base32.js@0.0.1:
-    resolution: {integrity: sha512-EGHIRiegFa62/SsA1J+Xs2tIzludPdzM064N9wjbiEgHnGnJ1V0WEpA4pEwCYT5nDvZk3ubf0shqaCS7k6xeUQ==}
-=======
   /base-x@5.0.1:
     resolution: {integrity: sha512-M7uio8Zt++eg3jPj+rHMfCC+IuygQHHCOU+IYsVtik6FWjuYpVt/+MRKcgsAMHh8mMFAwnB+Bs+mTrFiXjMzKg==}
->>>>>>> 17a5afd (feat: deposit flow)
+    dev: false
+
+  /base32.js@0.0.1:
+    resolution: {integrity: sha512-EGHIRiegFa62/SsA1J+Xs2tIzludPdzM064N9wjbiEgHnGnJ1V0WEpA4pEwCYT5nDvZk3ubf0shqaCS7k6xeUQ==}
     dev: false
 
   /base64-js@1.5.1:

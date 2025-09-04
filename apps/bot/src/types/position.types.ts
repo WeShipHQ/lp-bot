@@ -1,3 +1,25 @@
+import { Token } from "./token.types";
+
+export type PositionStatus = "active" | "closed" | "rebalancing";
+
+export interface Position {
+  id: string;
+  poolId: string;
+  dex: string;
+  userAddress: string;
+  liquidity: string;
+  tokenX: Token;
+  tokenY: Token;
+  feesEarned: string;
+  pnl: {
+    absolute: string;
+    percentage: number;
+  };
+  status: PositionStatus;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface DisplayPosition {
   address: string;
   pair_address: string;
@@ -12,6 +34,8 @@ export interface DisplayPosition {
   fee_apr_24h: number;
   daily_fee_yield: number;
 }
+
+
 
 
 // ublicKey: PublicKey [PublicKey(338RGSh4boMSv41d1ibq46cexUXTmMD9TKyUhxrcqJJm)] {

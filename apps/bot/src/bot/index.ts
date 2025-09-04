@@ -3,22 +3,8 @@ import { message } from "telegraf/filters";
 import { FastifyInstance } from "fastify";
 import { setupMiddleware } from "./middleware";
 import { registerCommands } from "./commands";
-import {
-  messageHandler,
-  // inputMessageScene,
-  // strategySelectionScene,
-  // sideSelectionScene,
-  // amountInputScene,
-  // customAmountScene,
-  // confirmationScene,
-  // positionPreviewScene,
-} from "./handlers";
+import { messageHandler } from "./handlers";
 import { BotContext } from "@/types/bot.types";
-// import {
-//   handlePositionCallback,
-//   handlePoolSelection,
-//   handlePositionCreation,
-// } from "./handlers";
 import { logger } from "@/utils/logger";
 import { positionDetailScene } from "./scenes";
 import { poolDetailScene } from "./scenes/pool-detail.scene";
@@ -44,16 +30,12 @@ export async function setupBotCommands(
       // positionPreviewScene,
     ],
     {
-      ttl: 600, // Scene TTL of 10 minutes
+      ttl: 600, // 10 minutes
     }
   );
 
   bot.use(session());
   bot.use(stage.middleware());
-
-  // bot.on("inline_query", async (ctx) => {
-  //   console.log("inline_query", ctx);
-  // });
 
   bot.on(message("text"), messageHandler);
 

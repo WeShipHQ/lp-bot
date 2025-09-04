@@ -1,6 +1,6 @@
 import { User } from "@/db";
 import { StrategyType } from "@meteora-ag/dlmm";
-import type { Context, Scenes } from "telegraf";
+import type { Context } from "telegraf";
 
 interface TransferState {
   type: "all_sol" | "specific_sol" | "all_tokens" | "specific_tokens" | "token";

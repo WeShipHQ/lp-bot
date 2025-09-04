@@ -10,11 +10,6 @@ export class PoolService {
   private tokenAdapter = new TokenAdapter();
   private meteoraAdapter = new MeteoraAdapter();
 
-  /**
-   * Find Meteora pools that contain the specified token
-   * @param tokenAddress - Token address to search for
-   * @returns Array of pool data sorted by liquidity/volume
-   */
   async findPoolsForToken(tokenAddress: string): Promise<MeteoraPoolData[]> {
     try {
       console.log(`[PoolDiscovery] Finding pools for token: ${tokenAddress}`);
@@ -123,11 +118,6 @@ export class PoolService {
     }
   }
 
-  /**
-   * Get the best pool for a token based on liquidity and fees
-   * @param tokenAddress - Token address
-   * @returns Best pool or null if none found
-   */
   async getBestPoolForToken(
     tokenAddress: string
   ): Promise<MeteoraPoolData | null> {
@@ -152,38 +142,9 @@ export class PoolService {
   async getPoolV2(poolAddress: string): Promise<Pool> {
     // for now we mainly support DLMM so we only fetch DLMM pool
     const dlmmPool = await this.meteoraApiService.getDlmmPool(poolAddress);
+    console.log("dlmmPool", dlmmPool);
     return this.meteoraAdapter.transformDlmmPool(dlmmPool);
   }
-
-  // for now we mainly support DLMM so we only fetch DLMM pool
-  // we need create an abstract interface for all pool types later
-  // async getDLMMPool(
-  //   poolAddress: string
-  // ): Promise<MeteoraDlmmPoolDetail | null> {
-  //   try {
-  //     const pool = await meteoraPoolService.getDlmmPoolInfo(poolAddress);
-  //     const [mintX, mintY] = await Promise.all([
-  //       jupiterService.getTokenInfo(pool.mint_x),
-  //       jupiterService.getTokenInfo(pool.mint_y),
-  //     ]);
-
-  //     if (!mintX || !mintY) {
-  //       return null;
-  //     }
-
-  //     return {
-  //       ...pool,
-  //       token_x: this.tokenAdapter.transformToken(mintX),
-  //       token_y: this.tokenAdapter.transformToken(mintY),
-  //     };
-  //   } catch (error) {
-  //     console.error(
-  //       `[Meteora] Error fetching DLMM pool ${poolAddress}:`,
-  //       error
-  //     );
-  //     return null;
-  //   }
-  // }
 }
 
 export const poolService = new PoolService();

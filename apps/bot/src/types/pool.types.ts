@@ -44,23 +44,25 @@ export interface Pool {
     hour4: number;
     min30: number;
   };
-  metadata: Record<string, any>; // DEX-specific data
-}
-
-export interface Position {
-  id: string;
-  poolId: string;
-  dex: string;
-  userAddress: string;
-  liquidity: string;
-  tokenAAmount: string;
-  tokenBAmount: string;
-  feesEarned: string;
-  pnl: {
-    absolute: string;
-    percentage: number;
+  meteora: {
+    hide: boolean;
+    isBlacklisted: boolean;
+    baseFeePercentage: string;
+    binStep: number;
+    cumulativeFeeVolume: string;
+    cumulativeTradeVolume: string;
+    farmApr: number;
+    farmApy: number;
+    launchpad: string;
+    maxFeePercentage: string;
+    protocolFeePercentage: string;
+    reserveX: string;
+    reserveXAmount: number;
+    reserveY: string;
+    reserveYAmount: number;
+    rewardMintX: string;
+    rewardMintY: string;
+    tags: Array<string>;
+    todayFees: number;
   };
-  status: "active" | "closed" | "rebalancing";
-  createdAt: Date;
-  updatedAt: Date;
 }

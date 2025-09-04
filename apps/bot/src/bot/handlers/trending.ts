@@ -1,6 +1,6 @@
 import { Context } from "telegraf";
 import { FastifyInstance } from "fastify";
-import { TRENDING_MESSAGES } from "../constants/trending.constants";
+import { TRENDING_MESSAGES } from "@/bot/config/constants";
 import { trendingService } from "@/services/trending.service";
 import { getTrendingKeyboard } from "../keyboards/trending-menu";
 import { buildPoolDetailMarkdown } from "@/services/pool-detail.service";
@@ -17,7 +17,7 @@ export async function trendingHandler(
     const loading = await ctx.reply(TRENDING_MESSAGES.FETCHING);
     const chatId = ctx.chat!.id;
 
-    await trendingService.loadHotPoolsPage(chatId, 0, "apy", "dlmm");
+    await trendingService.loadHotPoolsPage(chatId, 0, "tvl", "dlmm");
 
     const state = trendingService.getState(chatId)!;
 
@@ -31,8 +31,7 @@ export async function trendingHandler(
     const keyboard = getTrendingKeyboard(
       chatId,
       state.sortBy!,
-      state.poolSource!,
-     
+      state.poolSource!
     );
 
     const replyResponse = await ctx.reply(text, {
@@ -59,7 +58,7 @@ export async function handleTrendingCallback(
 
     const paginationMatch = /^tr_(prev|next|refresh)_(\d+)$/.exec(raw);
     const sourceMatch = /^tr_src_(dlmm|dammv1|dammv2)_(\d+)$/.exec(raw);
-    const openMatch = /^tr_open_(\d+)_(\d+)$/.exec(raw); 
+    const openMatch = /^tr_open_(\d+)_(\d+)$/.exec(raw);
 
     let action: "prev" | "next" | "refresh" | "source" | "open";
     let chatIdStr = "";
@@ -124,13 +123,12 @@ export async function handleTrendingCallback(
 
     let currentState = trendingService.getState(chatId);
     if (!currentState) {
-      await trendingService.loadHotPoolsPage(chatId, 0, "apy", "dlmm");
+      await trendingService.loadHotPoolsPage(chatId, 0, "tvl", "dlmm");
       currentState = trendingService.getState(chatId)!;
     }
 
     const beforeApi = currentState.apiPage ?? 0;
-    const currentSort: "apy" | "fee24h" | "fee_tvl_ratio" =
-      currentState.sortBy || "apy";
+    const currentSort = currentState.sortBy || "tvl";
     const currentSource: "dlmm" | "dammv1" | "dammv2" =
       source || currentState.poolSource || "dlmm";
 
@@ -169,12 +167,7 @@ export async function handleTrendingCallback(
       );
       await ctx.answerCbQuery("Refreshed");
     } else if (action === "source" && source) {
-      await trendingService.loadHotPoolsPage(
-        chatId,
-        0, 
-        currentSort,
-        source
-      );
+      await trendingService.loadHotPoolsPage(chatId, 0, currentSort, source);
       await ctx.answerCbQuery(`Source: ${source.toUpperCase()}`);
     }
 
@@ -190,8 +183,7 @@ export async function handleTrendingCallback(
     const keyboard = getTrendingKeyboard(
       chatId,
       state.sortBy!,
-      state.poolSource!,
-      
+      state.poolSource!
     );
 
     const messageId = state.messageId ?? ctx.callbackQuery?.message?.message_id;

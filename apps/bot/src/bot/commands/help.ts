@@ -5,7 +5,7 @@ import { FastifyInstance } from "fastify";
 
 export function helpCommand(
   bot: Telegraf<BotContext>,
-  server: FastifyInstance
+  _server: FastifyInstance
 ) {
   bot.command("help", (ctx) => {
     ctx.reply(

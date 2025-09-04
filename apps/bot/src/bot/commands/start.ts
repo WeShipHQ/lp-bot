@@ -39,9 +39,7 @@ export function startCommand(
 
       await ctx.reply(welcomeMessage, {
         parse_mode: "Markdown",
-        reply_markup: {
-          inline_keyboard: getMainKeyboard().inline_keyboard,
-        },
+        reply_markup: getMainKeyboard(),
       });
     } catch (error) {
       console.error("Error in start command:", error);

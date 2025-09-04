@@ -8,3 +8,10 @@ export function getPositionStartCommand(
 export function getPoolStartCommand(botName: string, poolAddress: string) {
   return `https://t.me/${botName}?start=dlmm_pool_${poolAddress}`;
 }
+
+export function getSolscanLink(
+  type: "account" | "tx" | "block",
+  value: string
+) {
+  return `https://solscan.io/${type}/${value}`;
+}

@@ -5,6 +5,8 @@ import { MessageService } from "@/services/message.service";
 import { MeteoraPoolData } from "@/types/meteora.types";
 import { poolService } from "@/services/pool.service";
 import { getPoolInfoKeyboard } from "../keyboards";
+import { loading } from "../utils/text-formatters";
+import { DISABLE_LINK_PREVIEW } from "../handlers";
 
 type SceneState = {
   poolAddress?: string;
@@ -24,11 +26,11 @@ poolDetailScene.enter(async (ctx) => {
       return ctx.scene.leave();
     }
 
-    const loadingMsg = await ctx.reply("⏳ **Loading pool details...**", {
+    const loadingMsg = await ctx.reply(`${loading("Loading pool details..")}`, {
       parse_mode: "Markdown",
     });
 
-    const poolData = await poolService.getPool(poolAddress, "dlmm");
+    const poolData = await poolService.getPoolV2(poolAddress);
 
     ctx.scene.state = {
       pool: poolData,
@@ -46,8 +48,8 @@ poolDetailScene.enter(async (ctx) => {
       return ctx.scene.leave();
     }
 
-    const message = MessageService.formatPoolInfo(poolData);
-    const keyboard = getPoolInfoKeyboard(poolData.pool_address);
+    const message = MessageService.formatPoolInfoV2(poolData);
+    const keyboard = getPoolInfoKeyboard(poolData.address);
 
     await ctx.telegram.editMessageText(
       ctx.chat?.id,
@@ -57,6 +59,7 @@ poolDetailScene.enter(async (ctx) => {
       {
         parse_mode: "Markdown",
         reply_markup: keyboard,
+        ...DISABLE_LINK_PREVIEW,
       }
     );
   } catch (error) {
