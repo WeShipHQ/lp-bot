@@ -41,43 +41,75 @@ export function twoFactorAuthCommand(
   });
   
   bot.action("setupTwoFactor", async (ctx: BotContext) => {
-    await handleTwoFactorSetup(ctx, server);
+    try {
+      await ctx.answerCbQuery("🔐 Setting up 2FA...");
+      await handleTwoFactorSetup(ctx, server);
+    } catch (error) {
+      console.error("Error in setupTwoFactor:", error);
+      await ctx.answerCbQuery("❌ Error setting up 2FA");
+    }
   });
   
   bot.action("twoFactorStatus", async (ctx: BotContext) => {
-    await handleTwoFactorStatus(ctx);
+    try {
+      await ctx.answerCbQuery("📊 Checking 2FA status...");
+      await handleTwoFactorStatus(ctx);
+    } catch (error) {
+      console.error("Error in twoFactorStatus:", error);
+      await ctx.answerCbQuery("❌ Error checking status");
+    }
   });
   
   bot.action("disableTwoFactor", async (ctx: BotContext) => {
-    await handleTwoFactorDisable(ctx);
+    try {
+      await ctx.answerCbQuery("❌ Disabling 2FA...");
+      await handleTwoFactorDisable(ctx);
+    } catch (error) {
+      console.error("Error in disableTwoFactor:", error);
+      await ctx.answerCbQuery("❌ Error disabling 2FA");
+    }
   });
   
   bot.action("verifyTwoFactorReady", async (ctx: BotContext) => {
-    await ctx.editMessageText(
-      "🔐 **Ready to Verify 2FA!**\n\n" +
-      "Please enter the 6-digit code from your Google Authenticator app.\n\n" +
-      "**Example:** `123456`\n\n" +
-      "Just type the code and send it as a message.",
-      { 
-        parse_mode: "Markdown",
-        reply_markup: getTwoFactorSetupKeyboard()
-      }
-    );
+    try {
+      await ctx.answerCbQuery("✅ Ready to verify! Please enter your 6-digit code.");
+      
+      await ctx.editMessageText(
+        "🔐 **Ready to Verify 2FA!**\n\n" +
+        "Please enter the 6-digit code from your Google Authenticator app.\n\n" +
+        "**Example:** `123456`\n\n" +
+        "Just type the code and send it as a message.",
+        { 
+          parse_mode: "Markdown",
+          reply_markup: getTwoFactorSetupKeyboard()
+        }
+      );
+    } catch (error) {
+      console.error("Error in verifyTwoFactorReady:", error);
+      await ctx.answerCbQuery("❌ Error processing request");
+    }
   });
 
   // Navigation actions
   bot.action("back_to_2fa_menu", async (ctx: BotContext) => {
-    const message = 
-      "🔐 **Two-Factor Authentication**\n\n" +
-      "Choose an option below to manage your 2FA settings:\n\n" +
-      "• **Setup 2FA** - Enable Two-Factor Authentication\n" +
-      "• **Check Status** - View your current 2FA status\n" +
-      "• **Disable 2FA** - Disable 2FA (contact support required)";
+    try {
+      await ctx.answerCbQuery("🔙 Back to 2FA menu");
+      
+      const message = 
+        "🔐 **Two-Factor Authentication**\n\n" +
+        "Choose an option below to manage your 2FA settings:\n\n" +
+        "• **Setup 2FA** - Enable Two-Factor Authentication\n" +
+        "• **Check Status** - View your current 2FA status\n" +
+        "• **Disable 2FA** - Disable 2FA (contact support required)";
 
-    await ctx.editMessageText(message, {
-      parse_mode: "Markdown",
-      reply_markup: getTwoFactorKeyboard()
-    });
+      await ctx.editMessageText(message, {
+        parse_mode: "Markdown",
+        reply_markup: getTwoFactorKeyboard()
+      });
+    } catch (error) {
+      console.error("Error in back_to_2fa_menu:", error);
+      await ctx.answerCbQuery("❌ Error navigating back");
+    }
   });
 
   // Handle 2FA verification via text message

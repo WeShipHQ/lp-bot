@@ -71,7 +71,7 @@ export async function handleTwoFactorSetup(ctx: BotContext, _server: FastifyInst
           parse_mode: "Markdown",
           reply_markup: {
             inline_keyboard: [
-              [{ text: "✅ I'm Ready to Verify", callback_data: "verify_2fa_ready" }]
+              [{ text: "✅ I'm Ready to Verify", callback_data: "verifyTwoFactorReady" }]
             ]
           }
         }
