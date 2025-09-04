@@ -74,6 +74,7 @@ export function authMiddleware(
             { err: timeoutError },
             "Privy API timeout and no cache available"
           );
+          // Don't set ctx.user if there's a timeout and no cache
           return next();
         }
       }
@@ -104,6 +105,26 @@ export function authMiddleware(
         const customMetadata = user.customMetadata ?? {};
         walletAddress = customMetadata.walletAddress ?? "";
         walletId = customMetadata.walletId ?? "";
+        // If user exists but has no wallet, create one
+        if (!walletAddress || !walletId) {
+          const wallet = await privy.walletApi.createWallet({
+            chainType: "solana",
+            ownerId: CONFIG.PRIVY.PRIVY_AUTH_ID,
+            additionalSigners: [{ signerId: CONFIG.PRIVY.PRIVY_AUTH_ID }],
+          });
+
+          // Update user with wallet info
+          await privy.setCustomMetadata(user.id, {
+            ...customMetadata,
+            walletId: wallet.id,
+            walletAddress: wallet.address,
+          });
+
+          walletAddress = wallet.address;
+          walletId = wallet.id;
+
+          server.log.info(`Wallet created for existing user: ${telegramUserId}`);
+        }
       }
 
       ctx.user = {
@@ -112,6 +133,7 @@ export function authMiddleware(
         walletId,
         telegramUserId,
       };
+
 
       userCache.set(telegramUserId, {
         user,

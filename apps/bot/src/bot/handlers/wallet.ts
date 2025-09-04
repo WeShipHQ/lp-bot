@@ -17,7 +17,7 @@ export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
 
     const user = ctx.user;
 
-    if (!user.walletAddress) {
+    if (!user.walletAddress || user.walletAddress.trim() === "") {
       try {
         await ctx.reply("⏳ **Wallet Still Creating**\n\nYour wallet is being set up. Please wait a moment and try again.\n\nIf this persists, please contact support.", {
           parse_mode: "Markdown"

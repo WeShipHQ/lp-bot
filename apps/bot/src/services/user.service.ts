@@ -5,7 +5,6 @@ export interface UserInfo {
   telegramUserId?: string;
   twoFactorEnabled?: boolean;
   twoFactorSecret?: string;
-  backupCodes?: string[];
 }
 
 export class UserService {
@@ -22,8 +21,6 @@ export class UserService {
       const walletAddress = user.customMetadata.walletAddress as string;
       const twoFactorEnabled = user.customMetadata.twoFactorEnabled as boolean || false;
       const twoFactorSecret = user.customMetadata.twoFactorSecret as string;
-      const backupCodesString = user.customMetadata.backupCodes as string;
-      const backupCodes = backupCodesString ? JSON.parse(backupCodesString) : [];
 
       const result = {
         id: user.id,
@@ -31,7 +28,6 @@ export class UserService {
         telegramUserId,
         twoFactorEnabled,
         twoFactorSecret,
-        backupCodes,
       };
       
       return result;
@@ -50,7 +46,7 @@ export class UserService {
     twoFactorSecret?: string
   ): Promise<boolean> {
     try {
-      const customMetadata: any = {
+      const customMetadata: Record<string, string | number | boolean> = {
         twoFactorEnabled
       };
 
