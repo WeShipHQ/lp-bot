@@ -13,7 +13,7 @@ export interface TwoFactorVerification {
 }
 
 export class TwoFactorAuthService {
-  private readonly issuer = 'WeShip LP Bot';
+  private readonly issuer = 'Panda LP Bot';
   private readonly algorithm = 'sha1';
   private readonly digits = 6;
   private readonly period = 30;
