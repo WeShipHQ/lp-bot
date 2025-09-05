@@ -1,11 +1,12 @@
-import { Queue, Worker, Job, QueueOptions, WorkerOptions } from 'bullmq';
-import Redis from 'ioredis';
-import { logger } from '../utils/logger';
-import { RebalanceService } from './rebalance.service';
-import { PriceMonitoringService } from './price-monitoring.service';
-import { db } from '../db';
-import { positions, users } from '../db/schema';
-import { eq, and } from 'drizzle-orm';
+import { Queue, Worker, Job, QueueOptions, WorkerOptions } from "bullmq";
+import Redis from "ioredis";
+import { logger } from "../utils/logger";
+import { RebalanceService } from "./rebalance.service";
+import { PriceMonitoringService } from "./price-monitoring.service";
+import { db } from "../db";
+import { positions, users } from "../db/schema";
+import { eq, and } from "drizzle-orm";
+import { CONFIG } from "@/config";
 
 // Job Types
 export interface PositionMonitorJobData {
@@ -16,13 +17,13 @@ export interface PositionMonitorJobData {
 export interface PriceAlertJobData {
   tokenAddress: string;
   threshold: number;
-  direction: 'up' | 'down';
+  direction: "up" | "down";
 }
 
 export interface RebalanceJobData {
   positionId: string;
   userId: string;
-  strategy: 'STANDARD' | 'DIP_PROTECTION';
+  strategy: "STANDARD" | "DIP_PROTECTION";
   reason: string;
 }
 
@@ -31,21 +32,16 @@ export class JobQueueService {
   private positionMonitorQueue: Queue<PositionMonitorJobData>;
   private priceAlertQueue: Queue<PriceAlertJobData>;
   private rebalanceQueue: Queue<RebalanceJobData>;
-  private positionMonitorWorker: Worker<PositionMonitorJobData>;
-  private priceAlertWorker: Worker<PriceAlertJobData>;
-  private rebalanceWorker: Worker<RebalanceJobData>;
-  
+  private positionMonitorWorker!: Worker<PositionMonitorJobData>;
+  // private priceAlertWorker!: Worker<PriceAlertJobData>;
+  private rebalanceWorker!: Worker<RebalanceJobData>;
+
   private rebalanceService: RebalanceService;
   private priceMonitoringService: PriceMonitoringService;
 
   constructor() {
-    // Redis connection
-    this.redis = new Redis({
-      host: process.env.REDIS_HOST || 'localhost',
-      port: parseInt(process.env.REDIS_PORT || '6379'),
-      password: process.env.REDIS_PASSWORD,
-      maxRetriesPerRequest: 3,
-      retryDelayOnFailover: 100,
+    this.redis = new Redis(CONFIG.REDIS.URL, {
+      maxRetriesPerRequest: null,
       lazyConnect: true,
     });
 
@@ -53,19 +49,19 @@ export class JobQueueService {
       connection: this.redis,
       defaultJobOptions: {
         removeOnComplete: 100, // Keep last 100 completed jobs
-        removeOnFail: 50,      // Keep last 50 failed jobs
+        removeOnFail: 50, // Keep last 50 failed jobs
         attempts: 3,
         backoff: {
-          type: 'exponential',
+          type: "exponential",
           delay: 2000,
         },
       },
     };
 
     // Initialize queues
-    this.positionMonitorQueue = new Queue('position-monitor', queueOptions);
-    this.priceAlertQueue = new Queue('price-alert', queueOptions);
-    this.rebalanceQueue = new Queue('rebalance', queueOptions);
+    this.positionMonitorQueue = new Queue("position-monitor", queueOptions);
+    this.priceAlertQueue = new Queue("price-alert", queueOptions);
+    this.rebalanceQueue = new Queue("rebalance", queueOptions);
 
     // Initialize services
     this.rebalanceService = new RebalanceService();
@@ -83,9 +79,8 @@ export class JobQueueService {
       stalledInterval: 30000,
     };
 
-    // Position Monitor Worker
     this.positionMonitorWorker = new Worker<PositionMonitorJobData>(
-      'position-monitor',
+      "position-monitor",
       async (job: Job<PositionMonitorJobData>) => {
         return this.processPositionMonitorJob(job);
       },
@@ -93,17 +88,16 @@ export class JobQueueService {
     );
 
     // Price Alert Worker
-    this.priceAlertWorker = new Worker<PriceAlertJobData>(
-      'price-alert',
-      async (job: Job<PriceAlertJobData>) => {
-        return this.processPriceAlertJob(job);
-      },
-      workerOptions
-    );
+    // this.priceAlertWorker = new Worker<PriceAlertJobData>(
+    //   "price-alert",
+    //   async (job: Job<PriceAlertJobData>) => {
+    //     return this.processPriceAlertJob(job);
+    //   },
+    //   workerOptions
+    // );
 
-    // Rebalance Worker
     this.rebalanceWorker = new Worker<RebalanceJobData>(
-      'rebalance',
+      "rebalance",
       async (job: Job<RebalanceJobData>) => {
         return this.processRebalanceJob(job);
       },
@@ -111,35 +105,38 @@ export class JobQueueService {
     );
 
     // Error handling
-    [this.positionMonitorWorker, this.priceAlertWorker, this.rebalanceWorker].forEach(worker => {
-      worker.on('failed', (job, err) => {
+    [
+      this.positionMonitorWorker,
+      // this.priceAlertWorker,
+      this.rebalanceWorker,
+    ].forEach((worker) => {
+      worker.on("failed", (job, err) => {
         logger.error(`Job ${job?.id} failed:`, err);
       });
 
-      worker.on('error', (err) => {
-        logger.error('Worker error:', err);
+      worker.on("error", (err) => {
+        logger.error("Worker error:", err);
       });
     });
   }
 
-  // Job Processors
   private async processPositionMonitorJob(job: Job<PositionMonitorJobData>) {
     const { userId, positionId } = job.data;
-    
+
     try {
       logger.info(`Processing position monitor job for user ${userId}`);
-      
+
       // Get user's auto-rebalance settings
       const user = await db.query.users.findFirst({
         where: eq(users.id, userId),
       });
 
       if (!user?.autoRebalanceEnabled) {
-        return { skipped: true, reason: 'Auto-rebalance disabled' };
+        return { skipped: true, reason: "Auto-rebalance disabled" };
       }
 
       // Get positions to monitor
-      const positionsToCheck = positionId 
+      const positionsToCheck = positionId
         ? await db.query.positions.findMany({
             where: and(
               eq(positions.userId, userId),
@@ -151,29 +148,31 @@ export class JobQueueService {
           });
 
       const results = [];
-      
+
       for (const position of positionsToCheck) {
-        const analysis = await this.rebalanceService.analyzePosition(position.id);
-        
-        if (analysis.needsRebalance) {
+        const analysis = await this.rebalanceService.analyzePosition(
+          position.id
+        );
+
+        if (analysis?.shouldRebalance) {
           // Queue rebalance job
           await this.queueRebalanceJob({
             positionId: position.id,
             userId: userId,
-            strategy: user.rebalanceStrategy || 'STANDARD',
-            reason: analysis.reason || 'Position analysis triggered rebalance'
+            strategy: user.rebalanceStrategy || "STANDARD",
+            reason: analysis.reason || "Position analysis triggered rebalance",
           });
-          
+
           results.push({
             positionId: position.id,
-            action: 'rebalance_queued',
-            reason: analysis.reason
+            action: "rebalance_queued",
+            reason: analysis.reason,
           });
         } else {
           results.push({
             positionId: position.id,
-            action: 'no_action_needed',
-            health: analysis.currentHealth
+            action: "no_action_needed",
+            health: analysis?.reason,
           });
         }
       }
@@ -185,72 +184,78 @@ export class JobQueueService {
     }
   }
 
-  private async processPriceAlertJob(job: Job<PriceAlertJobData>) {
-    const { tokenAddress, threshold, direction } = job.data;
-    
-    try {
-      logger.info(`Processing price alert job for token ${tokenAddress}`);
-      
-      const currentPrice = await this.priceMonitoringService.getCurrentPrice(tokenAddress);
-      
-      if (!currentPrice) {
-        throw new Error(`Could not fetch price for token ${tokenAddress}`);
-      }
+  // private async processPriceAlertJob(job: Job<PriceAlertJobData>) {
+  //   const { tokenAddress, threshold, direction } = job.data;
 
-      const alertTriggered = direction === 'up' 
-        ? currentPrice.price >= threshold
-        : currentPrice.price <= threshold;
+  //   try {
+  //     logger.info(`Processing price alert job for token ${tokenAddress}`);
 
-      if (alertTriggered) {
-        // Find positions affected by this price change
-        const affectedPositions = await this.priceMonitoringService.getPositionsForToken(tokenAddress);
-        
-        for (const position of affectedPositions) {
-          await this.queuePositionMonitorJob({
-            userId: position.userId,
-            positionId: position.id
-          });
-        }
+  //     const currentPrice =
+  //       await this.priceMonitoringService.getCurrentPrice(tokenAddress);
 
-        return {
-          triggered: true,
-          currentPrice: currentPrice.price,
-          threshold,
-          direction,
-          affectedPositions: affectedPositions.length
-        };
-      }
+  //     if (!currentPrice) {
+  //       throw new Error(`Could not fetch price for token ${tokenAddress}`);
+  //     }
 
-      return {
-        triggered: false,
-        currentPrice: currentPrice.price,
-        threshold,
-        direction
-      };
-    } catch (error) {
-      logger.error(`Price alert job failed for token ${tokenAddress}:`, error);
-      throw error;
-    }
-  }
+  //     const alertTriggered =
+  //       direction === "up"
+  //         ? currentPrice.price >= threshold
+  //         : currentPrice.price <= threshold;
+
+  //     if (alertTriggered) {
+  //       // Find positions affected by this price change
+  //       const affectedPositions =
+  //         await this.priceMonitoringService.getPositionsForToken(tokenAddress);
+
+  //       for (const position of affectedPositions) {
+  //         await this.queuePositionMonitorJob({
+  //           userId: position.userId,
+  //           positionId: position.id,
+  //         });
+  //       }
+
+  //       return {
+  //         triggered: true,
+  //         currentPrice: currentPrice.price,
+  //         threshold,
+  //         direction,
+  //         affectedPositions: affectedPositions.length,
+  //       };
+  //     }
+
+  //     return {
+  //       triggered: false,
+  //       currentPrice: currentPrice.price,
+  //       threshold,
+  //       direction,
+  //     };
+  //   } catch (error) {
+  //     logger.error(`Price alert job failed for token ${tokenAddress}:`, error);
+  //     throw error;
+  //   }
+  // }
 
   private async processRebalanceJob(job: Job<RebalanceJobData>) {
     const { positionId, userId, strategy, reason } = job.data;
-    
+
     try {
       logger.info(`Processing rebalance job for position ${positionId}`);
-      
-      const result = await this.rebalanceService.executeRebalance(positionId, strategy);
-      
+
+      const result = await this.rebalanceService.executeRebalance(
+        positionId
+        // strategy
+      );
+
       if (result.success) {
         logger.info(`Rebalance completed for position ${positionId}:`, result);
         return {
           success: true,
           transactionId: result.transactionId,
           reason,
-          strategy
+          strategy,
         };
       } else {
-        throw new Error(result.error || 'Rebalance failed');
+        throw new Error(result.error || "Rebalance failed");
       }
     } catch (error) {
       logger.error(`Rebalance job failed for position ${positionId}:`, error);
@@ -260,50 +265,77 @@ export class JobQueueService {
 
   // Public Methods to Queue Jobs
   async queuePositionMonitorJob(data: PositionMonitorJobData, delay?: number) {
-    return this.positionMonitorQueue.add('monitor-position', data, {
+    return this.positionMonitorQueue.add("monitor-position", data, {
       delay,
-      jobId: `monitor-${data.userId}-${data.positionId || 'all'}-${Date.now()}`
+      jobId: `monitor-${data.userId}-${data.positionId || "all"}-${Date.now()}`,
     });
   }
 
   async queuePriceAlertJob(data: PriceAlertJobData, delay?: number) {
-    return this.priceAlertQueue.add('price-alert', data, {
+    return this.priceAlertQueue.add("price-alert", data, {
       delay,
-      jobId: `alert-${data.tokenAddress}-${data.direction}-${Date.now()}`
+      jobId: `alert-${data.tokenAddress}-${data.direction}-${Date.now()}`,
     });
   }
 
   async queueRebalanceJob(data: RebalanceJobData, delay?: number) {
-    return this.rebalanceQueue.add('rebalance', data, {
+    return this.rebalanceQueue.add("rebalance", data, {
       delay,
       priority: 10, // High priority for rebalancing
-      jobId: `rebalance-${data.positionId}-${Date.now()}`
+      jobId: `rebalance-${data.positionId}-${Date.now()}`,
     });
   }
 
-  // Scheduled Jobs
-  async setupScheduledJobs() {
-    // Monitor all positions every 5 minutes
+  // Add new methods to JobQueueService class
+
+  // Create individual position monitoring job
+  async createPositionMonitorJob(positionId: string, userId: string) {
+    const jobId = `position-monitor-${positionId}`;
+
     await this.positionMonitorQueue.add(
-      'scheduled-monitor-all',
-      { userId: 'all' },
+      "monitor-single-position",
+      { userId, positionId },
       {
-        repeat: { pattern: '*/5 * * * *' }, // Every 5 minutes
-        jobId: 'scheduled-monitor-all'
+        repeat: { pattern: "0 * * * *" }, // Every hour
+        jobId,
       }
     );
 
-    // Price monitoring every minute
+    logger.info(`Created monitoring job for position ${positionId}`);
+    return jobId;
+  }
+
+  // Remove position monitoring job
+  async removePositionMonitorJob(positionId: string) {
+    const jobId = `position-monitor-${positionId}`;
+
+    await this.positionMonitorQueue.removeRepeatable(
+      "monitor-single-position",
+      {
+        pattern: "0 * * * *",
+        jobId,
+      }
+    );
+
+    logger.info(`Removed monitoring job for position ${positionId}`);
+  }
+
+  // Update setupScheduledJobs to remove global monitoring
+  async setupScheduledJobs() {
+    // Remove the global position monitoring
+    // Keep only price monitoring if needed
     await this.priceAlertQueue.add(
-      'scheduled-price-check',
-      { tokenAddress: 'all', threshold: 0, direction: 'up' },
+      "scheduled-price-check",
+      { tokenAddress: "all", threshold: 0, direction: "up" },
       {
-        repeat: { pattern: '* * * * *' }, // Every minute
-        jobId: 'scheduled-price-check'
+        repeat: { pattern: "* * * * *" }, // Every minute
+        jobId: "scheduled-price-check",
       }
     );
 
-    logger.info('Scheduled jobs setup completed');
+    logger.info(
+      "Scheduled jobs setup completed (without global position monitoring)"
+    );
   }
 
   // Queue Management
@@ -311,13 +343,13 @@ export class JobQueueService {
     const [positionStats, priceStats, rebalanceStats] = await Promise.all([
       this.positionMonitorQueue.getJobCounts(),
       this.priceAlertQueue.getJobCounts(),
-      this.rebalanceQueue.getJobCounts()
+      this.rebalanceQueue.getJobCounts(),
     ]);
 
     return {
       positionMonitor: positionStats,
       priceAlert: priceStats,
-      rebalance: rebalanceStats
+      rebalance: rebalanceStats,
     };
   }
 
@@ -325,39 +357,36 @@ export class JobQueueService {
     await Promise.all([
       this.positionMonitorQueue.pause(),
       this.priceAlertQueue.pause(),
-      this.rebalanceQueue.pause()
+      this.rebalanceQueue.pause(),
     ]);
-    logger.info('All queues paused');
+    logger.info("All queues paused");
   }
 
   async resumeQueues() {
     await Promise.all([
       this.positionMonitorQueue.resume(),
       this.priceAlertQueue.resume(),
-      this.rebalanceQueue.resume()
+      this.rebalanceQueue.resume(),
     ]);
-    logger.info('All queues resumed');
+    logger.info("All queues resumed");
   }
 
   async shutdown() {
-    logger.info('Shutting down job queue service...');
-    
+    logger.info("Shutting down job queue service...");
+
     await Promise.all([
       this.positionMonitorWorker.close(),
-      this.priceAlertWorker.close(),
-      this.rebalanceWorker.close()
+      // this.priceAlertWorker.close(),
+      this.rebalanceWorker.close(),
     ]);
 
     await Promise.all([
       this.positionMonitorQueue.close(),
       this.priceAlertQueue.close(),
-      this.rebalanceQueue.close()
+      this.rebalanceQueue.close(),
     ]);
 
     await this.redis.quit();
-    logger.info('Job queue service shutdown completed');
+    logger.info("Job queue service shutdown completed");
   }
 }
-
-// Singleton instance
-export const jobQueueService = new JobQueueService();
