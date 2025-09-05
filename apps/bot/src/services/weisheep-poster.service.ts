@@ -2,6 +2,12 @@ import { createCanvas, loadImage, GlobalFonts } from "@napi-rs/canvas";
 import QRCode from "qrcode";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+// esm
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // asset help
 async function resolveAssetPath(relativeOrAbsolutePath: string) {
@@ -33,7 +39,6 @@ Tried:
 - ${resolvedPath2}`);
 }
 
-
 (async () => {
   try {
     const silkscreenBoldPath = await resolveAssetPath(
@@ -58,7 +63,6 @@ Tried:
   }
 })();
 
-
 export type WeisheepPosterInput = {
   backgroundImagePath?: string;
   logoImagePath?: string;
@@ -82,7 +86,7 @@ async function loadImageFromSafePath(imagePath: string) {
   return await loadImage(fileBuffer);
 }
 
- // Drawing help 
+// Drawing help
 function createRoundedRectanglePath(
   context: ReturnType<typeof createCanvas>["getContext"] extends (
     ...args: any
@@ -286,7 +290,7 @@ export async function generateWeisheepPoster(
     });
   };
 
-   // Header: logo + project name (top-left)
+  // Header: logo + project name (top-left)
   try {
     const logoImage = await loadImageFromSafePath(logoImagePath);
     const LOGO_HEIGHT = 34;
@@ -324,7 +328,7 @@ export async function generateWeisheepPoster(
     });
   }
 
-   // BIG HIGHLIGHTED TEXT (left-top area)
+  // BIG HIGHLIGHTED TEXT (left-top area)
   drawTextBlock(highlightedText, 80, 140, {
     font: "bold 140px FredokaBold, Arial",
     color: highlightedTextColor,
@@ -333,7 +337,7 @@ export async function generateWeisheepPoster(
     shadow: true,
   });
 
-   // 3-row grid of label–value
+  // 3-row grid of label–value
   const CONTENT_LEFT = 48;
   const CONTENT_RIGHT = CANVAS_WIDTH - 48;
   const INNER_CONTENT_WIDTH = CONTENT_RIGHT - CONTENT_LEFT;
@@ -392,7 +396,7 @@ export async function generateWeisheepPoster(
     value: referralLink || "-",
   });
 
-   //QR code (bottom-right)
+  //QR code (bottom-right)
   const qrCodeContent = qrCodeData || referralLink || "";
   const qrCodeSize = 160;
   const outerPadding = 26;
