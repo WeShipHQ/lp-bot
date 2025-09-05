@@ -48,18 +48,18 @@ export class SolanaService {
    * Generate a new Solana wallet keypair
    * @returns WalletInfo containing address and private key
    */
-  generateWallet(): WalletInfo {
-    try {
-      const keypair = Keypair.generate();
-      return {
-        address: keypair.publicKey.toString(),
-        privateKey: JSON.stringify(Array.from(keypair.secretKey)),
-      };
-    } catch (error) {
-      console.error("Error generating wallet:", error);
-      throw new Error("Failed to generate wallet");
-    }
-  }
+  // generateWallet(): WalletInfo {
+  //   try {
+  //     const keypair = Keypair.generate();
+  //     return {
+  //       address: keypair.publicKey.toString(),
+  //       privateKey: JSON.stringify(Array.from(keypair.secretKey)),
+  //     };
+  //   } catch (error) {
+  //     console.error("Error generating wallet:", error);
+  //     throw new Error("Failed to generate wallet");
+  //   }
+  // }
 
   /**
    * Get SOL balance for a given address

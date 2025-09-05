@@ -1,5 +1,4 @@
-// @ts-expect-error
-import { InlineKeyboardMarkup } from "telegraf/typings/core/types/typegram";
+import { InlineKeyboardMarkup } from "@telegraf/types";
 import { PortfolioPosition } from "@/types/portfolio.types";
 
 export function getOverviewKeyboard(): InlineKeyboardMarkup {

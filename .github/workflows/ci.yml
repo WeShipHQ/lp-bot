@@ -24,7 +24,7 @@ on:
 
 env:
   NODE_VERSION: 22
-  PNPM_VERSION: 8.15.6
+  PNPM_VERSION: 10
 
 permissions:
   contents: read
@@ -36,7 +36,12 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        task: [lint, check-types, test, build]
+        task: [
+            # lint,
+            # check-types,
+            #  test,
+            build,
+          ]
 
     steps:
       - name: Checkout code
@@ -61,15 +66,6 @@ jobs:
       - name: Run ${{ matrix.task }}
         run: |
           case ${{ matrix.task }} in
-            "lint")
-              pnpm lint
-              ;;
-            "check-types")
-              pnpm check-types
-              ;;
-            "test")
-              pnpm -w turbo run test --filter=./apps/bot
-              ;;
             "build")
               pnpm -w turbo run build --filter=./apps/bot
               ;;

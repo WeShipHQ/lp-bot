@@ -1,12 +1,31 @@
 import {
-  formatCurrency,
+  formatPrice,
+  formatNumber,
   formatPercentage,
   formatTokenAmount,
+  truncateAddress,
 } from "@/bot/utils/formatters";
+import { bold, code, link } from "@/bot/utils/text-formatters";
+import {
+  MeteoraDlmmPool,
+  // MeteoraDlmmPoolDetail,
+  MeteoraDlmmPosition,
+  MeteoraPoolData,
+} from "@/types/meteora.types";
+import { Pool, PoolDex } from "@/types/pool.types";
 import { PortfolioData, PortfolioPosition } from "@/types/portfolio.types";
+import { TokenDisplayData, TokenInfo } from "@/types/token.types";
+import { getPositionStartCommand } from "@/utils/link";
+import { LbPair, LbPosition } from "@meteora-ag/dlmm";
+import { escapers } from "@telegraf/entity";
+import { BN } from "bn.js";
 
-const bold = (s: string) => `**${s}**`;
+// const bold = (s: string) => `**${s}**`;
 const italic = (s: string) => `_${s}_`;
+
+// Add utility functions for generating URLs
+const buildSolscanUrl = (poolAddress: string) =>
+  `https://solscan.io/account/${poolAddress}`;
 
 const buildDexScreenerUrl = (poolAddress: string) =>
   `https://dexscreener.com/solana/${poolAddress}`;
@@ -50,7 +69,7 @@ export class MessageService {
     solBalance: number,
     usdValue: number
   ): string {
-    let message = `🏦 *Wallet SOL Balance:* ${solBalance.toFixed(3)} SOL (${formatCurrency(usdValue)})\n\n`;
+    let message = `🏦 *Wallet SOL Balance:* ${solBalance.toFixed(3)} SOL (${formatPrice(usdValue)})\n\n`;
     message += `*Wallet Address:*\n`;
     message += `\`${walletAddress}\` (tap to copy)\n\n`;
 
@@ -73,7 +92,10 @@ export class MessageService {
     return "❌ Please start the bot in a private chat with me.";
   }
 
-  static getPortfolioOverviewMessage(data: PortfolioData): string {
+  static getPortfolioOverviewMessage(
+    data: PortfolioData,
+    botName?: string
+  ): string {
     const positions = data.positions ?? [];
     const totals = data.totals;
 
@@ -88,11 +110,15 @@ export class MessageService {
 
     let msg = `*Portfolio Overview*\n\n`;
 
-    msg += `Total Positions: ${totals.total_positions} | Total Deposit: ${bold(formatCurrency(totals.total_current_value_usd))}\n\n`;
+    msg += `Total Positions: ${totals.total_positions} | Total Deposit: ${bold(formatPrice(totals.total_current_value_usd))}\n\n`;
 
     msg += positions
       .map((pos, i) => {
-        const title = `/${i + 1} ${formatPairSymbol(pos)}\n`;
+        // Create the link if botName is provided
+        const title = botName
+          ? `[/${i + 1} ${formatPairSymbol(pos)}](${getPositionStartCommand(botName, pos.position_address)})\n`
+          : `/${i + 1} ${formatPairSymbol(pos)}\n`;
+
         const dbTracked =
           pos.is_tracked_in_db != null
             ? `• Tracked in DB: ${pos.is_tracked_in_db ? "🟢 Yes" : "🟠 No"} ${italic("(Click to add to DB)")}`
@@ -100,18 +126,18 @@ export class MessageService {
 
         const balance =
           pos.current_x_amount != null && pos.current_y_amount != null
-            ? `• Position Balance: ${bold(formatTokenAmount(pos.current_x_amount, 3))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.current_y_amount, 3))} ${pos.token_y_info.symbol} (${bold(formatCurrency(pos.current_value_usd))})`
-            : `• Position Balance: ${bold(formatCurrency(pos.current_value_usd))}`;
+            ? `• Position Balance: ${bold(formatTokenAmount(pos.current_x_amount, 3))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.current_y_amount, 3))} ${pos.token_y_info.symbol} (${bold(formatPrice(pos.current_value_usd))})`
+            : `• Position Balance: ${bold(formatPrice(pos.current_value_usd))}`;
 
         const unclaimed =
           pos.unclaimed_fees_x != null && pos.unclaimed_fees_y != null
-            ? `• Unclaimed Fees: ${bold(formatTokenAmount(pos.unclaimed_fees_x, 3))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.unclaimed_fees_y, 3))} ${pos.token_y_info.symbol} (${bold(formatCurrency(pos.total_unclaimed_fees_usd))})`
-            : `• Unclaimed Fees: ${bold(formatCurrency(pos.total_unclaimed_fees_usd))}`;
+            ? `• Unclaimed Fees: ${bold(formatTokenAmount(pos.unclaimed_fees_x, 3))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.unclaimed_fees_y, 3))} ${pos.token_y_info.symbol} (${bold(formatPrice(pos.total_unclaimed_fees_usd))})`
+            : `• Unclaimed Fees: ${bold(formatPrice(pos.total_unclaimed_fees_usd))}`;
 
         const claimed =
           pos.claimed_fees_x != null && pos.claimed_fees_y != null
-            ? `• Claimed Fees: ${bold(formatTokenAmount(pos.claimed_fees_x, 3))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.claimed_fees_y, 3))} ${pos.token_y_info.symbol} (${bold(formatCurrency(pos.total_claimed_fees_usd))})\n`
-            : `• Claimed Fees: ${bold(formatCurrency(pos.total_claimed_fees_usd))}\n`;
+            ? `• Claimed Fees: ${bold(formatTokenAmount(pos.claimed_fees_x, 3))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.claimed_fees_y, 3))} ${pos.token_y_info.symbol} (${bold(formatPrice(pos.total_claimed_fees_usd))})\n`
+            : `• Claimed Fees: ${bold(formatPrice(pos.total_claimed_fees_usd))}\n`;
 
         const feeTvlPercent = toPercentNumber(pos.pool_fee_tvl_24h);
         const feeTvl =
@@ -144,21 +170,21 @@ export class MessageService {
     }
 
     if (pos.current_x_amount != null && pos.current_y_amount != null) {
-      msg += `**• Position Balance:** ${bold(formatTokenAmount(pos.current_x_amount, 3))} ${sx} / ${bold(formatTokenAmount(pos.current_y_amount, 3))} ${sy} (${bold(formatCurrency(pos.current_value_usd))})\n`;
+      msg += `**• Position Balance:** ${bold(formatTokenAmount(pos.current_x_amount, 3))} ${sx} / ${bold(formatTokenAmount(pos.current_y_amount, 3))} ${sy} (${bold(formatPrice(pos.current_value_usd))})\n`;
     } else {
-      msg += `**• Position Balance:** ${bold(formatCurrency(pos.current_value_usd))}\n`;
+      msg += `**• Position Balance:** ${bold(formatPrice(pos.current_value_usd))}\n`;
     }
 
     if (pos.unclaimed_fees_x != null && pos.unclaimed_fees_y != null) {
-      msg += `**• Unclaimed Fees:** ${bold(formatTokenAmount(pos.unclaimed_fees_x, 3))} ${sx} / ${bold(formatTokenAmount(pos.unclaimed_fees_y, 3))} ${sy} (${bold(formatCurrency(pos.total_unclaimed_fees_usd))})\n`;
+      msg += `**• Unclaimed Fees:** ${bold(formatTokenAmount(pos.unclaimed_fees_x, 3))} ${sx} / ${bold(formatTokenAmount(pos.unclaimed_fees_y, 3))} ${sy} (${bold(formatPrice(pos.total_unclaimed_fees_usd))})\n`;
     } else {
-      msg += `**• Unclaimed Fees:** ${bold(formatCurrency(pos.total_unclaimed_fees_usd))}\n`;
+      msg += `**• Unclaimed Fees:** ${bold(formatPrice(pos.total_unclaimed_fees_usd))}\n`;
     }
 
     if (pos.claimed_fees_x != null && pos.claimed_fees_y != null) {
-      msg += `**• Claimed Fees:** ${bold(formatTokenAmount(pos.claimed_fees_x, 3))} ${sx} / ${bold(formatTokenAmount(pos.claimed_fees_y, 3))} ${sy} (${bold(formatCurrency(pos.total_claimed_fees_usd))})\n`;
+      msg += `**• Claimed Fees:** ${bold(formatTokenAmount(pos.claimed_fees_x, 3))} ${sx} / ${bold(formatTokenAmount(pos.claimed_fees_y, 3))} ${sy} (${bold(formatPrice(pos.total_claimed_fees_usd))})\n`;
     } else {
-      msg += `**• Claimed Fees:** ${bold(formatCurrency(pos.total_claimed_fees_usd))}\n`;
+      msg += `**• Claimed Fees:** ${bold(formatPrice(pos.total_claimed_fees_usd))}\n`;
     }
 
     const feeTvlPercent = toPercentNumber(pos.pool_fee_tvl_24h);
@@ -176,6 +202,72 @@ export class MessageService {
 
     msg += `Net Profit: View on [Instafin](https://instafin.com)`;
     return msg;
+  }
+
+  static getPositionDetailMessageV1(
+    position: MeteoraDlmmPosition,
+    lbPosition: LbPosition,
+    poolInfo: Pool
+  ): string {
+    const meteoraUrl = link(
+      "Meteora",
+      `https://www.meteora.ag/dlmm/${poolInfo.address}`
+    );
+
+    let message = `*${poolInfo.name}* | ${meteoraUrl} \n\n`;
+
+    const totalXAmount = `${Number(lbPosition.positionData.totalXAmount) / 10 ** Number(poolInfo.tokenA.decimals)} ${poolInfo.tokenA.symbol}`;
+    const totalYAmount = `${Number(lbPosition.positionData.totalYAmount) / 10 ** Number(poolInfo.tokenB.decimals)} ${poolInfo.tokenB.symbol}`;
+
+    const positionBinData = lbPosition.positionData.positionBinData;
+    const startBin = positionBinData[0];
+    const lastBin = positionBinData.slice(-1)[0];
+
+    const startPrice = startBin.pricePerToken;
+    const endPrice = lastBin.pricePerToken;
+
+    // console.log("feeX", lbPosition.positionData.feeX.toString());
+    // console.log("feeY", lbPosition.positionData.feeY.toString());
+    // console.log("rewardOne", lbPosition.positionData.rewardOne.toString());
+    // console.log("rewardTwo", lbPosition.positionData.rewardTwo.toString());
+    // console.log(
+    //   "totalClaimedFeeXAmount",
+    //   lbPosition.positionData.totalClaimedFeeXAmount.toString()
+    // );
+    // console.log(
+    //   "totalClaimedFeeYAmount",
+    //   lbPosition.positionData.totalClaimedFeeYAmount.toString()
+    // );
+    // console.log(
+    //   "feeXExcludeTransferFee",
+    //   lbPosition.positionData.feeXExcludeTransferFee.toString()
+    // );
+    // console.log(
+    //   "feeYExcludeTransferFee",
+    //   lbPosition.positionData.feeYExcludeTransferFee.toString()
+    // );
+    // console.log(
+    //   "rewardOneExcludeTransferFee",
+    //   lbPosition.positionData.rewardOneExcludeTransferFee.toString()
+    // );
+    // console.log(
+    //   "rewardTwoExcludeTransferFee",
+    //   lbPosition.positionData.rewardTwoExcludeTransferFee.toString()
+    // );
+    // console.log(
+    //   "totalXAmountExcludeTransferFee",
+    //   lbPosition.positionData.totalXAmountExcludeTransferFee.toString()
+    // );
+    // console.log(
+    //   "totalYAmountExcludeTransferFee",
+    //   lbPosition.positionData.totalYAmountExcludeTransferFee.toString()
+    // );
+
+    message += `Net Profit: NA \n`;
+    message += `Position Balance: *${totalXAmount} / ${totalYAmount}*\n`;
+    message += `Position Range: *${formatNumber(startPrice, { maxDecimals: 6 })} - ${formatNumber(endPrice, { maxDecimals: 6 })} ${poolInfo.tokenA.symbol}/${poolInfo.tokenB.symbol}*\n`;
+
+    return message;
   }
 
   /**
@@ -202,7 +294,7 @@ export class MessageService {
   ): string {
     return (
       `🔍 *Confirm Transfer*\n\n` +
-      `You are about to send *${amount} SOL* (${formatCurrency(usdValue)}) to:\n` +
+      `You are about to send *${amount} SOL* (${formatPrice(usdValue)}) to:\n` +
       `\`${recipientAddress}\`\n\n` +
       `Please confirm this transaction by clicking the button below.`
     );
@@ -326,5 +418,170 @@ export class MessageService {
       `\`${signature}\`\n\n` +
       `View on Solscan: https://solscan.io/tx/${signature}`
     );
+  }
+
+  // 2FA Messages
+  static getTwoFactorMenuMessage(): string {
+    return (
+      "🔐 **Two-Factor Authentication**\n\n" +
+      "Choose an option below to manage your 2FA settings:\n\n" +
+      "• **Setup 2FA** - Enable Two-Factor Authentication\n" +
+      "• **Check Status** - View your current 2FA status\n" +
+      "• **Disable 2FA** - Disable 2FA (contact support required)"
+    );
+  }
+
+  static getTwoFactorAlreadyEnabledMessage(): string {
+    return (
+      "⚠️ **Two-Factor Authentication is already enabled!**\n\n" +
+      "If you want to reset your 2FA, please contact support."
+    );
+  }
+
+  static getTwoFactorNotEnabledMessage(): string {
+    return (
+      "ℹ️ **Two-Factor Authentication is not enabled**\n\n" +
+      "Use `/setup-2fa` to enable 2FA for your account."
+    );
+  }
+
+  static getTwoFactorSetupMessage(): string {
+    return (
+      "🔐 **Two-Factor Authentication Setup**\n\n" +
+      "**Step 1:** Install Authenticator App on your phone\n\n" +
+      "**Step 2:** Scan this QR code with Authenticator App:\n\n" +
+      "**Step 3:** Enter the 6-digit code from your authenticator app\n\n" +
+      "⚠️ **Important:**\n" +
+      "• Keep your phone secure\n" +
+      "• Don't share your authenticator app\n" +
+      "• Contact support if you lose access\n\n"
+    );
+  }
+
+  static getTwoFactorReadyToVerifyMessage(): string {
+    return (
+      "🔐 **Ready to Verify 2FA!**\n\n" +
+      "Please enter the 6-digit code from your Authenticator App app.\n\n" +
+      "**Example:** `123456`\n\n" +
+      "Just type the code and send it as a message."
+    );
+  }
+
+  static getTwoFactorEnabledSuccessMessage(): string {
+    return (
+      "✅ **Two-Factor Authentication Enabled Successfully!**\n\n" +
+      "🔐 Your account is now protected with 2FA\n" +
+      "📱 Use Authenticator App for future logins\n\n" +
+      "⚠️ **Important Reminders:**\n" +
+      "• Keep your phone secure\n" +
+      "• Don't share your authenticator app\n" +
+      "• Contact support if you lose access"
+    );
+  }
+
+  static getTwoFactorInvalidCodeMessage(): string {
+    return (
+      "❌ **Invalid verification code!**\n\n" +
+      "Please check your Authenticator App app and try again.\n" +
+      "Make sure the code is current and entered correctly."
+    );
+  }
+
+  static getTwoFactorNoSetupInProgressMessage(): string {
+    return (
+      "❌ **No 2FA setup in progress!**\n\n" +
+      "Please click the 🔐 2FA button and setup 2FA first."
+    );
+  }
+
+  static getTwoFactorDisableMessage(): string {
+    return (
+      "⚠️ **Disable Two-Factor Authentication**\n\n" +
+      "This will remove 2FA protection from your account.\n\n" +
+      "**To disable 2FA, please contact support** with:\n" +
+      "• Your account verification\n" +
+      "• Reason for disabling 2FA\n\n" +
+      "For security reasons, 2FA cannot be disabled through the bot."
+    );
+  }
+
+  static getTwoFactorStatusMessage(isEnabled: boolean): string {
+    const status = isEnabled ? "✅ Enabled" : "❌ Disabled";
+    const statusColor = isEnabled ? "🟢" : "🔴";
+
+    return (
+      `🔐 **Two-Factor Authentication Status**\n\n` +
+      `${statusColor} **Status:** ${status}\n\n` +
+      `**Security Tips:**\n` +
+      `• Keep your phone secure\n` +
+      `• Use a secure authenticator app\n` +
+      `• Don't share your 2FA codes`
+    );
+  }
+
+  static getTwoFactorRequiredForExportMessage(): string {
+    return (
+      "🔐 **2FA Required for Wallet Export**\n\n" +
+      "For security reasons, you must enable Two-Factor Authentication before exporting your private key.\n\n" +
+      "Please use the command `/twoFactor` to setup 2FA first.\n\n" +
+      "⚠️ **Why 2FA is required:**\n" +
+      "• Protects your private key from unauthorized access\n" +
+      "• Adds an extra layer of security\n" +
+      "• Required for sensitive operations"
+    );
+  }
+
+  static getTwoFactorVerificationRequiredMessage(): string {
+    return (
+      "🔐 **2FA Verification Required**\n\n" +
+      "Please enter your 6-digit authentication code from Authenticator App:\n\n" +
+      "⏰ The code expires in 30 seconds\n" +
+      "🔄 You have 3 attempts remaining\n\n" +
+      "Type `/cancel` to cancel this operation."
+    );
+  }
+
+  static getTwoFactorTooManyAttemptsMessage(): string {
+    return (
+      "❌ **Too Many Failed Attempts**\n\n" +
+      "You have exceeded the maximum number of attempts. Please try again later."
+    );
+  }
+
+  static getTwoFactorInvalidCodeWithAttemptsMessage(
+    remainingAttempts: number
+  ): string {
+    return (
+      `❌ **Invalid Authentication Code**\n\n` +
+      `Please check your Authenticator App app and try again.\n\n` +
+      `🔄 Attempts remaining: ${remainingAttempts}\n` +
+      `Type \`/cancel\` to cancel this operation.`
+    );
+  }
+
+  // Export Private Key Messages
+  static getFirstTimeExportWarningMessage(): string {
+    return (
+      "⚠️ **First Time Export Warning**\n\n" +
+      "This is your first time exporting your private key. For security reasons:\n\n" +
+      "• This export will be allowed without 2FA verification\n" +
+      "• **All future exports will require 2FA verification**\n" +
+      "• Please ensure you have 2FA enabled for future security\n\n" +
+      "Do you want to proceed with the export?"
+    );
+  }
+
+  static getFirstTimeExportSuccessMessage(): string {
+    return (
+      "✅ **Private Key Exported Successfully!**\n\n" +
+      "⚠️ **Important Security Reminder:**\n" +
+      "• All future exports will require 2FA verification\n" +
+      "• Please enable 2FA in `/twoFactor` for better security\n" +
+      "• Keep your private key secure and never share it"
+    );
+  }
+
+  static getExportCancelledMessage(): string {
+    return "✅ Private key export cancelled.";
   }
 }

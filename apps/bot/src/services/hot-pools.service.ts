@@ -3,7 +3,11 @@ import { DammV1Source } from "./hot-pools/sources/dammv1";
 import { DammV2Source } from "./hot-pools/sources/dammv2";
 import { DlmmSource } from "./hot-pools/sources/dlmm";
 import { HotPoolFilters, PoolSource } from "./hot-pools/types";
-
+import {
+  formatAPR,
+  formatMarketCap,
+  formatPrice,
+} from "@/bot/utils/formatters";
 
 export class HotPoolsService {
   private dlmm = new DlmmSource();
@@ -11,12 +15,12 @@ export class HotPoolsService {
   private dammv2 = new DammV2Source();
 
   static readonly TOTAL_ITEMS = 25;
-  static readonly ITEMS_PER_PAGE = 5;
+  static readonly ITEMS_PER_PAGE = 10;
   static readonly TOTAL_PAGES = 5;
 
   private readonly defaultFilters: HotPoolFilters = {
-    sortBy: "apy",
-    minTvl: 50000,
+    sortBy: "tvl",
+    minTvl: 5000,
     onlyVerified: true,
     includeUnknown: false,
   };
@@ -46,17 +50,13 @@ export class HotPoolsService {
   }
 
   formatPoolForDisplay(pool: HotPoolItem, index: number): string {
-    const apy = `${pool.apy.toFixed(2)}%`;
-    const fee24h = this.formatCurrency(pool.fee24h);
-    const tvl = this.formatCurrency(pool.tvl);
+    const apy = formatAPR(pool.apy);
+    const fee24h = formatPrice(pool.fee24h, {
+      compact: true,
+      maxDecimals: 2,
+    });
+    const tvl = formatMarketCap(pool.tvl);
     return `${index + 1}) ${pool.tokenASymbol}/${pool.tokenBSymbol} | APY: ${apy} | Fee24h: ${fee24h} | TVL: ${tvl}`;
-  }
-
-  private formatCurrency(value: number): string {
-    if (value >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-    if (value >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
-    if (value >= 1e3) return `$${(value / 1e3).toFixed(2)}K`;
-    return `$${value.toFixed(2)}`;
   }
 }
 

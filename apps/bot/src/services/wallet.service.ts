@@ -2,6 +2,20 @@ import { generateAuthorizationSignature } from "@privy-io/server-auth/wallet-api
 import { CONFIG } from "../config";
 import { generateRecipientKeypair } from "../bot/utils/hpke-keygen";
 import { decryptHPKEMessage } from "../bot/utils/hpke-decrypt";
+import { privy } from "./privy.service";
+import {
+  Connection,
+  PublicKey,
+  Signer,
+  TransactionInstruction,
+  AddressLookupTableAccount,
+  Transaction,
+  VersionedTransaction,
+} from "@solana/web3.js";
+import { User } from "@/db";
+import { CreateSmartTransactionOptions } from "@/types/transaction.types";
+import { broadcastTransaction, createSmartTransaction } from "@/utils/build-tx";
+
 export interface WalletExportResult {
   privateKey: string;
 }
@@ -13,10 +27,13 @@ export interface TransferSolParams {
 }
 
 export class WalletService {
-  static async exportAndDecryptWallet(walletId: string): Promise<WalletExportResult> {
+  static async exportAndDecryptWallet(
+    walletId: string
+  ): Promise<WalletExportResult> {
     try {
       // 1. Generate keypair for HPKE encryption
-      const { publicKeyBase64, privateKeyBase64 } = await generateRecipientKeypair();
+      const { publicKeyBase64, privateKeyBase64 } =
+        await generateRecipientKeypair();
 
       // 2. Prepare input
       const input = {
@@ -41,9 +58,11 @@ export class WalletService {
         "privy-app-id": CONFIG.PRIVY.PRIVY_APP_ID?.trim(),
         "Content-Type": "application/json",
         "privy-authorization-signature": signature as string,
-        "Authorization": "Basic " + Buffer.from(
-          `${CONFIG.PRIVY.PRIVY_APP_ID}:${CONFIG.PRIVY.PRIVY_APP_SECRET}`
-        ).toString("base64"),
+        Authorization:
+          "Basic " +
+          Buffer.from(
+            `${CONFIG.PRIVY.PRIVY_APP_ID}:${CONFIG.PRIVY.PRIVY_APP_SECRET}`
+          ).toString("base64"),
       };
 
       // 3. Call Privy API
@@ -54,8 +73,10 @@ export class WalletService {
       });
 
       if (!res.ok) {
-        throw new Error(`Export wallet failed: ${res.status} ${await res.text()}`);
-      } 
+        throw new Error(
+          `Export wallet failed: ${res.status} ${await res.text()}`
+        );
+      }
 
       const response = await res.json();
 
@@ -66,16 +87,26 @@ export class WalletService {
         response.ciphertext
       );
 
-      if (typeof decryptedData === 'string') {
-        if (decryptedData.includes('error') || decryptedData.includes('Error') || decryptedData.includes('failed')) {
-          throw new Error(`Privy returned error in decrypted data: ${decryptedData}`);
+      if (typeof decryptedData === "string") {
+        if (
+          decryptedData.includes("error") ||
+          decryptedData.includes("Error") ||
+          decryptedData.includes("failed")
+        ) {
+          throw new Error(
+            `Privy returned error in decrypted data: ${decryptedData}`
+          );
         }
       }
 
       let walletData;
-      
-      if (typeof decryptedData === 'string' && decryptedData.length > 50 && !decryptedData.includes('{') && !decryptedData.includes('"')) {
 
+      if (
+        typeof decryptedData === "string" &&
+        decryptedData.length > 50 &&
+        !decryptedData.includes("{") &&
+        !decryptedData.includes('"')
+      ) {
         walletData = {
           privateKey: decryptedData,
         };
@@ -83,7 +114,9 @@ export class WalletService {
         try {
           walletData = JSON.parse(decryptedData);
         } catch (parseError) {
-          throw new Error(`Failed to parse decrypted wallet data: ${parseError instanceof Error ? parseError.message : 'Unknown parse error'}`);
+          throw new Error(
+            `Failed to parse decrypted wallet data: ${parseError instanceof Error ? parseError.message : "Unknown parse error"}`
+          );
         }
       }
 
@@ -97,4 +130,47 @@ export class WalletService {
       );
     }
   }
+
+  static async signAndSendTransaction(
+    user: User,
+    instructions: TransactionInstruction[],
+    signers: Signer[] = [],
+    lookupTables: AddressLookupTableAccount[] = [],
+    options: CreateSmartTransactionOptions = {}
+  ): Promise<string> {
+    const connection = new Connection(CONFIG.SOLANA.RPC_URL);
+
+    const payer = new PublicKey(user.walletAddress!);
+
+    const transaction = await createSmartTransaction(
+      connection,
+      instructions,
+      payer,
+      signers,
+      lookupTables,
+      options
+    );
+
+    const { signedTransaction } = await privy.walletApi.solana.signTransaction({
+      walletId: user.walletId,
+      transaction: transaction.transaction,
+    });
+
+    const result = await broadcastTransaction(connection, signedTransaction);
+
+    console.log("Sign message result:", result);
+    return result;
+  }
+
+  static async signTransaction(
+    user: User,
+    transaction: Transaction | VersionedTransaction
+  ): Promise<{ signedTransaction: Transaction | VersionedTransaction }> {
+    return privy.walletApi.solana.signTransaction({
+      walletId: user.walletId,
+      transaction: transaction,
+    });
+  }
+
+  
 }

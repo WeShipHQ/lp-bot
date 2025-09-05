@@ -3,83 +3,23 @@ import { FastifyInstance } from "fastify";
 import { privy } from "../../services/privy.service";
 import { CONFIG } from "../../config";
 import { BotContext } from "@/types/bot.types";
-
-interface PrivyUser {
-  id: string;
-  customMetadata?: {
-    walletAddress?: string;
-    walletId?: string;
-    [key: string]: unknown;
-  };
-}
-
-interface CachedUserData {
-  user: PrivyUser;
-  walletAddress: string;
-  walletId: string;
-  timestamp: number;
-}
-
-const userCache = new Map<string, CachedUserData>();
-
-// 5 minutes
-const CACHE_TTL = 5 * 60 * 1000;
+import { User } from "@/db";
+import { createUser, findUserByTelegramId } from "@/db/queries";
+import { userSyncService } from "../../services/user-sync.service";
 
 export function authMiddleware(
   server: FastifyInstance
 ): MiddlewareFn<BotContext> {
   return async (ctx, next) => {
     if (!ctx.from) return;
-
     const telegramUserId = ctx.from.id.toString();
+    const username = ctx.from.username;
 
     try {
-      const cachedUser = userCache.get(telegramUserId);
-      const now = Date.now();
-
-      if (cachedUser && now - cachedUser.timestamp < CACHE_TTL) {
-        ctx.user = {
-          id: cachedUser.user.id,
-          walletAddress: cachedUser.walletAddress,
-          walletId: cachedUser.walletId,
-          telegramUserId,
-        };
-        return next();
-      }
-
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error("Privy API timeout")), 5000);
-      });
-
-      let user: PrivyUser | null = null;
-      try {
-        user = await Promise.race([
-          privy.getUserByTelegramUserId(telegramUserId),
-          timeoutPromise,
-        ]);
-      } catch (timeoutError) {
-        if (cachedUser) {
-          server.log.warn(
-            `Using expired cache for user ${telegramUserId} due to API timeout`
-          );
-          ctx.user = {
-            id: cachedUser.user.id,
-            walletAddress: cachedUser.walletAddress,
-            walletId: cachedUser.walletId,
-            telegramUserId,
-          };
-          return next();
-        } else {
-          server.log.error(
-            { err: timeoutError },
-            "Privy API timeout and no cache available"
-          );
-          return next();
-        }
-      }
-
+      let user = await privy.getUserByTelegramUserId(telegramUserId);
       let walletAddress: string;
       let walletId: string;
+      let dbUser: User | undefined = undefined;
 
       if (!user) {
         const wallet = await privy.walletApi.createWallet({
@@ -99,26 +39,41 @@ export function authMiddleware(
         walletAddress = wallet.address;
         walletId = wallet.id;
 
-        server.log.info(`New user registered: ${telegramUserId}`);
+        dbUser = await createUser({
+          telegramId: telegramUserId,
+          username: ctx.from.username,
+          walletAddress,
+          walletId,
+        });
+
+        server.log.info(
+          `New user registered: ${telegramUserId} with wallet: ${walletAddress}`
+        );
       } else {
-        const customMetadata = user.customMetadata ?? {};
-        walletAddress = customMetadata.walletAddress ?? "";
-        walletId = customMetadata.walletId ?? "";
+        walletAddress = user.customMetadata?.walletAddress as string;
+        walletId = user.customMetadata?.walletId as string;
+
+        dbUser = await findUserByTelegramId(telegramUserId);
+        if (!dbUser) {
+          dbUser = await createUser({
+            telegramId: telegramUserId,
+            username: ctx.from.username,
+            walletAddress,
+            walletId,
+          });
+        }
       }
 
-      ctx.user = {
+      // Sync user to local database
+      await userSyncService.syncUser({
         id: user.id,
+        telegramId: telegramUserId,
+        username,
         walletAddress,
         walletId,
-        telegramUserId,
-      };
-
-      userCache.set(telegramUserId, {
-        user,
-        walletAddress,
-        walletId,
-        timestamp: Date.now(),
       });
+
+      ctx.user = dbUser;
 
       server.log.info(`User authenticated: ${telegramUserId}`);
     } catch (error) {

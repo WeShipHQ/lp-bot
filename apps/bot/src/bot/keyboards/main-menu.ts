@@ -1,5 +1,4 @@
-// @ts-expect-error
-import { InlineKeyboardMarkup } from "telegraf/typings/core/types/typegram";
+import { InlineKeyboardMarkup } from "@telegraf/types";
 
 export function getMainKeyboard(): InlineKeyboardMarkup {
   return {
@@ -10,9 +9,10 @@ export function getMainKeyboard(): InlineKeyboardMarkup {
         { text: "💰 Wallet", callback_data: "wallet" },
       ],
       [
+        { text: "🧧 Referral", callback_data: "referral" },
         { text: "⚙️ Settings", callback_data: "settings" },
-        { text: "❓ Help", callback_data: "help" },
       ],
+      [{ text: "❓ Help", callback_data: "help" }],
     ],
   };
 }
