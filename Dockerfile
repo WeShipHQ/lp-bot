@@ -3,15 +3,16 @@ FROM node:22-slim AS base
 
 # Install essential build dependencies for native modules
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 \
-    make \
-    g++ \
-    git \
-    dumb-init \
-    openssl \
-    libssl-dev \
-  && rm -rf /var/lib/apt/lists/* \
-  && npm install -g pnpm@8.15.6
+  python3 \
+  make \
+  g++ \
+  git \
+  dumb-init \
+  openssl \
+  libssl-dev \
+  jq \
+  ca-certificates \
+  && rm -rf /var/lib/apt/lists/* 
 
 WORKDIR /app
 
@@ -19,6 +20,10 @@ WORKDIR /app
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY packages/*/package.json ./packages/
 COPY apps/bot/package.json ./apps/bot/
+
+# pnpm từ package.json
+RUN corepack enable \
+  && corepack prepare pnpm@$(jq -r '.packageManager' package.json | cut -d'@' -f2) --activate
 
 # Install all dependencies (including devDependencies for build)
 RUN pnpm install --frozen-lockfile
@@ -34,11 +39,10 @@ FROM node:22-slim AS production
 
 # Install only essential runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    dumb-init \
-    openssl \
-    ca-certificates \
-  && rm -rf /var/lib/apt/lists/* \
-  && npm install -g pnpm@8.15.6
+  dumb-init \
+  openssl \
+  ca-certificates \
+  && rm -rf /var/lib/apt/lists/* 
 
 WORKDIR /app
 
@@ -46,6 +50,10 @@ WORKDIR /app
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY packages/*/package.json ./packages/
 COPY apps/bot/package.json ./apps/bot/
+
+RUN corepack enable \
+  && corepack prepare pnpm@$(jq -r '.packageManager' package.json | cut -d'@' -f2) --activate
+
 
 # Install production dependencies only (skip native modules that need compilation)
 RUN pnpm install --prod --frozen-lockfile --ignore-scripts
