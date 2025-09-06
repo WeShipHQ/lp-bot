@@ -65,6 +65,7 @@
     "electron-log": "^5.2.4",
     "fastify": "^5.0.0",
     "fastify-plugin": "^5.0.1",
+    "helius-sdk": "^1.5.3",
     "ioredis": "^5.7.0",
     "mime-types": "^2.1.35",
     "nanoid": "^5.1.5",

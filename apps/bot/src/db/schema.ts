@@ -80,10 +80,14 @@ export const positions = pgTable("Position", {
   userId: uuid("userId")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  tokenAddress: text("tokenAddress").notNull(),
+  positionAddress: text("positionAddress").notNull(),
   poolAddress: text("poolAddress").notNull(),
   strategyType: strategyTypeEnum("strategyType").notNull(),
-  initialAmount: decimal("initialAmount", {
+  tokenXAmount: decimal("tokenXAmount", {
+    precision: 20,
+    scale: 8,
+  }).notNull(),
+  tokenYAmount: decimal("tokenYAmount", {
     precision: 20,
     scale: 8,
   }).notNull(),

@@ -26,6 +26,7 @@ export const CONFIG = {
   SOLANA: {
     RPC_URL: process.env.SOLANA_RPC_URL || "https://api.devnet.solana.com",
     NETWORK: process.env.SOLANA_NETWORK || "mainnet",
+    HELIUS_API_KEY: process.env.HELIUS_API_KEY || "",
   },
 
   METEORA: {

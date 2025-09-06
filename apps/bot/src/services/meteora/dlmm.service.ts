@@ -48,31 +48,22 @@ export class MeteoraDlmmService {
   }
 
   async createPositionIx(
-    poolAddress: string,
-    userPublicKey: string,
+    positionAddress: PublicKey,
+    poolAddress: PublicKey,
+    userPublicKey: PublicKey,
     totalXAmount: BN,
     totalYAmount: BN,
     strategy: StrategyType,
     rangeInterval: number
   ): Promise<{
     instructions: TransactionInstruction[];
-    signers: Keypair[];
   }> {
     const dlmmPool = await this.createInstance(poolAddress);
 
-    const poolInfo = await meteoraPoolService.getDlmmPoolInfo(poolAddress);
-    if (!poolInfo) {
-      throw new Error("Pool not found");
-    }
-
     const activeBin = await dlmmPool.getActiveBin();
-    const activeBinPricePerToken = dlmmPool.fromPricePerLamport(
-      Number(activeBin.price)
-    );
-
-    console.log(
-      `[DLMM] Active bin ID: ${activeBin.binId}, Price: ${activeBinPricePerToken}`
-    );
+    // const activeBinPricePerToken = dlmmPool.fromPricePerLamport(
+    //   Number(activeBin.price)
+    // );
 
     const minBinId = activeBin.binId - rangeInterval;
     const maxBinId = activeBin.binId + rangeInterval;
@@ -85,13 +76,10 @@ export class MeteoraDlmmService {
       `[DLMM] Final amounts - X: ${totalXAmount.toString()}, Y: ${totalYAmount.toString()}`
     );
 
-    const newBalancePosition = new Keypair();
-    const user = new PublicKey(userPublicKey);
-
     const createPositionTx =
       await dlmmPool.initializePositionAndAddLiquidityByStrategy({
-        positionPubKey: newBalancePosition.publicKey,
-        user: user,
+        positionPubKey: positionAddress,
+        user: userPublicKey,
         totalXAmount,
         totalYAmount,
         strategy: {
@@ -103,7 +91,6 @@ export class MeteoraDlmmService {
 
     return {
       instructions: createPositionTx.instructions,
-      signers: [newBalancePosition],
     };
   }
 

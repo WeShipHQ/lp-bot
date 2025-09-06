@@ -34,6 +34,7 @@ export interface BotContext extends Context {
     twoFactorVerification?: TwoFactorVerificationState;
   };
   scene: any;
+  wizard: any;
   startPayload?: string;
 }
 

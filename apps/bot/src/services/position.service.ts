@@ -13,8 +13,12 @@ import { OPEN_POSITION_FEE } from "@/bot/config/constants";
 import { StrategyType } from "@meteora-ag/dlmm";
 import { poolService } from "./pool.service";
 import { db, positions, transactions, NewPosition, NewTransaction } from "@/db";
+import { Keypair, PublicKey } from "@solana/web3.js";
+import { JobQueueService } from "./job-queue.service";
 
 export class PositionService {
+  private jobQueueService = new JobQueueService();
+
   async createBalancedPosition(
     user: User,
     poolAddress: string,
@@ -63,168 +67,130 @@ export class PositionService {
           dbStrategyType = "DLMM";
       }
 
-      // const halfAmount = amount / 2;
-      // const halfAmountLamports = (halfAmount * 1e9).toString();
+      const halfAmount = amount / 2;
+      const halfAmountLamports = (halfAmount * 1e9).toString();
 
-      // let tokenAAmount = new BN(0);
-      // let tokenBAmount = new BN(0);
+      console.log(`[Position] Starting SOL to Token A & B conversions...`);
 
-      // // Convert 50% SOL to token A (if not SOL)
-      // if (poolInfo.tokenA.address !== SOL_MINT) {
-      //   try {
-      //     const orderA = await jupiterService.getOrder({
-      //       inputMint: SOL_MINT,
-      //       outputMint: poolInfo.tokenA.address,
-      //       amount: halfAmountLamports,
-      //       taker: user.walletAddress!,
-      //     });
+      const [tokenAAmount, tokenBAmount] = await Promise.all([
+        // Token A swap
+        (async () => {
+          if (poolInfo.tokenA.address !== SOL_MINT) {
+            try {
+              console.log(`[Position] Starting SOL to Token A conversion...`);
+              const orderA = await jupiterService.getOrder({
+                inputMint: SOL_MINT,
+                outputMint: poolInfo.tokenA.address,
+                amount: halfAmountLamports,
+                taker: user.walletAddress!,
+              });
 
-      //     const swapTxStr = orderA.transaction;
-      //     if (!swapTxStr) {
-      //       throw new Error("Failed to get swap transaction");
-      //     }
-      //     const swapTx = jupiterService.getOrderTransaction(swapTxStr);
+              const swapTxStr = orderA.transaction;
+              if (!swapTxStr) {
+                throw new Error("Failed to get swap transaction for Token A");
+              }
+              const swapTx = jupiterService.getOrderTransaction(swapTxStr);
 
-      //     const { signedTransaction } = await WalletService.signTransaction(
-      //       user,
-      //       swapTx
-      //     );
+              const { signedTransaction } = await WalletService.signTransaction(
+                user,
+                swapTx
+              );
 
-      //     const executeA = await jupiterService.executeOrder({
-      //       requestId: orderA.requestId,
-      //       signedTransaction: Buffer.from(
-      //         signedTransaction.serialize()
-      //       ).toString("base64"),
-      //     });
+              const executeA = await jupiterService.executeOrder({
+                requestId: orderA.requestId,
+                signedTransaction: Buffer.from(
+                  signedTransaction.serialize()
+                ).toString("base64"),
+              });
 
-      //     if (executeA.status === "Failed") {
-      //       throw new Error(
-      //         `Failed to convert SOL to token A: ${executeA.error}`
-      //       );
-      //     }
-      //     tokenAAmount = new BN(executeA.outputAmountResult || "0");
-      //   } catch (error) {
-      //     console.error("Error converting SOL to token A:", error);
-      //     throw error;
-      //   }
-      // } else {
-      //   tokenAAmount = new BN(halfAmountLamports);
-      // }
+              if (executeA.status === "Failed") {
+                throw new Error(
+                  `Failed to convert SOL to token A: ${executeA.error}`
+                );
+              }
 
-      // // Convert 50% SOL to token B (if not SOL)
-      // if (poolInfo.tokenB.address !== SOL_MINT) {
-      //   try {
-      //     const orderB = await jupiterService.getOrder({
-      //       inputMint: SOL_MINT,
-      //       outputMint: poolInfo.tokenB.address,
-      //       amount: halfAmountLamports,
-      //       taker: user.walletAddress!,
-      //     });
+              return new BN(executeA.outputAmountResult || "0");
+            } catch (error) {
+              console.error("Error converting SOL to token A:", error);
+              throw error;
+            }
+          } else {
+            return new BN(halfAmountLamports);
+          }
+        })(),
 
-      //     const swapTxStr = orderB.transaction;
-      //     if (!swapTxStr) {
-      //       throw new Error("Failed to get swap transaction");
-      //     }
-      //     const swapTx = jupiterService.getOrderTransaction(swapTxStr);
+        // Token B swap
+        (async () => {
+          if (poolInfo.tokenB.address !== SOL_MINT) {
+            try {
+              console.log(`[Position] Starting SOL to Token B conversion...`);
+              const orderB = await jupiterService.getOrder({
+                inputMint: SOL_MINT,
+                outputMint: poolInfo.tokenB.address,
+                amount: halfAmountLamports,
+                taker: user.walletAddress!,
+              });
 
-      //     const { signedTransaction } = await WalletService.signTransaction(
-      //       user,
-      //       swapTx
-      //     );
+              const swapTxStr = orderB.transaction;
+              if (!swapTxStr) {
+                throw new Error("Failed to get swap transaction for Token B");
+              }
+              const swapTx = jupiterService.getOrderTransaction(swapTxStr);
 
-      //     const executeB = await jupiterService.executeOrder({
-      //       requestId: orderB.requestId,
-      //       signedTransaction: Buffer.from(
-      //         signedTransaction.serialize()
-      //       ).toString("base64"),
-      //     });
+              const { signedTransaction } = await WalletService.signTransaction(
+                user,
+                swapTx
+              );
 
-      //     if (executeB.status === "Failed") {
-      //       throw new Error(
-      //         `Failed to convert SOL to token B: ${executeB.error}`
-      //       );
-      //     }
-      //     tokenBAmount = new BN(executeB.outputAmountResult || "0");
-      //   } catch (error) {
-      //     console.error("Error converting SOL to token B:", error);
-      //     throw error;
-      //   }
-      // } else {
-      //   tokenBAmount = new BN(halfAmountLamports);
-      // }
+              const executeB = await jupiterService.executeOrder({
+                requestId: orderB.requestId,
+                signedTransaction: Buffer.from(
+                  signedTransaction.serialize()
+                ).toString("base64"),
+              });
 
-      // if (tokenAAmount.isZero() || tokenBAmount.isZero()) {
-      //   throw new Error("Failed to convert SOL to token A or token B");
-      // }
+              if (executeB.status === "Failed") {
+                throw new Error(
+                  `Failed to convert SOL to token B: ${executeB.error}`
+                );
+              }
 
-      // const { instructions, signers } =
-      //   await meteoraDlmmService.createPositionIx(
-      //     poolAddress,
-      //     user.walletAddress!,
-      //     tokenAAmount,
-      //     tokenBAmount,
-      //     strategy,
-      //     user.balancedPositionBinRange
-      //   );
+              return new BN(executeB.outputAmountResult || "0");
+            } catch (error) {
+              console.error("Error converting SOL to token B:", error);
+              throw error;
+            }
+          } else {
+            return new BN(halfAmountLamports);
+          }
+        })(),
+      ]);
 
-      // const transactionId = await WalletService.signAndSendTransaction(
-      //   user,
-      //   instructions,
-      //   signers
-      // );
-
-      const transactionId = "transaction_id" + Date.now();
-
-      // Save position to database after successful on-chain creation
-      let positionId: string | undefined;
-      try {
-        const newPosition: NewPosition = {
-          userId: user.id,
-          tokenAddress: poolInfo.tokenA.address, // Primary token for the position
-          poolAddress: poolAddress,
-          strategyType: dbStrategyType,
-          initialAmount: enteredAmount.toString(),
-          currentValue: enteredAmount.toString(), // Initially same as deposit
-          feesEarned: "0",
-          status: "ACTIVE",
-          priceRangeMin: null, // Will be updated when we get position details
-          priceRangeMax: null, // Will be updated when we get position details
-        };
-
-        const [insertedPosition] = await db
-          .insert(positions)
-          .values(newPosition)
-          .returning({ id: positions.id });
-        positionId = insertedPosition.id;
-
-        // Record the initial deposit transaction
-        const depositTransaction: NewTransaction = {
-          positionId: positionId,
-          type: "DEPOSIT",
-          amount: enteredAmount.toString(),
-          tokenAddress: SOL_MINT, // The deposit was in SOL
-          txHash: transactionId,
-          status: "CONFIRMED",
-        };
-
-        await db.insert(transactions).values(depositTransaction);
-
-        console.log(
-          `[Position] Saved position ${positionId} to database for user ${user.id}`
-        );
-      } catch (dbError) {
-        console.error(
-          `[Position] Failed to save position to database:`,
-          dbError
-        );
-        // Don't fail the entire operation if DB save fails, but log it
-        // The position was created on-chain successfully
+      if (tokenAAmount.isZero() || tokenBAmount.isZero()) {
+        throw new Error("Failed to convert SOL to token A or token B");
       }
+
+      const positionKp = Keypair.generate();
+
+      const { instructions } = await meteoraDlmmService.createPositionIx(
+        positionKp.publicKey,
+        new PublicKey(poolAddress),
+        new PublicKey(user.walletAddress!),
+        tokenAAmount,
+        tokenBAmount,
+        strategy,
+        user.balancedPositionBinRange
+      );
+
+      const transactionId = await WalletService.signAndSendTransaction(
+        user,
+        instructions,
+        [positionKp]
+      );
 
       return {
         success: true,
         transactionId,
-        positionId,
       };
     } catch (error) {
       console.error(`[Position] Error creating position:`, error);
