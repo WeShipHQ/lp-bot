@@ -2,7 +2,7 @@ import { meteoraDlmmService } from "./meteora/dlmm.service";
 import { jupiterService } from "./jupiter.service";
 import BN from "bn.js";
 import { WalletService } from "./wallet.service";
-import { User } from "@/db";
+import { pendingTransactions, User } from "@/db";
 import { SOL_MINT } from "@/config/constants";
 import { meteoraPositionService } from "./meteora/position.service";
 import {
@@ -15,9 +15,10 @@ import { poolService } from "./pool.service";
 import { db, positions, transactions, NewPosition, NewTransaction } from "@/db";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import { JobQueueService } from "./job-queue.service";
+import { createPosition } from "@/db/queries";
 
 export class PositionService {
-  private jobQueueService = new JobQueueService();
+  // private jobQueueService = new JobQueueService();
 
   async createBalancedPosition(
     user: User,
@@ -46,7 +47,6 @@ export class PositionService {
         throw new Error("Pool not found");
       }
 
-      // Map strategy type
       let strategy: StrategyType;
       let dbStrategyType: "DLMM" | "DAMM" | "CONCENTRATED";
       switch (depositType) {
@@ -172,21 +172,70 @@ export class PositionService {
 
       const positionKp = Keypair.generate();
 
-      const { instructions } = await meteoraDlmmService.createPositionIx(
-        positionKp.publicKey,
-        new PublicKey(poolAddress),
-        new PublicKey(user.walletAddress!),
-        tokenAAmount,
-        tokenBAmount,
-        strategy,
-        user.balancedPositionBinRange
-      );
+      // const { instructions } = await meteoraDlmmService.createPositionIx(
+      //   positionKp.publicKey,
+      //   new PublicKey(poolAddress),
+      //   new PublicKey(user.walletAddress!),
+      //   tokenAAmount,
+      //   tokenBAmount,
+      //   strategy,
+      //   user.balancedPositionBinRange
+      // );
 
-      const transactionId = await WalletService.signAndSendTransaction(
-        user,
-        instructions,
-        [positionKp]
-      );
+      // const transactionId = await WalletService.signAndSendTransaction(
+      //   user,
+      //   instructions,
+      //   [positionKp]
+      // );
+
+      const transactionId =
+        "2P54LUZ974FbR8AopHd5VNUuvEyZdtDthiBdbppFG1wueL1JxFbwGsUVmuN3NuYPm5FFt2mbi7zPEp5HdSKvp28j";
+
+      const metadata = JSON.stringify({
+        positionAddress: positionKp.publicKey.toBase58(),
+        poolAddress: poolAddress,
+        strategyType: dbStrategyType,
+        tokenAAmount: tokenAAmount.toString(),
+        tokenBAmount: tokenBAmount.toString(),
+        depositType,
+        enteredAmount,
+      });
+
+      // Insert pending transaction for processing
+      await db.insert(pendingTransactions).values({
+        signature: transactionId,
+        operationType: "CREATE_POSITION",
+        userId: user.id,
+        metadata,
+        status: "PENDING",
+      });
+
+      // Queue the transaction processing job
+      // await this.jobQueueService.queueTransactionProcessingJob(
+      //   {
+      //     signature: transactionId,
+      //     operationType: "CREATE_POSITION",
+      //     userId: user.id,
+      //   },
+      //   0
+      // );
+
+      // createPosition({
+      //   userId: user.id,
+      //   positionAddress: positionKp.publicKey.toBase58(),
+      //   poolAddress: poolAddress,
+      //   strategyType: "DLMM",
+      //   tokenXAmount: tokenAAmount.toString(),
+      //   tokenYAmount: tokenBAmount.toString(),
+      //   currentValue: tokenAAmount.toString(),
+      //   feesEarned: "0",
+      //   status: "ACTIVE",
+      // });
+
+      // this.jobQueueService.createPositionMonitorJob(
+      //   positionKp.publicKey.toBase58(),
+      //   user.id
+      // );
 
       return {
         success: true,
@@ -204,7 +253,6 @@ export class PositionService {
 
   async closePosition(
     user: User,
-    // TODO create abstract type
     position: MeteoraDlmmPosition
   ): Promise<{ success: boolean; transactionId?: string; error?: string }> {
     try {
@@ -213,9 +261,9 @@ export class PositionService {
       );
 
       const { instructions } = await meteoraDlmmService.closePositionIx(
-        user.walletAddress!,
-        position.pair_address,
-        position.address
+        new PublicKey(user.walletAddress),
+        new PublicKey(position.pair_address),
+        new PublicKey(position.address)
       );
 
       const transactionId = await WalletService.signAndSendTransaction(
@@ -313,6 +361,42 @@ export class PositionService {
       setTimeout(() => {
         swapToSol(position.address);
       }, 2000);
+
+      return {
+        success: true,
+        transactionId,
+      };
+    } catch (error) {
+      console.error(`[Position] Error closing position:`, error);
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to close position",
+      };
+    }
+  }
+
+  async closePositionV2(
+    user: User,
+    poolAddress: string,
+    positionAddress: string
+  ): Promise<{ success: boolean; transactionId?: string; error?: string }> {
+    try {
+      console.log(
+        `[Position] Closing position ${positionAddress} for user ${user.id}`
+      );
+
+      const { instructions } = await meteoraDlmmService.closePositionIx(
+        new PublicKey(user.walletAddress),
+        new PublicKey(poolAddress),
+        new PublicKey(positionAddress)
+      );
+
+      const transactionId = await WalletService.signAndSendTransaction(
+        user,
+        instructions,
+        []
+      );
 
       return {
         success: true,

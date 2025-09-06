@@ -81,6 +81,9 @@ importers:
 
   apps/bot:
     dependencies:
+      '@coral-xyz/anchor':
+        specifier: ^0.31.1
+        version: 0.31.1(typescript@5.8.2)
       '@fastify/autoload':
         specifier: ^6.3.1
         version: 6.3.1
@@ -817,8 +820,43 @@ packages:
       - utf-8-validate
     dev: false
 
+  /@coral-xyz/anchor@0.31.1(typescript@5.8.2):
+    resolution: {integrity: sha512-QUqpoEK+gi2S6nlYc2atgT2r41TT3caWr/cPUEL8n8Md9437trZ68STknq897b82p5mW0XrTBNOzRbmIRJtfsA==}
+    engines: {node: '>=17'}
+    dependencies:
+      '@coral-xyz/anchor-errors': 0.31.1
+      '@coral-xyz/borsh': 0.31.1(@solana/web3.js@1.98.4)
+      '@noble/hashes': 1.8.0
+      '@solana/web3.js': 1.98.4(typescript@5.8.2)
+      bn.js: 5.2.2
+      bs58: 4.0.1
+      buffer-layout: 1.2.2
+      camelcase: 6.3.0
+      cross-fetch: 3.2.0
+      eventemitter3: 4.0.7
+      pako: 2.1.0
+      superstruct: 0.15.5
+      toml: 3.0.0
+    transitivePeerDependencies:
+      - bufferutil
+      - encoding
+      - typescript
+      - utf-8-validate
+    dev: false
+
   /@coral-xyz/borsh@0.31.0(@solana/web3.js@1.98.4):
     resolution: {integrity: sha512-DwdQ5fuj+rGQCTKRnxnW1W2lvcpBaFc9m9M1TcGGlm+bwCcggmDgbLKLgF+LjIrKnc7Nd+bCACx5RA9YTK2I4Q==}
+    engines: {node: '>=10'}
+    peerDependencies:
+      '@solana/web3.js': ^1.69.0
+    dependencies:
+      '@solana/web3.js': 1.98.4(typescript@5.8.2)
+      bn.js: 5.2.2
+      buffer-layout: 1.2.2
+    dev: false
+
+  /@coral-xyz/borsh@0.31.1(@solana/web3.js@1.98.4):
+    resolution: {integrity: sha512-9N8AU9F0ubriKfNE3g1WF0/4dtlGXoBN/hd1PvbNBamBNwRgHxH4P+o3Zt7rSEloW1HUs6LfZEchlx9fW7POYw==}
     engines: {node: '>=10'}
     peerDependencies:
       '@solana/web3.js': ^1.69.0

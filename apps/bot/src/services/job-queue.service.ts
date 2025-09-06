@@ -4,9 +4,22 @@ import { logger } from "../utils/logger";
 import { RebalanceService } from "./rebalance.service";
 import { PriceMonitoringService } from "./price-monitoring.service";
 import { db } from "../db";
-import { positions, users } from "../db/schema";
+import { pendingTransactions, positions, users } from "../db/schema";
 import { eq, and } from "drizzle-orm";
 import { CONFIG } from "@/config";
+import { Connection, ParsedTransactionWithMeta } from "@solana/web3.js";
+import { parseMeteoraInstructions } from "@/utils/tx-parser";
+import { createPosition } from "@/db/queries";
+import { delay } from "@/utils/misc";
+import { JupiterService } from "./jupiter.service";
+import { TokenAdapter } from "@/adapters/token.adapter";
+import { PositionService } from "./position.service";
+
+const PROCESSING_TX_QUEUE_NAME = "transaction-processing";
+const PROCESSING_TX_WORKER_NAME = "transaction-processing-worker";
+
+const POSITION_MONITOR_QUEUE_NAME = "position-monitor";
+const POSITION_MONITOR_WORKER_NAME = "position-monitor-worker";
 
 // Job Types
 export interface PositionMonitorJobData {
@@ -27,17 +40,36 @@ export interface RebalanceJobData {
   reason: string;
 }
 
+export interface TransactionProcessingJobData {
+  signature: string;
+  operationType:
+    | "CREATE_POSITION"
+    | "CLOSE_POSITION"
+    | "ADD_LIQUIDITY"
+    | "REMOVE_LIQUIDITY"
+    | "CLAIM_FEES"
+    | "REBALANCE";
+  userId: string;
+}
+
 export class JobQueueService {
   private redis: Redis;
+
   private positionMonitorQueue: Queue<PositionMonitorJobData>;
-  private priceAlertQueue: Queue<PriceAlertJobData>;
-  private rebalanceQueue: Queue<RebalanceJobData>;
   private positionMonitorWorker!: Worker<PositionMonitorJobData>;
+  // private priceAlertQueue: Queue<PriceAlertJobData>;
+  // private rebalanceQueue: Queue<RebalanceJobData>;
   // private priceAlertWorker!: Worker<PriceAlertJobData>;
-  private rebalanceWorker!: Worker<RebalanceJobData>;
+  // private rebalanceWorker!: Worker<RebalanceJobData>;
+
+  private transactionProcessingWorker!: Worker<TransactionProcessingJobData>;
+  private transactionProcessingQueue!: Queue<TransactionProcessingJobData>;
 
   private rebalanceService: RebalanceService;
-  private priceMonitoringService: PriceMonitoringService;
+  private positionService: PositionService;
+  private jupiterService: JupiterService;
+  private tokenAdapter: TokenAdapter;
+  // private priceMonitoringService: PriceMonitoringService;
 
   constructor() {
     this.redis = new Redis(CONFIG.REDIS.URL, {
@@ -59,13 +91,23 @@ export class JobQueueService {
     };
 
     // Initialize queues
-    this.positionMonitorQueue = new Queue("position-monitor", queueOptions);
-    this.priceAlertQueue = new Queue("price-alert", queueOptions);
-    this.rebalanceQueue = new Queue("rebalance", queueOptions);
+    this.positionMonitorQueue = new Queue(
+      POSITION_MONITOR_QUEUE_NAME,
+      queueOptions
+    );
+    // this.priceAlertQueue = new Queue("price-alert", queueOptions);
+    // this.rebalanceQueue = new Queue("rebalance", queueOptions);
+    this.transactionProcessingQueue = new Queue(
+      PROCESSING_TX_QUEUE_NAME,
+      queueOptions
+    );
 
     // Initialize services
     this.rebalanceService = new RebalanceService();
-    this.priceMonitoringService = new PriceMonitoringService();
+    this.jupiterService = new JupiterService();
+    this.tokenAdapter = new TokenAdapter();
+    this.positionService = new PositionService();
+    // this.priceMonitoringService = new PriceMonitoringService();
 
     // Initialize workers
     this.initializeWorkers();
@@ -80,7 +122,7 @@ export class JobQueueService {
     };
 
     this.positionMonitorWorker = new Worker<PositionMonitorJobData>(
-      "position-monitor",
+      POSITION_MONITOR_QUEUE_NAME,
       async (job: Job<PositionMonitorJobData>) => {
         return this.processPositionMonitorJob(job);
       },
@@ -96,19 +138,28 @@ export class JobQueueService {
     //   workerOptions
     // );
 
-    this.rebalanceWorker = new Worker<RebalanceJobData>(
-      "rebalance",
-      async (job: Job<RebalanceJobData>) => {
-        return this.processRebalanceJob(job);
+    // this.rebalanceWorker = new Worker<RebalanceJobData>(
+    //   "rebalance",
+    //   async (job: Job<RebalanceJobData>) => {
+    //     return this.processRebalanceJob(job);
+    //   },
+    //   { ...workerOptions, concurrency: 2 } // Lower concurrency for rebalancing
+    // );
+
+    this.transactionProcessingWorker = new Worker<TransactionProcessingJobData>(
+      PROCESSING_TX_QUEUE_NAME,
+      async (job: Job<TransactionProcessingJobData>) => {
+        return this.processTransactionJob(job);
       },
-      { ...workerOptions, concurrency: 2 } // Lower concurrency for rebalancing
+      workerOptions
     );
 
     // Error handling
     [
       this.positionMonitorWorker,
       // this.priceAlertWorker,
-      this.rebalanceWorker,
+      // this.rebalanceWorker,
+      this.transactionProcessingWorker,
     ].forEach((worker) => {
       worker.on("failed", (job, err) => {
         logger.error(`Job ${job?.id} failed:`, err);
@@ -120,150 +171,12 @@ export class JobQueueService {
     });
   }
 
-  private async processPositionMonitorJob(job: Job<PositionMonitorJobData>) {
-    const { userId, positionId } = job.data;
-
-    try {
-      logger.info(`Processing position monitor job for user ${userId}`);
-
-      // Get user's auto-rebalance settings
-      const user = await db.query.users.findFirst({
-        where: eq(users.id, userId),
-      });
-
-      if (!user?.autoRebalanceEnabled) {
-        return { skipped: true, reason: "Auto-rebalance disabled" };
-      }
-
-      // Get positions to monitor
-      const positionsToCheck = positionId
-        ? await db.query.positions.findMany({
-            where: and(
-              eq(positions.userId, userId),
-              eq(positions.id, positionId)
-            ),
-          })
-        : await db.query.positions.findMany({
-            where: eq(positions.userId, userId),
-          });
-
-      const results = [];
-
-      for (const position of positionsToCheck) {
-        const analysis = await this.rebalanceService.analyzePosition(
-          position.id
-        );
-
-        if (analysis?.shouldRebalance) {
-          // Queue rebalance job
-          await this.queueRebalanceJob({
-            positionId: position.id,
-            userId: userId,
-            strategy: user.rebalanceStrategy || "STANDARD",
-            reason: analysis.reason || "Position analysis triggered rebalance",
-          });
-
-          results.push({
-            positionId: position.id,
-            action: "rebalance_queued",
-            reason: analysis.reason,
-          });
-        } else {
-          results.push({
-            positionId: position.id,
-            action: "no_action_needed",
-            health: analysis?.reason,
-          });
-        }
-      }
-
-      return { processed: results.length, results };
-    } catch (error) {
-      logger.error(`Position monitor job failed for user ${userId}:`, error);
-      throw error;
-    }
+  async setupScheduledJobs() {
+    await this.positionMonitorQueue.obliterate({ force: true });
+    await delay(1000);
+    logger.info("Scheduled jobs setup completed");
   }
 
-  // private async processPriceAlertJob(job: Job<PriceAlertJobData>) {
-  //   const { tokenAddress, threshold, direction } = job.data;
-
-  //   try {
-  //     logger.info(`Processing price alert job for token ${tokenAddress}`);
-
-  //     const currentPrice =
-  //       await this.priceMonitoringService.getCurrentPrice(tokenAddress);
-
-  //     if (!currentPrice) {
-  //       throw new Error(`Could not fetch price for token ${tokenAddress}`);
-  //     }
-
-  //     const alertTriggered =
-  //       direction === "up"
-  //         ? currentPrice.price >= threshold
-  //         : currentPrice.price <= threshold;
-
-  //     if (alertTriggered) {
-  //       // Find positions affected by this price change
-  //       const affectedPositions =
-  //         await this.priceMonitoringService.getPositionsForToken(tokenAddress);
-
-  //       for (const position of affectedPositions) {
-  //         await this.queuePositionMonitorJob({
-  //           userId: position.userId,
-  //           positionId: position.id,
-  //         });
-  //       }
-
-  //       return {
-  //         triggered: true,
-  //         currentPrice: currentPrice.price,
-  //         threshold,
-  //         direction,
-  //         affectedPositions: affectedPositions.length,
-  //       };
-  //     }
-
-  //     return {
-  //       triggered: false,
-  //       currentPrice: currentPrice.price,
-  //       threshold,
-  //       direction,
-  //     };
-  //   } catch (error) {
-  //     logger.error(`Price alert job failed for token ${tokenAddress}:`, error);
-  //     throw error;
-  //   }
-  // }
-
-  private async processRebalanceJob(job: Job<RebalanceJobData>) {
-    const { positionId, userId, strategy, reason } = job.data;
-
-    try {
-      logger.info(`Processing rebalance job for position ${positionId}`);
-
-      const result = await this.rebalanceService.executeRebalance(
-        positionId
-        // strategy
-      );
-
-      if (result.success) {
-        logger.info(`Rebalance completed for position ${positionId}:`, result);
-        return {
-          success: true,
-          transactionId: result.transactionId,
-          reason,
-          strategy,
-        };
-      } else {
-        throw new Error(result.error || "Rebalance failed");
-      }
-    } catch (error) {
-      logger.error(`Rebalance job failed for position ${positionId}:`, error);
-      throw error;
-    }
-  }
-
-  // Public Methods to Queue Jobs
   async queuePositionMonitorJob(data: PositionMonitorJobData, delay?: number) {
     return this.positionMonitorQueue.add("monitor-position", data, {
       delay,
@@ -271,32 +184,40 @@ export class JobQueueService {
     });
   }
 
-  async queuePriceAlertJob(data: PriceAlertJobData, delay?: number) {
-    return this.priceAlertQueue.add("price-alert", data, {
-      delay,
-      jobId: `alert-${data.tokenAddress}-${data.direction}-${Date.now()}`,
+  // async queuePriceAlertJob(data: PriceAlertJobData, delay?: number) {
+  //   return this.priceAlertQueue.add("price-alert", data, {
+  //     delay,
+  //     jobId: `alert-${data.tokenAddress}-${data.direction}-${Date.now()}`,
+  //   });
+  // }
+
+  // async queueRebalanceJob(data: RebalanceJobData, delay?: number) {
+  //   return this.rebalanceQueue.add("rebalance", data, {
+  //     delay,
+  //     priority: 10, // High priority for rebalancing
+  //     jobId: `rebalance-${data.positionId}-${Date.now()}`,
+  //   });
+  // }
+
+  async queueTransactionProcessingJob(
+    data: TransactionProcessingJobData,
+    delay?: number
+  ) {
+    await this.transactionProcessingQueue.add("process-transaction", data, {
+      delay: delay || 2_000, // 2 second delay to allow transaction confirmation
     });
   }
 
-  async queueRebalanceJob(data: RebalanceJobData, delay?: number) {
-    return this.rebalanceQueue.add("rebalance", data, {
-      delay,
-      priority: 10, // High priority for rebalancing
-      jobId: `rebalance-${data.positionId}-${Date.now()}`,
-    });
-  }
-
-  // Add new methods to JobQueueService class
-
-  // Create individual position monitoring job
   async createPositionMonitorJob(positionId: string, userId: string) {
+    logger.info(`createPositionMonitorJob ${positionId} ${userId}`);
     const jobId = `position-monitor-${positionId}`;
 
     await this.positionMonitorQueue.add(
       "monitor-single-position",
       { userId, positionId },
       {
-        repeat: { pattern: "0 * * * *" }, // Every hour
+        // repeat: { pattern: "0 * * * *" }, // Every hour
+        repeat: { pattern: "*/10 * * * * *" }, // Every hour
         jobId,
       }
     );
@@ -305,7 +226,6 @@ export class JobQueueService {
     return jobId;
   }
 
-  // Remove position monitoring job
   async removePositionMonitorJob(positionId: string) {
     const jobId = `position-monitor-${positionId}`;
 
@@ -320,44 +240,473 @@ export class JobQueueService {
     logger.info(`Removed monitoring job for position ${positionId}`);
   }
 
-  // Update setupScheduledJobs to remove global monitoring
-  async setupScheduledJobs() {
-    // Remove the global position monitoring
-    // Keep only price monitoring if needed
-    await this.priceAlertQueue.add(
-      "scheduled-price-check",
-      { tokenAddress: "all", threshold: 0, direction: "up" },
-      {
-        repeat: { pattern: "* * * * *" }, // Every minute
-        jobId: "scheduled-price-check",
+  // processing
+  private async processPositionMonitorJob(job: Job<PositionMonitorJobData>) {
+    const { userId, positionId } = job.data;
+
+    if (!userId || !positionId) return;
+
+    try {
+      logger.info(`Processing position monitor job for user ${userId}`);
+
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+      });
+
+      if (!user) return;
+
+      const position = await db.query.positions.findFirst({
+        where: eq(positions.id, positionId),
+      });
+
+      if (!position) return;
+
+      // const result = await this.rebalanceService.analyzePosition(
+      //   position.poolAddress,
+      //   position.positionAddress
+      // )
+
+      const result = {
+        isInRange: false,
+        activeBinId: 0,
+        positionLowerBinId: 0,
+        positionUpperBinId: 0,
+        distanceFromActive: 0,
+      };
+
+      if (!result.isInRange) {
+        // queue rebalance job
+        const closeResult = await this.positionService.closePositionV2(
+          user,
+          position.poolAddress,
+          position.positionAddress
+        );
       }
+
+      // Get positions to monitor
+      // const positionsToCheck = positionId
+      //   ? await db.query.positions.findMany({
+      //       where: and(
+      //         eq(positions.userId, userId),
+      //         eq(positions.id, positionId)
+      //       ),
+      //     })
+      //   : await db.query.positions.findMany({
+      //       where: eq(positions.userId, userId),
+      //     });
+
+      // const results = [];
+
+      // for (const position of positionsToCheck) {
+      //   const analysis = await this.rebalanceService.analyzePosition(
+      //     position.id
+      //   );
+
+      //   if (analysis?.shouldRebalance) {
+      //     // Queue rebalance job
+      //     await this.queueRebalanceJob({
+      //       positionId: position.id,
+      //       userId: userId,
+      //       strategy: user.rebalanceStrategy || "STANDARD",
+      //       reason: analysis.reason || "Position analysis triggered rebalance",
+      //     });
+
+      //     results.push({
+      //       positionId: position.id,
+      //       action: "rebalance_queued",
+      //       reason: analysis.reason,
+      //     });
+      //   } else {
+      //     results.push({
+      //       positionId: position.id,
+      //       action: "no_action_needed",
+      //       health: analysis?.reason,
+      //     });
+      //   }
+      // }
+
+      // return { processed: results.length, results };
+      return { processed: 1, results: [] };
+    } catch (error) {
+      logger.error(`Position monitor job failed for user ${userId}:`, error);
+      throw error;
+    }
+  }
+
+  // private async processRebalanceJob(job: Job<RebalanceJobData>) {
+  //   const { positionId, userId, strategy, reason } = job.data;
+
+  //   try {
+  //     logger.info(`Processing rebalance job for position ${positionId}`);
+
+  //     const result = await this.rebalanceService.executeRebalance(
+  //       positionId
+  //       // strategy
+  //     );
+
+  //     if (result.success) {
+  //       logger.info(`Rebalance completed for position ${positionId}:`, result);
+  //       return {
+  //         success: true,
+  //         transactionId: result.transactionId,
+  //         reason,
+  //         strategy,
+  //       };
+  //     } else {
+  //       throw new Error(result.error || "Rebalance failed");
+  //     }
+  //   } catch (error) {
+  //     logger.error(`Rebalance job failed for position ${positionId}:`, error);
+  //     throw error;
+  //   }
+  // }
+
+  private async processTransactionJob(job: Job<TransactionProcessingJobData>) {
+    const { signature, operationType, userId } = job.data;
+
+    try {
+      console.log(
+        `[TransactionProcessor] Processing ${operationType} transaction: ${signature}`
+      );
+
+      const [pendingTx] = await db
+        .select()
+        .from(pendingTransactions)
+        .where(eq(pendingTransactions.signature, signature));
+
+      if (!pendingTx) {
+        throw new Error(`Pending transaction not found: ${signature}`);
+      }
+
+      await db
+        .update(pendingTransactions)
+        .set({
+          status: "PROCESSING",
+          lastProcessedAt: new Date(),
+        })
+        .where(eq(pendingTransactions.signature, signature));
+
+      const connection = new Connection(CONFIG.SOLANA.RPC_URL, "confirmed");
+      const parsedTransaction = await connection.getParsedTransaction(
+        signature,
+        {
+          maxSupportedTransactionVersion: 0,
+        }
+      );
+
+      if (!parsedTransaction) {
+        throw new Error(`Transaction not found or not confirmed: ${signature}`);
+      }
+
+      console.log(
+        `[TransactionProcessor] Transaction confirmed, processing ${operationType}`
+      );
+
+      switch (operationType) {
+        case "CREATE_POSITION":
+          await this.processCreatePositionTransaction(
+            parsedTransaction,
+            signature,
+            pendingTx.metadata,
+            userId
+          );
+          break;
+        case "REBALANCE":
+          await this.processRebalanceTransaction(
+            parsedTransaction,
+            signature,
+            pendingTx.metadata,
+            userId
+          );
+          break;
+        default:
+          console.log(
+            `[TransactionProcessor] Operation type ${operationType} not implemented yet`
+          );
+      }
+
+      // Mark as completed
+      await db
+        .update(pendingTransactions)
+        .set({
+          status: "COMPLETED",
+          lastProcessedAt: new Date(),
+        })
+        .where(eq(pendingTransactions.signature, signature));
+
+      console.log(
+        `[TransactionProcessor] Successfully processed ${operationType}: ${signature}`
+      );
+    } catch (error) {
+      console.error(
+        `[TransactionProcessor] Error processing transaction ${signature}:`,
+        error
+      );
+
+      // Update retry count and status
+      const [currentTx] = await db
+        .select()
+        .from(pendingTransactions)
+        .where(eq(pendingTransactions.signature, signature));
+
+      if (currentTx) {
+        const newRetryCount = currentTx.retryCount + 1;
+        const newStatus =
+          newRetryCount >= currentTx.maxRetries ? "FAILED" : "RETRY";
+
+        await db
+          .update(pendingTransactions)
+          .set({
+            status: newStatus,
+            retryCount: newRetryCount,
+            errorMessage:
+              error instanceof Error ? error.message : "Unknown error",
+            lastProcessedAt: new Date(),
+          })
+          .where(eq(pendingTransactions.signature, signature));
+      }
+
+      throw error;
+    }
+  }
+
+  private async processCreatePositionTransaction(
+    transaction: ParsedTransactionWithMeta,
+    signature: string,
+    metadata: string | null,
+    userId: string
+  ) {
+    console.log(
+      `[TransactionProcessor] Processing CREATE_POSITION for user ${userId}`
     );
 
-    logger.info(
-      "Scheduled jobs setup completed (without global position monitoring)"
+    if (!metadata) {
+      throw new Error("Missing metadata for create position transaction");
+    }
+
+    const meteoraParsedIxs = await parseMeteoraInstructions(transaction);
+    if (meteoraParsedIxs.length === 0) {
+      throw new Error("No meteora instruction found");
+    }
+
+    const openIx = meteoraParsedIxs.find(
+      (ix) =>
+        ix.instructionType === "open" &&
+        ix.instructionName === "initialize_position"
     );
+
+    const addIx = meteoraParsedIxs.find(
+      (ix) =>
+        ix.instructionType === "add" &&
+        ix.instructionName === "add_liquidity_by_strategy2"
+    );
+
+    if (!openIx || !addIx) {
+      throw new Error("No meteora instruction found");
+    }
+
+    const positionAddress = openIx.accounts.position;
+    const poolAddress = openIx.accounts.lbPair;
+    const mintX = addIx.accounts.tokenXMint;
+    const mintY = addIx.accounts.tokenYMint;
+
+    if (!mintX || !mintY) {
+      throw new Error("No token mint found");
+    }
+
+    const { tokenX: jupiterTokenX, tokenY: jupiterTokenY } =
+      await this.jupiterService.getTokenPairInfo(mintX, mintY);
+
+    const tokenX = this.tokenAdapter.transformToken(jupiterTokenX);
+    const tokenY = this.tokenAdapter.transformToken(jupiterTokenY);
+
+    const amountX =
+      addIx.tokenTransfers.find(
+        (transfer) => transfer.mint === addIx.accounts.tokenXMint
+      )?.amount ?? 0;
+
+    const amountY =
+      addIx.tokenTransfers.find(
+        (transfer) => transfer.mint === addIx.accounts.tokenYMint
+      )?.amount ?? 0;
+
+    if (amountX === 0 || amountY === 0) {
+      throw new Error("No token amount found");
+    }
+
+    // TODO move to position.service.ts
+    const newPos = await createPosition({
+      userId: userId,
+      positionAddress,
+      poolAddress,
+      tokenX,
+      tokenY,
+      strategyType: "DLMM",
+      tokenXAmount: amountX.toString(),
+      tokenYAmount: amountY.toString(),
+      status: "ACTIVE",
+      creationSignature: signature,
+    });
+
+    if (newPos) {
+      // this.createPositionMonitorJob(newPos.id, userId);
+    }
+
+    console.log(
+      `[TransactionProcessor] Position created in database for signature: ${signature}`
+    );
+  }
+
+  private async processRebalanceTransaction(
+    transaction: ParsedTransactionWithMeta,
+    signature: string,
+    metadata: string | null,
+    userId: string
+  ) {
+    console.log(
+      `[TransactionProcessor] Processing REBALANCE for user ${userId}`
+    );
+
+    if (!metadata) {
+      throw new Error("Missing metadata for rebalance transaction");
+    }
+
+    const meteoraParsedIxs = await parseMeteoraInstructions(transaction);
+    if (meteoraParsedIxs.length === 0) {
+      throw new Error("No meteora instruction found");
+    }
+
+    console.log("---------------------------");
+    console.dir(meteoraParsedIxs, { depth: null });
+    console.log("---------------------------");
+
+    const removeIx = meteoraParsedIxs.find(
+      (ix) =>
+        ix.instructionType === "remove" &&
+        ix.instructionName === "remove_liquidity_by_range2"
+    );
+
+    const claimIx = meteoraParsedIxs.find(
+      (ix) =>
+        ix.instructionType === "claim" && ix.instructionName === "claim_fee2"
+    );
+
+    const closeIx = meteoraParsedIxs.find(
+      (ix) =>
+        ix.instructionType === "close" &&
+        ix.instructionName === "close_position_if_empty"
+    );
+
+    if (!removeIx || !claimIx || !closeIx) {
+      throw new Error("No meteora instruction found");
+    }
+
+    console.log(
+      `[TransactionProcessor] Position rebalanced in database for signature: ${signature}`
+    );
+
+    //     [
+    //   {
+    //     isHawksight: false,
+    //     signature: '3DP1SbuWJbEdJn22gvRiEJzXerpkTAJx5YXrjt3n29PYKw2NnNPr5BzqFkgeQB1iZvkf5hB8AiXNLKa5JkenvdVp',
+    //     slot: 365060609,
+    //     blockTime: 1757172092,
+    //     instructionName: 'remove_liquidity_by_range2',
+    //     instructionType: 'remove',
+    //     accounts: {
+    //       position: '3qm8JDpEMqDLut2vyJVe1PnjXy4pYHgYpak8jPwSJVXW',
+    //       lbPair: 'GMeANduWzq5MkgaHgDCihHH8HHak8hvRji1FMKCZwt4j',
+    //       sender: '42MXihgbqSkKroVrnurgwt2X9kQGsr9pGx9Qnq4QUkht',
+    //       tokenXMint: '5XgpGK83mxVdcGuZxv7My99ZmuSzdJo4noLaaD4bpump',
+    //       tokenYMint: 'So11111111111111111111111111111111111111112',
+    //       userTokenX: '3wy1i6ks2UZrFiQ7Wy2Rt5xPHUkAafDeHSiAVef4We1F',
+    //       userTokenY: 'H8EEgiiDsMsnWaftwu4ZGCJDTQXzLGBDzPVrnxTKLxBC'
+    //     },
+    //     tokenTransfers: [
+    //       {
+    //         mint: '5XgpGK83mxVdcGuZxv7My99ZmuSzdJo4noLaaD4bpump',
+    //         amount: 23318770726
+    //       },
+    //       {
+    //         mint: 'So11111111111111111111111111111111111111112',
+    //         amount: 0
+    //       }
+    //     ],
+    //     activeBinId: -514,
+    //     removalBps: 10000
+    //   },
+    //   {
+    //     isHawksight: false,
+    //     signature: '3DP1SbuWJbEdJn22gvRiEJzXerpkTAJx5YXrjt3n29PYKw2NnNPr5BzqFkgeQB1iZvkf5hB8AiXNLKa5JkenvdVp',
+    //     slot: 365060609,
+    //     blockTime: 1757172092,
+    //     instructionName: 'claim_fee2',
+    //     instructionType: 'claim',
+    //     accounts: {
+    //       position: '3qm8JDpEMqDLut2vyJVe1PnjXy4pYHgYpak8jPwSJVXW',
+    //       lbPair: 'GMeANduWzq5MkgaHgDCihHH8HHak8hvRji1FMKCZwt4j',
+    //       sender: '42MXihgbqSkKroVrnurgwt2X9kQGsr9pGx9Qnq4QUkht',
+    //       tokenXMint: '5XgpGK83mxVdcGuZxv7My99ZmuSzdJo4noLaaD4bpump',
+    //       tokenYMint: 'So11111111111111111111111111111111111111112',
+    //       userTokenX: '3wy1i6ks2UZrFiQ7Wy2Rt5xPHUkAafDeHSiAVef4We1F',
+    //       userTokenY: 'H8EEgiiDsMsnWaftwu4ZGCJDTQXzLGBDzPVrnxTKLxBC'
+    //     },
+    //     tokenTransfers: [
+    //       {
+    //         mint: '5XgpGK83mxVdcGuZxv7My99ZmuSzdJo4noLaaD4bpump',
+    //         amount: 790116613
+    //       },
+    //       {
+    //         mint: 'So11111111111111111111111111111111111111112',
+    //         amount: 3703797
+    //       }
+    //     ],
+    //     activeBinId: null,
+    //     removalBps: null
+    //   },
+    //   {
+    //     isHawksight: false,
+    //     signature: '3DP1SbuWJbEdJn22gvRiEJzXerpkTAJx5YXrjt3n29PYKw2NnNPr5BzqFkgeQB1iZvkf5hB8AiXNLKa5JkenvdVp',
+    //     slot: 365060609,
+    //     blockTime: 1757172092,
+    //     instructionName: 'close_position_if_empty',
+    //     instructionType: 'close',
+    //     accounts: {
+    //       position: '3qm8JDpEMqDLut2vyJVe1PnjXy4pYHgYpak8jPwSJVXW',
+    //       lbPair: '',
+    //       sender: '42MXihgbqSkKroVrnurgwt2X9kQGsr9pGx9Qnq4QUkht'
+    //     },
+    //     tokenTransfers: [],
+    //     activeBinId: null,
+    //     removalBps: null
+    //   }
+    // ]
   }
 
   // Queue Management
   async getQueueStats() {
-    const [positionStats, priceStats, rebalanceStats] = await Promise.all([
+    const [
+      positionStats,
+      //  priceStats,
+      // rebalanceStats
+    ] = await Promise.all([
       this.positionMonitorQueue.getJobCounts(),
-      this.priceAlertQueue.getJobCounts(),
-      this.rebalanceQueue.getJobCounts(),
+      // this.priceAlertQueue.getJobCounts(),
+      // this.rebalanceQueue.getJobCounts(),
     ]);
 
     return {
       positionMonitor: positionStats,
-      priceAlert: priceStats,
-      rebalance: rebalanceStats,
+      // priceAlert: priceStats,
+      // rebalance: rebalanceStats,
     };
   }
 
   async pauseQueues() {
     await Promise.all([
       this.positionMonitorQueue.pause(),
-      this.priceAlertQueue.pause(),
-      this.rebalanceQueue.pause(),
+      // this.priceAlertQueue.pause(),
+      // this.rebalanceQueue.pause(),
     ]);
     logger.info("All queues paused");
   }
@@ -365,8 +714,8 @@ export class JobQueueService {
   async resumeQueues() {
     await Promise.all([
       this.positionMonitorQueue.resume(),
-      this.priceAlertQueue.resume(),
-      this.rebalanceQueue.resume(),
+      // this.priceAlertQueue.resume(),
+      // this.rebalanceQueue.resume(),
     ]);
     logger.info("All queues resumed");
   }
@@ -375,15 +724,17 @@ export class JobQueueService {
     logger.info("Shutting down job queue service...");
 
     await Promise.all([
+      this.transactionProcessingWorker.close(),
       this.positionMonitorWorker.close(),
       // this.priceAlertWorker.close(),
-      this.rebalanceWorker.close(),
+      // this.rebalanceWorker.close(),
     ]);
 
     await Promise.all([
+      this.transactionProcessingQueue.close(),
       this.positionMonitorQueue.close(),
-      this.priceAlertQueue.close(),
-      this.rebalanceQueue.close(),
+      // this.priceAlertQueue.close(),
+      // this.rebalanceQueue.close(),
     ]);
 
     await this.redis.quit();

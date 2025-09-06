@@ -5,14 +5,8 @@ import DLMM, {
   LbPosition,
   LbPair,
 } from "@meteora-ag/dlmm";
-import {
-  Connection,
-  PublicKey,
-  Keypair,
-  TransactionInstruction,
-} from "@solana/web3.js";
+import { Connection, PublicKey, TransactionInstruction } from "@solana/web3.js";
 import BN from "bn.js";
-import { meteoraPoolService } from "../meteora/pool.service";
 import { CONFIG } from "@/config";
 
 export interface DepositAmountCalculation {
@@ -33,18 +27,32 @@ export interface DepositAmountCalculation {
 }
 
 export class MeteoraDlmmService {
-  async createPool(
-    connection: Connection,
-    poolAddress: PublicKey
-  ): Promise<DLMM> {
-    // @ts-ignore
-    return DLMM.default.create(connection, poolAddress);
-  }
+  private poolCache = new Map<string, { instance: DLMM; timestamp: number }>();
+  private readonly CACHE_TTL = 30000; // 30 seconds
 
   private async createInstance(poolAddress: string | PublicKey): Promise<DLMM> {
+    const poolKey =
+      typeof poolAddress === "string" ? poolAddress : poolAddress.toBase58();
+    const now = Date.now();
+
+    // Check if we have a valid cached instance
+    const cached = this.poolCache.get(poolKey);
+    if (cached && now - cached.timestamp < this.CACHE_TTL) {
+      return cached.instance;
+    }
+
+    // Create new instance
     const connection = new Connection(CONFIG.SOLANA.RPC_URL, "confirmed");
     // @ts-ignore
-    return DLMM.default.create(connection, new PublicKey(poolAddress));
+    const instance = await DLMM.default.create(
+      connection,
+      new PublicKey(poolAddress)
+    );
+
+    // Cache the instance
+    this.poolCache.set(poolKey, { instance, timestamp: now });
+
+    return instance;
   }
 
   async createPositionIx(
@@ -61,9 +69,6 @@ export class MeteoraDlmmService {
     const dlmmPool = await this.createInstance(poolAddress);
 
     const activeBin = await dlmmPool.getActiveBin();
-    // const activeBinPricePerToken = dlmmPool.fromPricePerLamport(
-    //   Number(activeBin.price)
-    // );
 
     const minBinId = activeBin.binId - rangeInterval;
     const maxBinId = activeBin.binId + rangeInterval;
@@ -91,6 +96,38 @@ export class MeteoraDlmmService {
 
     return {
       instructions: createPositionTx.instructions,
+    };
+  }
+
+  async closePositionIx(
+    ownerAddress: PublicKey,
+    poolAddress: PublicKey,
+    positionAddress: PublicKey
+  ): Promise<{
+    instructions: TransactionInstruction[];
+  }> {
+    const dlmmPool = await this.createInstance(poolAddress);
+    const position = await dlmmPool.getPosition(positionAddress);
+
+    if (!position) {
+      throw new Error("Position not found");
+    }
+
+    const binIdsToRemove = position.positionData.positionBinData.map(
+      (bin) => bin.binId
+    );
+
+    const removeLiquidityTx = await dlmmPool.removeLiquidity({
+      position: position.publicKey,
+      user: ownerAddress,
+      fromBinId: binIdsToRemove[0],
+      toBinId: binIdsToRemove[binIdsToRemove.length - 1],
+      bps: new BN(100 * 100), // 100% (range from 0 to 100)
+      shouldClaimAndClose: true, // should claim swap fee and close position together
+    });
+
+    return {
+      instructions: removeLiquidityTx.flatMap((tx) => tx.instructions),
     };
   }
 
@@ -222,14 +259,20 @@ export class MeteoraDlmmService {
     };
   }
 
-  async closePositionIx(
-    ownerAddress: string | PublicKey,
+  async analyzePositionInRange(
     poolAddress: string | PublicKey,
     positionAddress: string | PublicKey
   ): Promise<{
-    instructions: TransactionInstruction[];
+    isInRange: boolean;
+    activeBinId: number;
+    positionLowerBinId: number;
+    positionUpperBinId: number;
+    distanceFromActive: number;
   }> {
     const dlmmPool = await this.createInstance(poolAddress);
+
+    const activeBin = await dlmmPool.getActiveBin();
+
     const position = await dlmmPool.getPosition(
       typeof positionAddress === "string"
         ? new PublicKey(positionAddress)
@@ -240,26 +283,56 @@ export class MeteoraDlmmService {
       throw new Error("Position not found");
     }
 
-    const binIdsToRemove = position.positionData.positionBinData.map(
-      (bin) => bin.binId
+    const positionData = position.positionData;
+    const lowerBinId = positionData.lowerBinId;
+    const upperBinId = positionData.upperBinId;
+    const activeBinId = activeBin.binId;
+
+    const isInRange = activeBinId >= lowerBinId && activeBinId <= upperBinId;
+
+    const distanceFromActive = Math.min(
+      Math.abs(activeBinId - lowerBinId),
+      Math.abs(activeBinId - upperBinId)
     );
 
-    const removeLiquidityTx = await dlmmPool.removeLiquidity({
-      position: position.publicKey,
-      user:
-        typeof ownerAddress === "string"
-          ? new PublicKey(ownerAddress)
-          : ownerAddress,
-      fromBinId: binIdsToRemove[0],
-      toBinId: binIdsToRemove[binIdsToRemove.length - 1],
-      bps: new BN(100 * 100), // 100% (range from 0 to 100)
-      shouldClaimAndClose: true, // should claim swap fee and close position together
-    });
-
     return {
-      instructions: removeLiquidityTx.flatMap((tx) => tx.instructions),
+      isInRange,
+      activeBinId,
+      positionLowerBinId: lowerBinId,
+      positionUpperBinId: upperBinId,
+      distanceFromActive,
     };
   }
 }
 
 export const meteoraDlmmService = new MeteoraDlmmService();
+
+function formatComplexObject(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+
+  if (obj instanceof PublicKey) {
+    return obj.toString();
+  }
+
+  if (obj instanceof BN) {
+    return obj.toString();
+  }
+
+  if (typeof obj === "bigint") {
+    return obj.toString();
+  }
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => formatComplexObject(item));
+  }
+
+  if (typeof obj === "object") {
+    const formatted: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      formatted[key] = formatComplexObject(value);
+    }
+    return formatted;
+  }
+
+  return obj;
+}

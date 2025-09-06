@@ -7,8 +7,10 @@ import {
   pgEnum,
   uuid,
   integer,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import { Token } from "@/types/token.types";
 
 // Enums
 export const strategyTypeEnum = pgEnum("StrategyType", [
@@ -40,6 +42,23 @@ export const pointTypeEnum = pgEnum("PointType", [
   "REFERRAL_BONUS",
   "FEE_EARNING",
   "ACTIVITY_REWARD",
+]);
+
+export const operationTypeEnum = pgEnum("OperationType", [
+  "CREATE_POSITION",
+  "CLOSE_POSITION",
+  "ADD_LIQUIDITY",
+  "REMOVE_LIQUIDITY",
+  "CLAIM_FEES",
+  "REBALANCE",
+]);
+
+export const pendingTransactionStatusEnum = pgEnum("PendingTransactionStatus", [
+  "PENDING",
+  "PROCESSING",
+  "COMPLETED",
+  "FAILED",
+  "RETRY",
 ]);
 
 // Tables
@@ -82,6 +101,8 @@ export const positions = pgTable("Position", {
     .references(() => users.id, { onDelete: "cascade" }),
   positionAddress: text("positionAddress").notNull(),
   poolAddress: text("poolAddress").notNull(),
+  tokenX: jsonb("tokenX").$type<Token>(),
+  tokenY: jsonb("tokenY").$type<Token>(),
   strategyType: strategyTypeEnum("strategyType").notNull(),
   tokenXAmount: decimal("tokenXAmount", {
     precision: 20,
@@ -91,14 +112,11 @@ export const positions = pgTable("Position", {
     precision: 20,
     scale: 8,
   }).notNull(),
-  currentValue: decimal("currentValue", { precision: 20, scale: 8 }).notNull(),
-  feesEarned: decimal("feesEarned", { precision: 20, scale: 8 })
-    .notNull()
-    .default("0"),
   status: positionStatusEnum("status").notNull().default("ACTIVE"),
   lastRebalanceAt: timestamp("lastRebalanceAt"),
-  priceRangeMin: decimal("priceRangeMin", { precision: 20, scale: 8 }),
-  priceRangeMax: decimal("priceRangeMax", { precision: 20, scale: 8 }),
+  creationSignature: text("creationSignature"),
+  closureSignature: text("closureSignature"),
+  
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });
@@ -157,6 +175,23 @@ export const points = pgTable("Points", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 });
 
+export const pendingTransactions = pgTable("PendingTransaction", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  signature: text("signature").notNull().unique(),
+  operationType: operationTypeEnum("operationType").notNull(),
+  userId: uuid("userId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  status: pendingTransactionStatusEnum("status").notNull().default("PENDING"),
+  metadata: text("metadata"),
+  retryCount: integer("retryCount").notNull().default(0),
+  maxRetries: integer("maxRetries").notNull().default(3),
+  lastProcessedAt: timestamp("lastProcessedAt"),
+  errorMessage: text("errorMessage"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   wallets: many(wallets),
@@ -202,12 +237,12 @@ export const rebalanceEventsRelations = relations(
 export const referralsRelations = relations(referrals, ({ one, many }) => ({
   referrer: one(users, {
     fields: [referrals.referrerId],
-    references: [users.telegramId], 
+    references: [users.telegramId],
     relationName: "referrer",
   }),
   referred: one(users, {
     fields: [referrals.referredId],
-    references: [users.telegramId], 
+    references: [users.telegramId],
     relationName: "referred",
   }),
   points: many(points),
@@ -216,13 +251,23 @@ export const referralsRelations = relations(referrals, ({ one, many }) => ({
 export const pointsRelations = relations(points, ({ one }) => ({
   user: one(users, {
     fields: [points.userId],
-    references: [users.telegramId], 
+    references: [users.telegramId],
   }),
   referral: one(referrals, {
     fields: [points.referralId],
     references: [referrals.id],
   }),
 }));
+
+export const pendingTransactionsRelations = relations(
+  pendingTransactions,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [pendingTransactions.userId],
+      references: [users.id],
+    }),
+  })
+);
 
 // Export types
 export type User = typeof users.$inferSelect;
@@ -239,6 +284,8 @@ export type Referral = typeof referrals.$inferSelect;
 export type NewReferral = typeof referrals.$inferInsert;
 export type Points = typeof points.$inferSelect;
 export type NewPoints = typeof points.$inferInsert;
+export type PendingTransaction = typeof pendingTransactions.$inferSelect;
+export type NewPendingTransaction = typeof pendingTransactions.$inferInsert;
 
 // Export enum types
 export type StrategyType = (typeof strategyTypeEnum.enumValues)[number];
@@ -249,3 +296,6 @@ export type TransactionStatus =
 export type RebalanceStrategy =
   (typeof rebalanceStrategyEnum.enumValues)[number];
 export type PointType = (typeof pointTypeEnum.enumValues)[number];
+export type OperationType = (typeof operationTypeEnum.enumValues)[number];
+export type PendingTransactionStatus =
+  (typeof pendingTransactionStatusEnum.enumValues)[number];
