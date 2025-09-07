@@ -1,4 +1,4 @@
-import { FastifyBaseLogger, FastifyInstance } from "fastify";
+import { FastifyBaseLogger } from "fastify";
 import { Composer, Telegraf } from "telegraf";
 import { BotContext } from "@/types/bot.types";
 import { PortfolioData } from "@/types/portfolio.types";
@@ -7,7 +7,7 @@ import {
   getPositionDetailKeyboard,
 } from "../keyboards/portfolio-menu";
 import { MessageService } from "@/services/message.service";
-import { PortfolioService } from "@/services/portfolio.service";
+import { portfolioService } from "@/services/portfolio.service";
 
 interface TelegramError {
   response?: {
@@ -32,7 +32,7 @@ const PORTFOLIO_CALLBACK = {
 } as const;
 
 // Unified regex for all position actions
-const POSITION_ACTION_REGEX = /^pos:(claim|rebalance):(\d+)$/;
+const POSITION_ACTION_REGEX = /^pos:(claim|rebalance|refresh):(\d+)$/;
 
 // -------- Session helpers --------
 
@@ -184,7 +184,7 @@ async function renderPortfolioPosition(
   const extra = {
     parse_mode: "Markdown" as const,
     ...DISABLE_LINK_PREVIEW,
-    reply_markup: getPositionDetailKeyboard(position, positionIndex),
+    reply_markup: getPositionDetailKeyboard(positionIndex),
   };
   return mode === "edit"
     ? safeEditMessage(context, text, extra)
@@ -193,10 +193,7 @@ async function renderPortfolioPosition(
 
 // -------- Entry command: /portfolio --------
 
-export async function portfolioHandler(
-  ctx: BotContext,
-  _server: FastifyInstance
-) {
+export async function portfolioHandler(ctx: BotContext) {
   const loadingMessage = await ctx.reply("Loading Portfolio...", {
     parse_mode: "Markdown",
   });
@@ -204,7 +201,7 @@ export async function portfolioHandler(
   const loadingMessageId = (loadingMessage as { message_id: number })
     .message_id;
 
-  const portfolioResponse = await PortfolioService.getUserPortfolio(
+  const portfolioResponse = await portfolioService.getUserPortfolio(
     ctx.user.walletAddress!
   );
 
@@ -256,7 +253,7 @@ export function registerPortfolioCallbacks(bot: Telegraf<BotContext>) {
       }
 
       const portfolioResponse =
-        await PortfolioService.getUserPortfolio(walletAddress);
+        await portfolioService.getUserPortfolio(walletAddress);
 
       if (!portfolioResponse.success || !portfolioResponse.data) {
         await answerCallbackSafely(
@@ -291,7 +288,7 @@ export function registerPortfolioCallbacks(bot: Telegraf<BotContext>) {
     }
   });
 
-  // Handle all position actions (claim/toggle_ar/rebalance)
+  // Handle all position actions (claim/toggle_ar/rebalance/refresh)
   router.action(POSITION_ACTION_REGEX, async (context) => {
     const portfolio = getPortfolio(context);
     if (!portfolio) return;
@@ -307,6 +304,52 @@ export function registerPortfolioCallbacks(bot: Telegraf<BotContext>) {
 
       case "rebalance":
         return context.answerCbQuery("Rebalance not implemented.");
+
+      case "refresh": {
+        try {
+          const refreshed = await portfolioService.getPositionByAddress(
+            position.position_address,
+            position.pool_address
+          );
+
+          if (!refreshed.success) {
+            await answerCallbackSafely(
+              context,
+              refreshed.message || "Refresh failed"
+            );
+            return;
+          }
+
+          const updatedPortfolio = { ...portfolio };
+          updatedPortfolio.positions = [...updatedPortfolio.positions];
+          updatedPortfolio.positions[positionIndex] = refreshed.data;
+          setPortfolio(context, updatedPortfolio);
+
+          const edited = await renderPortfolioPosition(
+            context,
+            updatedPortfolio,
+            positionIndex,
+            "edit"
+          );
+
+          await answerCallbackSafely(
+            context,
+            edited ? "Position refreshed" : "Already up to date"
+          );
+        } catch (error: unknown) {
+          const tgErr = error as TelegramError;
+          const desc = tgErr?.response?.description ?? "";
+          if (desc.includes("message is not modified")) {
+            await answerCallbackSafely(context, "Already up to date");
+            return;
+          }
+          await answerCallbackSafely(
+            context,
+            "Failed to refresh position. Please try again."
+          );
+        }
+        return;
+      }
     }
   });
 
