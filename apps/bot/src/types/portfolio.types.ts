@@ -63,8 +63,11 @@ export type PortfolioPosition = {
 
   total_deposits_usd: number;
   total_withdrawals_usd: number;
-  total_claimed_fees_usd: number; // gồm cả rewards
+  total_claimed_fees_usd: number;
   total_unclaimed_fees_usd: number;
+  position_fee_24h_usd?: number;
+
+  position_fee_tvl_24h?: number;
 
   pnl_usd: number;
   pnl_pct?: number;
@@ -76,6 +79,14 @@ export type PortfolioPosition = {
   created_at: string;
 
   is_tracked_in_db?: boolean;
+
+  lower_bin_id?: number;
+  upper_bin_id?: number;
+  active_bin_id?: number;
+  bin_step_bps?: number; // bin step in basis points (e.g., 25 = 0.25%)
+  price_min?: number; // position range lower price (tokenX/tokenY)
+  price_max?: number; // position range upper price (tokenX/tokenY)
+  pool_price?: number; // current pool price (tokenX/tokenY) derived from active bin
 };
 
 export type PortfolioTotals = {
