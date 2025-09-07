@@ -90,7 +90,7 @@ export class MessageService {
       );
     }
 
-    let msg = `**Portfolio Overview**\n\n`;
+    let msg = `**${bold(`Portfolio Overview`)}**\n\n`;
 
     // Display totals in 2 rows instead of 4
     msg += `**Total Positions:** ${bold(totals.total_positions)}    **Total Balance:** ${bold(formatPrice(totals.total_current_value_usd))}\n`;
