@@ -1,6 +1,5 @@
 import { config } from "dotenv";
 
-// Load environment variables
 config();
 
 export const CONFIG = {
@@ -29,57 +28,49 @@ export const CONFIG = {
     HELIUS_API_KEY: process.env.HELIUS_API_KEY || "",
   },
 
-  METEORA: {
-    API_URL: process.env.METEORA_API_URL || "https://dlmm-api.meteora.ag",
-  },
-
   REDIS: {
     URL: process.env.REDIS_URL || "redis://localhost:6379",
-    HOST: process.env.REDIS_HOST || "localhost",
-    PORT: parseInt(process.env.REDIS_PORT || "6379", 10),
-    PASSWORD: process.env.REDIS_PASSWORD || "",
+    // HOST: process.env.REDIS_HOST || "localhost",
+    // PORT: parseInt(process.env.REDIS_PORT || "6379", 10),
+    // PASSWORD: process.env.REDIS_PASSWORD || "",
   },
 
-  ENCRYPTION_KEY: process.env.ENCRYPTION_KEY || "",
+  // ENCRYPTION_KEY: process.env.ENCRYPTION_KEY || "",
 
-  REBALANCING: {
-    ENABLED: true,
-    INTERVAL_MINUTES: parseInt(
-      process.env.REBALANCE_INTERVAL_MINUTES || "60",
-      10
-    ),
-    DEFAULT_THRESHOLD: parseFloat(
-      process.env.DEFAULT_REBALANCE_THRESHOLD || "5.0"
-    ),
-    MAX_GAS_PRICE_SOL: parseFloat(process.env.MAX_GAS_PRICE_SOL || "0.01"),
-  },
+  // REBALANCING: {
+  //   ENABLED: true,
+  //   INTERVAL_MINUTES: parseInt(
+  //     process.env.REBALANCE_INTERVAL_MINUTES || "60",
+  //     10
+  //   ),
+  //   DEFAULT_THRESHOLD: parseFloat(
+  //     process.env.DEFAULT_REBALANCE_THRESHOLD || "5.0"
+  //   ),
+  //   MAX_GAS_PRICE_SOL: parseFloat(process.env.MAX_GAS_PRICE_SOL || "0.01"),
+  // },
 
   LOG_LEVEL: process.env.LOG_LEVEL || "debug",
-  SENTRY_DSN: process.env.SENTRY_DSN || "",
 
-  RATE_LIMIT: {
-    WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS || "60000", 10),
-    MAX_REQUESTS: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || "100", 10),
-  },
+  // RATE_LIMIT: {
+  //   WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS || "60000", 10),
+  //   MAX_REQUESTS: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || "100", 10),
+  // },
 
-  JWT_SECRET: process.env.JWT_SECRET || "",
-  CORS_ORIGIN: process.env.CORS_ORIGIN || "*",
+  // JWT_SECRET: process.env.JWT_SECRET || "",
+  // CORS_ORIGIN: process.env.CORS_ORIGIN || "*",
 };
 
-// Export individual configs for convenience
 export const {
   PORT,
   NODE_ENV,
   DATABASE_URL,
   TELEGRAM,
   SOLANA,
-  METEORA,
   REDIS,
-  ENCRYPTION_KEY,
-  REBALANCING,
+  // REBALANCING,
   LOG_LEVEL,
-  SENTRY_DSN,
-  RATE_LIMIT,
-  JWT_SECRET,
-  CORS_ORIGIN,
+  // SENTRY_DSN,
+  // RATE_LIMIT,
+  // JWT_SECRET,
+  // CORS_ORIGIN,
 } = CONFIG;
