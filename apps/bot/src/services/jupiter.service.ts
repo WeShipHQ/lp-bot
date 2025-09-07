@@ -1,4 +1,8 @@
-import { JupiterTokenInfo } from "@/types/jupiter.types";
+import {
+  JupiterToken,
+  JupiterTokenInfo,
+  JupiterTokenSearchResponse,
+} from "@/types/jupiter.types";
 import {
   JupiterOrderRequest,
   JupiterOrderResponse,
@@ -73,22 +77,46 @@ export class JupiterService {
   //   throw new Error(`Failed to fetch token information: ${lastError?.message}`);
   // }
 
-  async getTokenInfo(poolAddress: string): Promise<JupiterTokenInfo | null> {
-    try {
-      console.log(`[Jupiter] Fetching token info for: ${poolAddress}`);
+  private mapJupiterTokenToTokenInfo(
+    jupiterToken: JupiterToken
+  ): JupiterTokenInfo {
+    return {
+      address: jupiterToken.id,
+      name: jupiterToken.name,
+      symbol: jupiterToken.symbol,
+      icon: jupiterToken.icon,
+      decimals: jupiterToken.decimals,
+      price: jupiterToken.usdPrice || 0,
+      priceChange24h: jupiterToken.stats24h?.priceChange || 0,
+      marketCap: jupiterToken.mcap || 0,
+      volume24h:
+        (jupiterToken.stats24h?.buyVolume || 0) +
+        (jupiterToken.stats24h?.sellVolume || 0),
+      liquidity: jupiterToken.liquidity || 0,
+      isVerified: jupiterToken.isVerified || false,
+      source: "jupiter",
+    };
+  }
 
-      const response = await api.getWithRetry<JupiterTokenInfo[]>(
-        `${this.tokenBaseUrl}/search?query=${poolAddress}`
+  async getTokenInfo(mintAddress: string): Promise<JupiterTokenInfo | null> {
+    try {
+      console.log(`[Jupiter] Fetching token info for: ${mintAddress}`);
+
+      const response = await api.getWithRetry<JupiterTokenSearchResponse>(
+        `${this.tokenBaseUrl}/search?query=${mintAddress}`
       );
 
-      if (response.length === 0) {
+      if (!Array.isArray(response) || response.length === 0) {
         return null;
       }
 
-      return response[0];
+      const token =
+        response.find((t) => t.id === mintAddress) ||
+        (response[0] as JupiterToken);
+      return this.mapJupiterTokenToTokenInfo(token);
     } catch (error) {
       console.error(
-        `[Jupiter] Error fetching token info ${poolAddress}:`,
+        `[Jupiter] Error fetching token info ${mintAddress}:`,
         error
       );
       throw error;
@@ -105,19 +133,24 @@ export class JupiterService {
     try {
       console.log(`[Jupiter] Fetching token info for: ${tokenX}, ${tokenY}`);
 
-      const response = await api.getWithRetry<JupiterTokenInfo[]>(
+      const response = await api.getWithRetry<JupiterTokenSearchResponse>(
         `${this.tokenBaseUrl}/search?query=${tokenX},${tokenY}`
       );
 
-      if (response.length !== 2) {
+      if (!Array.isArray(response) || response.length < 2) {
         throw new Error(
           `[Jupiter] Error fetching token info ${tokenX}, ${tokenY}`
         );
       }
 
+      const tokX =
+        response.find((t) => t.id === tokenX) || (response[0] as JupiterToken);
+      const tokY =
+        response.find((t) => t.id === tokenY) || (response[1] as JupiterToken);
+
       return {
-        tokenX: response[0],
-        tokenY: response[1],
+        tokenX: this.mapJupiterTokenToTokenInfo(tokX),
+        tokenY: this.mapJupiterTokenToTokenInfo(tokY),
       };
     } catch (error) {
       console.error(
