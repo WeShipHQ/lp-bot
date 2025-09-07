@@ -13,7 +13,7 @@ import type {
  */
 export function escapeMarkdown(text: string): string {
   // Characters that need escaping in MarkdownV2: _*[]()~`>#+-=|{}.!
-  return text.replace(/[_*\[\]()~`>#+=|{}.!-]/g, "\\$&");
+  return text.replace(/[_*()~`>#+=|{}!]/g, "\\$&");
 }
 
 /**
@@ -135,10 +135,10 @@ export function list(items: string[], ordered: boolean = false): string {
  * Create a formatted table (simple)
  */
 export function table(headers: string[], rows: string[][]): string {
-  const headerRow = headers.map((h) => escapeMarkdown(h)).join(" \\| ");
-  const separator = headers.map(() => "\\-\\-\\-").join(" \\| ");
+  const headerRow = headers.map((h) => escapeMarkdown(h)).join(" | ");
+  const separator = headers.map(() => "---").join(" | ");
   const dataRows = rows.map((row) =>
-    row.map((cell) => escapeMarkdown(cell)).join(" \\| ")
+    row.map((cell) => escapeMarkdown(cell)).join(" | ")
   );
 
   return [headerRow, separator, ...dataRows].join("\n");
@@ -149,7 +149,7 @@ export function table(headers: string[], rows: string[][]): string {
  */
 export function formatPriceText(price: number, isPositive?: boolean): string {
   const priceStr =
-    // @ts-expect-error
+    // @ts-expect-error - allow both string/number inputs and format simply
     typeof price === "number" ? price.toFixed(2) : price.toString();
 
   if (isPositive === true) {
@@ -182,7 +182,7 @@ export function formatAddress(
   if (truncate && address.length > 12) {
     const start = address.slice(0, 6);
     const end = address.slice(-6);
-    return code(`${start}\.\.\.${end}`);
+    return code(`${start}...${end}`);
   }
   return code(address);
 }
@@ -365,8 +365,11 @@ const markdownSerialiser: Serialiser = (match: string, node?: Node) => {
   }
 };
 
-export function toMarkdownV2(msg: TextMessage, settings: any): string {
-  // @ts-expect-error
+export function toMarkdownV2(
+  msg: TextMessage,
+  settings: Record<string, unknown>
+): string {
+  // @ts-expect-error - library types accept broader shape; tolerate here
   if (settings.remove_formatting) return msg.text ?? msg.caption ?? "";
   const selectedEscaper = settings.markdown_escaper
     ? escapers.MarkdownV2
