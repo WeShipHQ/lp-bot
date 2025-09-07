@@ -281,11 +281,11 @@ export class MessageService {
       const invLow = 1 / high;
       const invHigh = 1 / low;
       if (high < 1) {
-        msg += `**Range (alt):** ${bold(
+        msg += `**Price Range (alt):** ${bold(
           formatNumber(invLow, { maxDecimals: 2 })
         )} - ${bold(formatNumber(invHigh, { maxDecimals: 2 }))} ${sx}/${sy}\n`;
       } else {
-        msg += `**Range (alt):** ${bold(
+        msg += `**Price Range (alt):** ${bold(
           formatNumber(invLow, { maxDecimals: 8 })
         )} - ${bold(formatNumber(invHigh, { maxDecimals: 8 }))} ${sy}/${sx}\n`;
       }
