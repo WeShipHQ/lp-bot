@@ -104,19 +104,80 @@ export const positions = pgTable("Position", {
   tokenX: jsonb("tokenX").$type<Token>(),
   tokenY: jsonb("tokenY").$type<Token>(),
   strategyType: strategyTypeEnum("strategyType").notNull(),
-  tokenXAmount: decimal("tokenXAmount", {
-    precision: 20,
-    scale: 8,
-  }).notNull(),
-  tokenYAmount: decimal("tokenYAmount", {
-    precision: 20,
-    scale: 8,
-  }).notNull(),
+
   status: positionStatusEnum("status").notNull().default("ACTIVE"),
   lastRebalanceAt: timestamp("lastRebalanceAt"),
   creationSignature: text("creationSignature"),
   closureSignature: text("closureSignature"),
-  
+
+  // for pnl
+  depositTokenXAmount: decimal("depositTokenXAmount", {
+    precision: 20,
+    scale: 8,
+  }).notNull(),
+  depositTokenYAmount: decimal("depositTokenYAmount", {
+    precision: 20,
+    scale: 8,
+  }).notNull(),
+  tokenXPriceAtCreation: decimal("tokenXPriceAtCreation", {
+    precision: 20,
+    scale: 8,
+  }).notNull(), // Price in SOL/USD when position created
+  tokenYPriceAtCreation: decimal("tokenYPriceAtCreation", {
+    precision: 20,
+    scale: 8,
+  }).notNull(),
+  // withdraw
+  withdrawTokenXAmount: decimal("withdrawTokenXAmount", {
+    precision: 20,
+    scale: 8,
+  }).notNull(),
+  withdrawTokenYAmount: decimal("withdrawTokenYAmount", {
+    precision: 20,
+    scale: 8,
+  }).notNull(),
+  tokenXPriceAtClosure: decimal("tokenXPriceAtClosure", {
+    precision: 20,
+    scale: 8,
+  }),
+  tokenYPriceAtClosure: decimal("tokenYPriceAtClosure", {
+    precision: 20,
+    scale: 8,
+  }),
+  // fee
+  feeTokenXAmount: decimal("feeTokenXAmount", {
+    precision: 20,
+    scale: 8,
+  }).notNull(),
+  feeTokenYAmount: decimal("feeTokenYAmount", {
+    precision: 20,
+    scale: 8,
+  }).notNull(),
+  initialValueInSol: decimal("initialValueInSol", {
+    precision: 20,
+    scale: 8,
+  }).notNull(),
+  finalValueInSol: decimal("finalValueInSol", {
+    precision: 20,
+    scale: 8,
+  }),
+  feesEarnedInSol: decimal("feesEarnedInSol", {
+    precision: 20,
+    scale: 8,
+  }).default("0"), // Total fees earned in SOL
+  pnlInSol: decimal("pnlInSol", {
+    precision: 20,
+    scale: 8,
+  }),
+  pnlInUsd: decimal("pnlInUsd", {
+    precision: 20,
+    scale: 8,
+  }),
+  pnlPercentage: decimal("pnlPercentage", {
+    precision: 10,
+    scale: 4,
+  }),
+
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });

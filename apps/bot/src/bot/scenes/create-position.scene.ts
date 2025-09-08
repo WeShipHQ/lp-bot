@@ -1030,7 +1030,6 @@ createPositionScene.action("cancel", async (ctx) => {
   return ctx.scene.leave();
 });
 
-// Handle text inputs (for custom amount and custom price change)
 createPositionScene.on(message("text"), async (ctx, next) => {
   const state = ctx.scene.state as WizardState;
 

@@ -14,12 +14,15 @@ import { delay } from "@/utils/misc";
 import { JupiterService } from "./jupiter.service";
 import { TokenAdapter } from "@/adapters/token.adapter";
 import { PositionService } from "./position.service";
+import { TokenPriceService } from "./token-price.service";
 
 const PROCESSING_TX_QUEUE_NAME = "transaction-processing";
 const PROCESSING_TX_WORKER_NAME = "transaction-processing-worker";
 
 const POSITION_MONITOR_QUEUE_NAME = "position-monitor";
 const POSITION_MONITOR_WORKER_NAME = "position-monitor-worker";
+
+const _QUEUE_NAME = "position-monitor";
 
 // Job Types
 export interface PositionMonitorJobData {
@@ -57,19 +60,15 @@ export class JobQueueService {
 
   private positionMonitorQueue: Queue<PositionMonitorJobData>;
   private positionMonitorWorker!: Worker<PositionMonitorJobData>;
-  // private priceAlertQueue: Queue<PriceAlertJobData>;
-  // private rebalanceQueue: Queue<RebalanceJobData>;
-  // private priceAlertWorker!: Worker<PriceAlertJobData>;
-  // private rebalanceWorker!: Worker<RebalanceJobData>;
 
   private transactionProcessingWorker!: Worker<TransactionProcessingJobData>;
   private transactionProcessingQueue!: Queue<TransactionProcessingJobData>;
 
-  private rebalanceService: RebalanceService;
-  private positionService: PositionService;
+  // private rebalanceService: RebalanceService;
+  // private positionService: PositionService;
   private jupiterService: JupiterService;
+  private tokenPriceService: TokenPriceService;
   private tokenAdapter: TokenAdapter;
-  // private priceMonitoringService: PriceMonitoringService;
 
   constructor() {
     this.redis = new Redis(CONFIG.REDIS.URL, {
@@ -90,26 +89,21 @@ export class JobQueueService {
       },
     };
 
-    // Initialize queues
     this.positionMonitorQueue = new Queue(
       POSITION_MONITOR_QUEUE_NAME,
       queueOptions
     );
-    // this.priceAlertQueue = new Queue("price-alert", queueOptions);
-    // this.rebalanceQueue = new Queue("rebalance", queueOptions);
     this.transactionProcessingQueue = new Queue(
       PROCESSING_TX_QUEUE_NAME,
       queueOptions
     );
 
-    // Initialize services
-    this.rebalanceService = new RebalanceService();
+    // this.rebalanceService = new RebalanceService();
     this.jupiterService = new JupiterService();
     this.tokenAdapter = new TokenAdapter();
-    this.positionService = new PositionService();
-    // this.priceMonitoringService = new PriceMonitoringService();
+    // this.positionService = new PositionService();
+    this.tokenPriceService = new TokenPriceService();
 
-    // Initialize workers
     this.initializeWorkers();
   }
 
@@ -129,23 +123,6 @@ export class JobQueueService {
       workerOptions
     );
 
-    // Price Alert Worker
-    // this.priceAlertWorker = new Worker<PriceAlertJobData>(
-    //   "price-alert",
-    //   async (job: Job<PriceAlertJobData>) => {
-    //     return this.processPriceAlertJob(job);
-    //   },
-    //   workerOptions
-    // );
-
-    // this.rebalanceWorker = new Worker<RebalanceJobData>(
-    //   "rebalance",
-    //   async (job: Job<RebalanceJobData>) => {
-    //     return this.processRebalanceJob(job);
-    //   },
-    //   { ...workerOptions, concurrency: 2 } // Lower concurrency for rebalancing
-    // );
-
     this.transactionProcessingWorker = new Worker<TransactionProcessingJobData>(
       PROCESSING_TX_QUEUE_NAME,
       async (job: Job<TransactionProcessingJobData>) => {
@@ -155,20 +132,17 @@ export class JobQueueService {
     );
 
     // Error handling
-    [
-      this.positionMonitorWorker,
-      // this.priceAlertWorker,
-      // this.rebalanceWorker,
-      this.transactionProcessingWorker,
-    ].forEach((worker) => {
-      worker.on("failed", (job, err) => {
-        logger.error(`Job ${job?.id} failed:`, err);
-      });
+    [this.positionMonitorWorker, this.transactionProcessingWorker].forEach(
+      (worker) => {
+        worker.on("failed", (job, err) => {
+          logger.error(`Job ${job?.id} failed:`, err);
+        });
 
-      worker.on("error", (err) => {
-        logger.error("Worker error:", err);
-      });
-    });
+        worker.on("error", (err) => {
+          logger.error("Worker error:", err);
+        });
+      }
+    );
   }
 
   async setupScheduledJobs() {
@@ -179,52 +153,38 @@ export class JobQueueService {
 
   async queuePositionMonitorJob(data: PositionMonitorJobData, delay?: number) {
     return this.positionMonitorQueue.add("monitor-position", data, {
+      repeat: { pattern: "*/10 * * * * *" }, // Every hour
       delay,
       jobId: `monitor-${data.userId}-${data.positionId || "all"}-${Date.now()}`,
     });
   }
 
-  // async queuePriceAlertJob(data: PriceAlertJobData, delay?: number) {
-  //   return this.priceAlertQueue.add("price-alert", data, {
-  //     delay,
-  //     jobId: `alert-${data.tokenAddress}-${data.direction}-${Date.now()}`,
-  //   });
-  // }
-
-  // async queueRebalanceJob(data: RebalanceJobData, delay?: number) {
-  //   return this.rebalanceQueue.add("rebalance", data, {
-  //     delay,
-  //     priority: 10, // High priority for rebalancing
-  //     jobId: `rebalance-${data.positionId}-${Date.now()}`,
-  //   });
-  // }
-
   async queueTransactionProcessingJob(
     data: TransactionProcessingJobData,
-    delay?: number
+    delay: number = 1000
   ) {
     await this.transactionProcessingQueue.add("process-transaction", data, {
-      delay: delay || 2_000, // 2 second delay to allow transaction confirmation
+      delay,
     });
   }
 
-  async createPositionMonitorJob(positionId: string, userId: string) {
-    logger.info(`createPositionMonitorJob ${positionId} ${userId}`);
-    const jobId = `position-monitor-${positionId}`;
+  // async createPositionMonitorJob(positionId: string, userId: string) {
+  //   logger.info(`createPositionMonitorJob ${positionId} ${userId}`);
+  //   const jobId = `position-monitor-${positionId}`;
 
-    await this.positionMonitorQueue.add(
-      "monitor-single-position",
-      { userId, positionId },
-      {
-        // repeat: { pattern: "0 * * * *" }, // Every hour
-        repeat: { pattern: "*/10 * * * * *" }, // Every hour
-        jobId,
-      }
-    );
+  //   await this.positionMonitorQueue.add(
+  //     "monitor-single-position",
+  //     { userId, positionId },
+  //     {
+  //       // repeat: { pattern: "0 * * * *" }, // Every hour
+  //       repeat: { pattern: "*/10 * * * * *" }, // Every hour
+  //       jobId,
+  //     }
+  //   );
 
-    logger.info(`Created monitoring job for position ${positionId}`);
-    return jobId;
-  }
+  //   logger.info(`Created monitoring job for position ${positionId}`);
+  //   return jobId;
+  // }
 
   async removePositionMonitorJob(positionId: string) {
     const jobId = `position-monitor-${positionId}`;
@@ -247,7 +207,9 @@ export class JobQueueService {
     if (!userId || !positionId) return;
 
     try {
-      logger.info(`Processing position monitor job for user ${userId}`);
+      logger.info(
+        `Processing position ${positionId} monitor job for user ${userId}`
+      );
 
       const user = await db.query.users.findFirst({
         where: eq(users.id, userId),
@@ -275,57 +237,15 @@ export class JobQueueService {
       };
 
       if (!result.isInRange) {
+        // handle rebalance
         // queue rebalance job
-        const closeResult = await this.positionService.closePositionV2(
-          user,
-          position.poolAddress,
-          position.positionAddress
-        );
+        // const closeResult = await this.positionService.closePositionV2(
+        //   user,
+        //   position.poolAddress,
+        //   position.positionAddress
+        // );
       }
 
-      // Get positions to monitor
-      // const positionsToCheck = positionId
-      //   ? await db.query.positions.findMany({
-      //       where: and(
-      //         eq(positions.userId, userId),
-      //         eq(positions.id, positionId)
-      //       ),
-      //     })
-      //   : await db.query.positions.findMany({
-      //       where: eq(positions.userId, userId),
-      //     });
-
-      // const results = [];
-
-      // for (const position of positionsToCheck) {
-      //   const analysis = await this.rebalanceService.analyzePosition(
-      //     position.id
-      //   );
-
-      //   if (analysis?.shouldRebalance) {
-      //     // Queue rebalance job
-      //     await this.queueRebalanceJob({
-      //       positionId: position.id,
-      //       userId: userId,
-      //       strategy: user.rebalanceStrategy || "STANDARD",
-      //       reason: analysis.reason || "Position analysis triggered rebalance",
-      //     });
-
-      //     results.push({
-      //       positionId: position.id,
-      //       action: "rebalance_queued",
-      //       reason: analysis.reason,
-      //     });
-      //   } else {
-      //     results.push({
-      //       positionId: position.id,
-      //       action: "no_action_needed",
-      //       health: analysis?.reason,
-      //     });
-      //   }
-      // }
-
-      // return { processed: results.length, results };
       return { processed: 1, results: [] };
     } catch (error) {
       logger.error(`Position monitor job failed for user ${userId}:`, error);
@@ -365,8 +285,8 @@ export class JobQueueService {
     const { signature, operationType, userId } = job.data;
 
     try {
-      console.log(
-        `[TransactionProcessor] Processing ${operationType} transaction: ${signature}`
+      logger.info(
+        `Processing transaction job for user ${userId} ${operationType} ${signature}`
       );
 
       const [pendingTx] = await db
@@ -387,6 +307,7 @@ export class JobQueueService {
         .where(eq(pendingTransactions.signature, signature));
 
       const connection = new Connection(CONFIG.SOLANA.RPC_URL, "confirmed");
+      // FIXME: add retry logic
       const parsedTransaction = await connection.getParsedTransaction(
         signature,
         {
@@ -476,13 +397,7 @@ export class JobQueueService {
     metadata: string | null,
     userId: string
   ) {
-    console.log(
-      `[TransactionProcessor] Processing CREATE_POSITION for user ${userId}`
-    );
-
-    if (!metadata) {
-      throw new Error("Missing metadata for create position transaction");
-    }
+    logger.info(`Processing create position transaction for user ${userId}`);
 
     const meteoraParsedIxs = await parseMeteoraInstructions(transaction);
     if (meteoraParsedIxs.length === 0) {
@@ -520,6 +435,15 @@ export class JobQueueService {
     const tokenX = this.tokenAdapter.transformToken(jupiterTokenX);
     const tokenY = this.tokenAdapter.transformToken(jupiterTokenY);
 
+    const prices = await this.tokenPriceService.getPrices([
+      tokenX.address,
+      tokenY.address,
+    ]);
+
+    if (!prices || !prices[tokenX.address] || !prices[tokenY.address]) {
+      throw new Error("No token price found");
+    }
+
     const amountX =
       addIx.tokenTransfers.find(
         (transfer) => transfer.mint === addIx.accounts.tokenXMint
@@ -534,9 +458,8 @@ export class JobQueueService {
       throw new Error("No token amount found");
     }
 
-    // TODO move to position.service.ts
     const newPos = await createPosition({
-      userId: userId,
+      userId,
       positionAddress,
       poolAddress,
       tokenX,
@@ -546,10 +469,22 @@ export class JobQueueService {
       tokenYAmount: amountY.toString(),
       status: "ACTIVE",
       creationSignature: signature,
+      tokenXPriceAtCreation: prices[tokenX.address].price.toString(),
+      tokenYPriceAtCreation: prices[tokenY.address].price.toString(),
+      tokenXPriceAtClosure: "0",
+      tokenYPriceAtClosure: "0",
+      initialValueInSol: "0",
+      finalValueInSol: "0",
+      feesEarnedInSol: "0",
+      pnlInSol: "0",
+      pnlPercentage: "0",
     });
 
     if (newPos) {
-      // this.createPositionMonitorJob(newPos.id, userId);
+      this.queuePositionMonitorJob({
+        positionId: newPos.id,
+        userId,
+      });
     }
 
     console.log(

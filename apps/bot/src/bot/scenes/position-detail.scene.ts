@@ -8,6 +8,7 @@ import {
   getPositionCloseConfirmKeyboard,
 } from "../keyboards/position-detail-menu";
 import { MeteoraDlmmPosition } from "@/types/meteora.types";
+import { DISABLE_LINK_PREVIEW } from "../handlers";
 
 type SceneState = {
   positionAddress?: string;
@@ -67,6 +68,7 @@ positionDetailScene.enter(async (ctx) => {
       {
         parse_mode: "Markdown",
         reply_markup: keyboard,
+        ...DISABLE_LINK_PREVIEW,
       }
     );
   } catch (error) {
@@ -126,7 +128,11 @@ positionDetailScene.action("pos_close_yes", async (ctx) => {
 
   try {
     const { success, transactionId, error } =
-      await positionService.closePosition(ctx.user, position);
+      await positionService.closePositionV2(
+        ctx.user,
+        position.pair_address,
+        position.address
+      );
 
     if (!success) {
       await ctx.telegram.editMessageText(

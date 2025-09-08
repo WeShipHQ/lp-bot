@@ -7,6 +7,8 @@ import { init } from "@/utils/tx-parser";
 import { PublicKey } from "@solana/web3.js";
 import { db, pendingTransactions } from "@/db";
 import { JobQueueService } from "@/services/job-queue.service";
+import { PositionService } from "@/services/position.service";
+import { SCENE_IDS } from "../config/scenes";
 
 export function devCommand(
   bot: Telegraf<BotContext>,
@@ -15,40 +17,33 @@ export function devCommand(
   bot.command("dev", async (ctx) => {
     // await init();
 
-    const createId =
-      "4yerVcYgjhLoWwNHMJf9NPiEs8ZjzKKsmNp9MfQWSxQwGxjATsAnPi5vcytNRxGfS58YmMpYGqwVKegHriqcD4pX";
+    // const createId =
+    //   "4yerVcYgjhLoWwNHMJf9NPiEs8ZjzKKsmNp9MfQWSxQwGxjATsAnPi5vcytNRxGfS58YmMpYGqwVKegHriqcD4pX";
 
-    const closeId =
-      "3DP1SbuWJbEdJn22gvRiEJzXerpkTAJx5YXrjt3n29PYKw2NnNPr5BzqFkgeQB1iZvkf5hB8AiXNLKa5JkenvdVp";
+    // const closeId =
+    //   "3DP1SbuWJbEdJn22gvRiEJzXerpkTAJx5YXrjt3n29PYKw2NnNPr5BzqFkgeQB1iZvkf5hB8AiXNLKa5JkenvdVp";
 
-    const positionAddress = "3qm8JDpEMqDLut2vyJVe1PnjXy4pYHgYpak8jPwSJVXW";
-    const poolAddress = "GMeANduWzq5MkgaHgDCihHH8HHak8hvRji1FMKCZwt4j";
+    // const positionAddress = "3qm8JDpEMqDLut2vyJVe1PnjXy4pYHgYpak8jPwSJVXW";
+    // const poolAddress = "GMeANduWzq5MkgaHgDCihHH8HHak8hvRji1FMKCZwt4j";
 
-    const jobService = new JobQueueService();
+    const positionService = new PositionService();
 
-    // create
-    const createMetadata = JSON.stringify({
-      positionAddress,
-      poolAddress,
+    // await positionService.createBalancedPosition(
+    //   ctx.user,
+    //   poolAddress,
+    //   "spot",
+    //   10000000
+    // );
+
+    // close position
+    // const closePosId =
+    //   "3DP1SbuWJbEdJn22gvRiEJzXerpkTAJx5YXrjt3n29PYKw2NnNPr5BzqFkgeQB1iZvkf5hB8AiXNLKa5JkenvdVp";
+    const posAddress = "G8Rrhq9mNjjPakapTqbT9jC4KoQDHpqrfiJwEMAtgPZg";
+
+    // await positionService.closePositionV2(ctx.user, posAddress, posAddress);
+
+    await ctx.scene.enter(SCENE_IDS.POSITION_DETAIL_SCENE, {
+      positionAddress: posAddress,
     });
-
-    await db.insert(pendingTransactions).values({
-      signature: createId,
-      operationType: "CREATE_POSITION",
-      userId: ctx.user.id,
-      metadata: createMetadata,
-      status: "PENDING",
-    });
-
-    await jobService.queueTransactionProcessingJob(
-      {
-        signature: createId,
-        operationType: "CREATE_POSITION",
-        userId: ctx.user.id,
-      },
-      0
-    );
-
-    return ctx.reply("dev");
   });
 }

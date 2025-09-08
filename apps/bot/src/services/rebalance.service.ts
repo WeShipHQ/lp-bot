@@ -5,6 +5,8 @@ import type { Position, User, RebalanceStrategy } from "../db/schema";
 import { meteoraPoolService } from "./meteora/pool.service";
 import { CONFIG } from "../config";
 import { MeteoraDlmmService } from "./meteora/dlmm.service";
+import { logger } from "@/utils/logger";
+import { PositionService } from "./position.service";
 
 export interface ExecuteRebalanceParams {
   positionId: string;
@@ -44,11 +46,9 @@ export interface RebalanceAnalysis {
   strategy: RebalanceStrategy;
 }
 
-/**
- * Service for handling automatic position rebalancing
- */
 export class RebalanceService {
   private dlmmService = new MeteoraDlmmService();
+  private positionService = new PositionService();
 
   async analyzePosition(
     poolAddress: string,
@@ -66,16 +66,37 @@ export class RebalanceService {
     );
   }
 
-  async executeRebalance({
-    positionId,
-    userId,
-    amountX,
-    amountY,
-    feeX,
-    feeY,
-  }: ExecuteRebalanceParams): Promise<any> {
+  async executeRebalance(positionId: string): Promise<any> {
     try {
-      console.log(`[Rebalance] Starting rebalance for position ${positionId}`);
+      logger.info(
+        `[Rebalance] Starting rebalance for position ${positionId}`
+      );
+
+      const position = await db.query.positions.findFirst({
+        where: eq(positions.id, positionId),
+      })
+
+      if(!position) {
+        throw new Error("Position not found")
+      }
+
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, position.userId),
+      })
+
+      if(!user) {
+        throw new Error("User not found")
+      }
+
+      const { success, transactionId } = await this.positionService.closePositionV2(
+        user,
+        position.poolAddress,
+        position.positionAddress
+      )
+
+      if(!success) {
+        throw new Error("Failed to close position")
+      }
 
       // close position
       // swap token
