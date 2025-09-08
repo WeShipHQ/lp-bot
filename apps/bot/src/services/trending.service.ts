@@ -1,12 +1,6 @@
 import { PoolTrendingItem, TrendingPageState } from "@/types/trending.types";
 import { HotPoolsService, hotPoolsService } from "./hot-pools.service";
 import { PoolSortCriteria, PoolSource } from "./hot-pools/types";
-import { getPoolStartCommand } from "@/utils/link";
-import {
-  formatAPR,
-  formatMarketCap,
-  formatPrice,
-} from "@/bot/utils/formatters";
 
 export class TrendingService {
   private readonly pageStates = new Map<number, TrendingPageState>();
@@ -107,7 +101,7 @@ export class TrendingService {
       const tvl = formatCurrency(pool.tvl);
       const displayIndex = (page - 1) * 5 + index + 1;
 
-      return `/${displayIndex} ${pool.tokenPair} APY: *${apy}* | Fee24h: *${fee24h}* | TVL: *${tvl}*`;
+      return `/t${displayIndex} ${pool.tokenPair} APY: *${apy}* | Fee24h: *${fee24h}* | TVL: *${tvl}*`;
     });
 
     const spacedLines: string[] = [];
@@ -128,6 +122,8 @@ export class TrendingService {
           ? "Fee/TVL Ratio"
           : sortCriteria.toUpperCase()
       }. Page ${page}/${HotPoolsService.TOTAL_PAGES}`,
+      "",
+      "_Tap on the commands above to view pool details_",
       "",
     ].join("\n");
   }

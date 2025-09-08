@@ -1,7 +1,11 @@
 import { DammV1SearchResponse } from "@/types/trending.types";
-import { HotPoolFilters, HotPoolItem, MeteoraPoolData } from "../types";
+import {
+  DammV1PoolResponse,
+  HotPoolFilters,
+  HotPoolItem,
+  MeteoraPoolData,
+} from "../types";
 import { applyFilters, sortPools } from "../utils";
-import { MeteoraDammV1PoolResponse } from "@/types/meteora.types";
 
 export class DammV1Source {
   constructor(private readonly baseUrl = "https://damm-api.meteora.ag") {}
@@ -12,9 +16,9 @@ export class DammV1Source {
     filters: HotPoolFilters
   ): Promise<HotPoolItem[]> {
     const sortKeyApi =
-      filters.sortBy === "feetvlratio"
+      filters.sortBy === "fee_tvl_ratio"
         ? "fee_tvl_ratio"
-        : filters.sortBy === "tvl"
+        : filters.sortBy === "apy"
           ? "tvl"
           : "volume";
 
@@ -47,11 +51,11 @@ export class DammV1Source {
     return sortPools(items, filters.sortBy);
   }
 
-  private convertToHotPool(pool: MeteoraDammV1PoolResponse): HotPoolItem | null {
+  private convertToHotPool(pool: DammV1PoolResponse): HotPoolItem | null {
     try {
       const [aSym, bSym] = (pool.pool_name || "")
         .split("-")
-        .map((s) => s?.trim());
+        .map((s: string) => s?.trim());
 
       return {
         address: pool.pool_address,
@@ -71,7 +75,7 @@ export class DammV1Source {
     }
   }
 
-  private mapToPoolData(d: MeteoraDammV1PoolResponse): MeteoraPoolData {
+  private mapToPoolData(d: DammV1PoolResponse): MeteoraPoolData {
     const tokens = (d.pool_name || "").split("-");
     return {
       pool_address: d.pool_address,

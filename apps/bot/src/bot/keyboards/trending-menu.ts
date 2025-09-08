@@ -1,10 +1,9 @@
-import { PoolSortCriteria } from "@/services/hot-pools/types";
 import { trendingService } from "@/services/trending.service";
 import { Markup } from "telegraf";
 
 export function getTrendingKeyboard(
   chatId: number,
-  currentSortBy: PoolSortCriteria = "tvl",
+  currentSortBy: "apy" | "fee24h" | "fee_tvl_ratio" = "apy",
   currentSource: "dlmm" | "dammv1" | "dammv2" = "dlmm"
 ): ReturnType<typeof Markup.inlineKeyboard> {
   const st = trendingService.getState(chatId);
@@ -18,45 +17,44 @@ export function getTrendingKeyboard(
   navRow.push(Markup.button.callback("Next ", `tr_next_${chatId}`));
   navRow.push(Markup.button.callback("🔄", `tr_refresh_${chatId}`));
 
-  // Sort buttons with check icons
-  const sortRow: any[] = [];
+  //  const sortRow: any[] = [];
 
-  const tvlButton = Markup.button.callback(
-    `${currentSortBy === "tvl" ? "✅ " : ""}TVL`,
-    `tr_sort_tvl_${chatId}`
-  );
+  //  const apyButton = Markup.button.callback(
+  //    `${currentSortBy === "apy" ? "🔽" : ""} APY`,
+  //    `tr_sort_apy_${chatId}`
+  //  );
 
-  const volButton = Markup.button.callback(
-    `${currentSortBy === 'volume' ? "✅ " : ""}24h Vol`,
-    `tr_sort_volume_${chatId}`
-  );
+  //  const feeButton = Markup.button.callback(
+  //    `${currentSortBy === "fee24h" ? "🔽" : ""} Fee24h`,
+  //    `tr_sort_fee24h_${chatId}`
+  //  );
 
-  const ratioButton = Markup.button.callback(
-    `${currentSortBy === 'feetvlratio' ? "✅ " : ""}Fee/TVL`,
-    `tr_sort_feetvlratio_${chatId}`
-  );
+  //  const ratioButton = Markup.button.callback(
+  //    `${currentSortBy === "fee_tvl_ratio" ? "🔽" : ""} Fee/TVL`,
+  //    `tr_sort_fee_tvl_ratio_${chatId}`
+  //  );
 
-  sortRow.push(tvlButton, volButton, ratioButton);
+  //  sortRow.push(apyButton, feeButton, ratioButton);
 
-  // Source buttons with check icons
   const srcRow: any[] = [];
-  const dlmmBtn = Markup.button.callback(
-    `${currentSource === "dlmm" ? "✅ " : ""}DLMM`,
-    `tr_src_dlmm_${chatId}`
-  );
+  const dlmmBtn =
+    currentSource === "dlmm"
+      ? Markup.button.callback("DLMM", `tr_src_dlmm_${chatId}`)
+      : Markup.button.callback("DLMM", `tr_src_dlmm_${chatId}`);
 
-  const v1Btn = Markup.button.callback(
-    `${currentSource === "dammv1" ? "✅ " : ""}DAMM v1`,
-    `tr_src_dammv1_${chatId}`
-  );
+  const v1Btn =
+    currentSource === "dammv1"
+      ? Markup.button.callback("DAMM v1", `tr_src_dammv1_${chatId}`)
+      : Markup.button.callback("DAMM v1", `tr_src_dammv1_${chatId}`);
 
-  const v2Btn = Markup.button.callback(
-    `${currentSource === "dammv2" ? "✅ " : ""}DAMM v2`,
-    `tr_src_dammv2_${chatId}`
-  );
+  const v2Btn =
+    currentSource === "dammv2"
+      ? Markup.button.callback("DAMM v2", `tr_src_dammv2_${chatId}`)
+      : Markup.button.callback("DAMM v2", `tr_src_dammv2_${chatId}`);
 
   srcRow.push(dlmmBtn, v1Btn, v2Btn);
 
-  const rows: any[] = [navRow, sortRow, srcRow];
+  // const rows: any[] = [navRow, sortRow, srcRow];
+  const rows: any[] = [navRow, srcRow];
   return Markup.inlineKeyboard(rows);
 }

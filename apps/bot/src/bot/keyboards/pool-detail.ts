@@ -1,6 +1,4 @@
-
 import { Markup } from "telegraf";
-
 
 export function getPoolDetailKeyboard(
   chatId: number,
@@ -24,6 +22,25 @@ export function getPoolDetailKeyboard(
     [
       Markup.button.callback("Close", `pl_close_${id}`),
       Markup.button.callback("Refresh", `pl_refresh_${id}`),
+    ],
+  ]);
+}
+
+export function getTrendingDetailKeyboard(
+  chatId: number,
+  poolIndex: number,
+  source: "dlmm" | "dammv1" | "dammv2"
+): ReturnType<typeof Markup.inlineKeyboard> {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback(
+        " Close",
+        `tr_close_detail_${chatId}_${poolIndex}_${source}`
+      ),
+      Markup.button.callback(
+        "Refresh",
+        `tr_refresh_detail_${chatId}_${poolIndex}_${source}`
+      ),
     ],
   ]);
 }

@@ -1,4 +1,3 @@
-import { PoolSortCriteria } from "@/services/hot-pools/types";
 import { MeteoraDammV1PoolResponse } from "./meteora.types";
 
 export interface PairItem {
@@ -95,13 +94,13 @@ export interface TokenBucket {
 export interface TrendingPageState {
   items: TrendingItem[];
   poolItems?: PoolTrendingItem[];
-  page: number; 
-  apiPage?: number; 
-  totalPages?: number; 
+  page: number;
+  apiPage?: number;
+  totalPages?: number;
   messageId?: number;
   displayMode?: "tokens" | "pools";
   poolSource?: "dlmm" | "dammv1" | "dammv2";
-  sortBy?: PoolSortCriteria;
+  sortBy?: "apy" | "fee24h" | "fee_tvl_ratio";
 }
 export interface DammV1SearchResponse {
   status?: number;
