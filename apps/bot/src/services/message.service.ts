@@ -3,38 +3,20 @@ import {
   formatNumber,
   formatPercentage,
   formatTokenAmount,
-  truncateAddress,
 } from "@/bot/utils/formatters";
-import { bold, code, link } from "@/bot/utils/text-formatters";
-import {
-  MeteoraDlmmPool,
-  // MeteoraDlmmPoolDetail,
-  MeteoraDlmmPosition,
-  MeteoraPoolData,
-} from "@/types/meteora.types";
-import { Pool, PoolDex } from "@/types/pool.types";
+import { bold, italic, link } from "@/bot/utils/text-formatters";
+import { MeteoraDlmmPosition } from "@/types/meteora.types";
+import { Pool } from "@/types/pool.types";
 import { PortfolioData, PortfolioPosition } from "@/types/portfolio.types";
-import { TokenDisplayData, TokenInfo } from "@/types/token.types";
 import { getPositionStartCommand } from "@/utils/link";
-import { LbPair, LbPosition } from "@meteora-ag/dlmm";
-import { escapers } from "@telegraf/entity";
-import { BN } from "bn.js";
+import { LbPosition } from "@meteora-ag/dlmm";
 
 // const bold = (s: string) => `**${s}**`;
-const italic = (s: string) => `_${s}_`;
-
-// Add utility functions for generating URLs
-const buildSolscanUrl = (poolAddress: string) =>
-  `https://solscan.io/account/${poolAddress}`;
-
-const buildDexScreenerUrl = (poolAddress: string) =>
-  `https://dexscreener.com/solana/${poolAddress}`;
 
 const formatPairSymbol = (p: PortfolioPosition) =>
   `${p.token_x_info.symbol}-${p.token_y_info.symbol}`;
 
-const toPercentNumber = (value?: number): number | undefined =>
-  value == null ? undefined : value > 1 ? value : value * 100;
+// removed: replaced by inline normalization where used
 
 export class MessageService {
   /**
@@ -108,48 +90,146 @@ export class MessageService {
       );
     }
 
-    let msg = `*Portfolio Overview*\n\n`;
+    let msg = `**${bold(`Portfolio Overview`)}**\n\n`;
 
-    msg += `Total Positions: ${totals.total_positions} | Total Deposit: ${bold(formatPrice(totals.total_current_value_usd))}\n\n`;
+    // Display totals in 2 rows instead of 4
+    msg += `**Total Positions:** ${bold(totals.total_positions)}    **Total Balance:** ${bold(formatPrice(totals.total_current_value_usd))}\n`;
+    msg += `**Total Unclaimed Fees:** ${bold(formatPrice(totals.total_unclaimed_fees_usd))}    **Total Deposits:** ${bold(formatPrice(totals.total_deposits_usd))}\n\n`;
 
     msg += positions
       .map((pos, i) => {
         // Create the link if botName is provided
         const title = botName
-          ? `[/${i + 1} ${formatPairSymbol(pos)}](${getPositionStartCommand(botName, pos.position_address)})\n`
-          : `/${i + 1} ${formatPairSymbol(pos)}\n`;
+          ? `[/${i + 1} ${bold(formatPairSymbol(pos))}](${bold(getPositionStartCommand(botName, pos.position_address))})\n`
+          : `/${i + 1} ${bold(formatPairSymbol(pos))}`;
 
-        const dbTracked =
-          pos.is_tracked_in_db != null
-            ? `• Tracked in DB: ${pos.is_tracked_in_db ? "🟢 Yes" : "🟠 No"} ${italic("(Click to add to DB)")}`
-            : undefined;
+        // Group 1: Basic Info
+        const basicInfo = [];
+        if (pos.is_tracked_in_db != null) {
+          basicInfo.push(
+            `**Tracked in DB:** ${pos.is_tracked_in_db ? "🟢 Yes" : "🟠 No"} ${italic("(Click to add to DB)")}`
+          );
+        }
 
+        // Group 2: Position Balance
         const balance =
           pos.current_x_amount != null && pos.current_y_amount != null
-            ? `• Position Balance: ${bold(formatTokenAmount(pos.current_x_amount, 3))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.current_y_amount, 3))} ${pos.token_y_info.symbol} (${bold(formatPrice(pos.current_value_usd))})`
-            : `• Position Balance: ${bold(formatPrice(pos.current_value_usd))}`;
+            ? `**Position Balance:** ${bold(formatTokenAmount(pos.current_x_amount, 6))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.current_y_amount, 6))} ${pos.token_y_info.symbol} (${bold(formatPrice(pos.current_value_usd))})`
+            : `**Position Balance:** ${bold(formatPrice(pos.current_value_usd))}`;
 
-        const unclaimed =
-          pos.unclaimed_fees_x != null && pos.unclaimed_fees_y != null
-            ? `• Unclaimed Fees: ${bold(formatTokenAmount(pos.unclaimed_fees_x, 3))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.unclaimed_fees_y, 3))} ${pos.token_y_info.symbol} (${bold(formatPrice(pos.total_unclaimed_fees_usd))})`
-            : `• Unclaimed Fees: ${bold(formatPrice(pos.total_unclaimed_fees_usd))}`;
+        // Group 3: Price Information
+        const priceInfo = [];
+        if (pos.price_min != null && pos.price_max != null) {
+          const low = Math.min(pos.price_min, pos.price_max);
+          const high = Math.max(pos.price_min, pos.price_max);
+          // Choose primary orientation based on magnitude (show smaller numbers with more precision)
+          if (high < 1) {
+            // Show Y/X as primary when prices are small
+            priceInfo.push(
+              `**Price Range:** ${bold(
+                formatNumber(low, { maxDecimals: 8 })
+              )} - ${bold(
+                formatNumber(high, { maxDecimals: 8 })
+              )} ${pos.token_y_info.symbol}/${pos.token_x_info.symbol}`
+            );
+          } else {
+            // Else show X/Y as primary
+            priceInfo.push(
+              `**Price Range:** ${bold(
+                formatNumber(low, { maxDecimals: 2 })
+              )} - ${bold(
+                formatNumber(high, { maxDecimals: 2 })
+              )} ${pos.token_x_info.symbol}/${pos.token_y_info.symbol}`
+            );
+          }
+        }
 
-        const claimed =
-          pos.claimed_fees_x != null && pos.claimed_fees_y != null
-            ? `• Claimed Fees: ${bold(formatTokenAmount(pos.claimed_fees_x, 3))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.claimed_fees_y, 3))} ${pos.token_y_info.symbol} (${bold(formatPrice(pos.total_claimed_fees_usd))})\n`
-            : `• Claimed Fees: ${bold(formatPrice(pos.total_claimed_fees_usd))}\n`;
+        if (pos.pool_price != null && pos.pool_price > 0) {
+          if (pos.pool_price < 1) {
+            // Small number: show Y/X primary with higher precision
+            priceInfo.push(
+              `**Pool Price:** ${bold(
+                formatNumber(pos.pool_price, { maxDecimals: 8 })
+              )} ${pos.token_y_info.symbol}/${pos.token_x_info.symbol}`
+            );
+          } else {
+            // Large number: show X/Y primary
+            priceInfo.push(
+              `**Pool Price:** ${bold(
+                formatNumber(pos.pool_price, { maxDecimals: 2 })
+              )} ${pos.token_x_info.symbol}/${pos.token_y_info.symbol}`
+            );
+          }
+        }
 
-        const feeTvlPercent = toPercentNumber(pos.pool_fee_tvl_24h);
-        const feeTvl =
-          feeTvlPercent != null
-            ? `• 24h Fee / TVL: ${bold(formatPercentage(feeTvlPercent))}`
-            : "—";
+        // Group 4: Fees Information
+        const feesInfo = [];
+        if (pos.unclaimed_fees_x != null && pos.unclaimed_fees_y != null) {
+          feesInfo.push(
+            `**Unclaimed Fees:** ${bold(formatTokenAmount(pos.unclaimed_fees_x, 6))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.unclaimed_fees_y, 6))} ${pos.token_y_info.symbol} (${bold(formatPrice(pos.total_unclaimed_fees_usd))})`
+          );
+        } else {
+          feesInfo.push(
+            `**Unclaimed Fees:** ${bold(formatPrice(pos.total_unclaimed_fees_usd))}`
+          );
+        }
 
-        const inRange = `• In Range: ${pos.in_range ? "🟢" : "🔴"}`;
+        if (pos.claimed_fees_x != null && pos.claimed_fees_y != null) {
+          feesInfo.push(
+            `**Claimed Fees:** ${bold(formatTokenAmount(pos.claimed_fees_x, 6))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.claimed_fees_y, 6))} ${pos.token_y_info.symbol} (${bold(formatPrice(pos.total_claimed_fees_usd))})`
+          );
+        } else {
+          feesInfo.push(
+            `**Claimed Fees:** ${bold(formatPrice(pos.total_claimed_fees_usd))}`
+          );
+        }
 
-        return [title, dbTracked, balance, unclaimed, claimed, feeTvl, inRange]
-          .filter(Boolean)
-          .join("\n");
+        // Group 5: Status Information
+        const feeTvlPercent =
+          pos.position_fee_tvl_24h ??
+          (pos.pool_fee_tvl_24h != null
+            ? pos.pool_fee_tvl_24h > 1
+              ? pos.pool_fee_tvl_24h / 100
+              : pos.pool_fee_tvl_24h
+            : undefined);
+        const statusInfo = [];
+        if (feeTvlPercent != null) {
+          statusInfo.push(
+            `**24h Fee / TVL:** ${bold(formatPercentage(feeTvlPercent))}`
+          );
+        }
+        statusInfo.push(`**In Range:** ${pos.in_range ? "🟢" : "🔴"}`);
+
+        // Combine all groups with proper spacing between sections
+        const sections = [];
+
+        // Section 1: Title
+        sections.push(title);
+
+        // Section 2: Basic Info
+        if (basicInfo.length > 0) {
+          sections.push(basicInfo.join("\n"));
+        }
+
+        // Section 3: Position Balance
+        sections.push(balance);
+
+        // Section 4: Price Information
+        if (priceInfo.length > 0) {
+          sections.push(priceInfo.join("\n"));
+        }
+
+        // Section 5: Fees Information
+        if (feesInfo.length > 0) {
+          sections.push(feesInfo.join("\n"));
+        }
+
+        // Section 6: Status Information
+        if (statusInfo.length > 0) {
+          sections.push(statusInfo.join("\n"));
+        }
+
+        return sections.filter(Boolean).join("\n\n");
       })
       .join("\n\n");
 
@@ -163,44 +243,121 @@ export class MessageService {
     const sx = pos.token_x_info.symbol;
     const sy = pos.token_y_info.symbol;
 
-    let msg = `**${pairName}** · [Dexscreener](${buildDexScreenerUrl(pos.pool_address)})\n\n`;
+    let msg = `**${bold(pairName)}** | [Meteora](https://www.meteora.ag/dlmm/${pos.pool_address}) | [Meteorlens](https://meteorlens.com/position/${pos.position_address})\n\n`;
 
+    msg += `**Net Profit:** ${bold(`-$0`)}\n`;
+
+    // DB Tracking Status
     if (pos.is_tracked_in_db != null) {
-      msg += `**• Tracked in DB:** ${pos.is_tracked_in_db ? "🟢 Yes" : "🟠 No"} ${italic("(Click to add to DB)")}\n`;
+      msg += `**Tracked in DB:** ${pos.is_tracked_in_db ? "🟢 Yes" : "🟠 No"} ${italic("(Click to add to DB)")}\n\n`;
     }
 
+    // Position Balance
     if (pos.current_x_amount != null && pos.current_y_amount != null) {
-      msg += `**• Position Balance:** ${bold(formatTokenAmount(pos.current_x_amount, 3))} ${sx} / ${bold(formatTokenAmount(pos.current_y_amount, 3))} ${sy} (${bold(formatPrice(pos.current_value_usd))})\n`;
+      msg += `**Position Balance:** ${bold(formatTokenAmount(pos.current_x_amount, 6))} ${sx} / ${bold(formatTokenAmount(pos.current_y_amount, 6))} ${sy} (${bold(formatPrice(pos.current_value_usd))})\n\n`;
     } else {
-      msg += `**• Position Balance:** ${bold(formatPrice(pos.current_value_usd))}\n`;
+      msg += `**Position Balance:** ${bold(formatPrice(pos.current_value_usd))}\n\n`;
     }
 
-    if (pos.unclaimed_fees_x != null && pos.unclaimed_fees_y != null) {
-      msg += `**• Unclaimed Fees:** ${bold(formatTokenAmount(pos.unclaimed_fees_x, 3))} ${sx} / ${bold(formatTokenAmount(pos.unclaimed_fees_y, 3))} ${sy} (${bold(formatPrice(pos.total_unclaimed_fees_usd))})\n`;
-    } else {
-      msg += `**• Unclaimed Fees:** ${bold(formatPrice(pos.total_unclaimed_fees_usd))}\n`;
+    // Price Range (Primary)
+    if (pos.price_min != null && pos.price_max != null) {
+      const low = Math.min(pos.price_min, pos.price_max);
+      const high = Math.max(pos.price_min, pos.price_max);
+      if (high < 1) {
+        msg += `**Price Range:** ${bold(
+          formatNumber(low, { maxDecimals: 8 })
+        )} - ${bold(formatNumber(high, { maxDecimals: 8 }))} ${sy}/${sx}\n`;
+      } else {
+        msg += `**Price Range:** ${bold(
+          formatNumber(low, { maxDecimals: 2 })
+        )} - ${bold(formatNumber(high, { maxDecimals: 2 }))} ${sx}/${sy}\n`;
+      }
     }
 
-    if (pos.claimed_fees_x != null && pos.claimed_fees_y != null) {
-      msg += `**• Claimed Fees:** ${bold(formatTokenAmount(pos.claimed_fees_x, 3))} ${sx} / ${bold(formatTokenAmount(pos.claimed_fees_y, 3))} ${sy} (${bold(formatPrice(pos.total_claimed_fees_usd))})\n`;
-    } else {
-      msg += `**• Claimed Fees:** ${bold(formatPrice(pos.total_claimed_fees_usd))}\n`;
+    // Price Range (Alternative)
+    if (pos.price_min != null && pos.price_max != null) {
+      const low = Math.min(pos.price_min, pos.price_max);
+      const high = Math.max(pos.price_min, pos.price_max);
+      const invLow = 1 / high;
+      const invHigh = 1 / low;
+      if (high < 1) {
+        msg += `**Price Range (alt):** ${bold(
+          formatNumber(invLow, { maxDecimals: 2 })
+        )} - ${bold(formatNumber(invHigh, { maxDecimals: 2 }))} ${sx}/${sy}\n`;
+      } else {
+        msg += `**Price Range (alt):** ${bold(
+          formatNumber(invLow, { maxDecimals: 8 })
+        )} - ${bold(formatNumber(invHigh, { maxDecimals: 8 }))} ${sy}/${sx}\n`;
+      }
     }
 
-    const feeTvlPercent = toPercentNumber(pos.pool_fee_tvl_24h);
-    const feeTvlPart =
-      feeTvlPercent != null
-        ? `**• 24h Fee/TVL:** ${bold(formatPercentage(feeTvlPercent))}  •  `
-        : "";
+    // Pool Price (Primary)
+    if (pos.pool_price != null && pos.pool_price > 0) {
+      if (pos.pool_price < 1) {
+        msg += `**Pool Price:** ${bold(
+          formatNumber(pos.pool_price, { maxDecimals: 8 })
+        )} ${sy}/${sx}\n`;
+      } else {
+        msg += `**Pool Price:** ${bold(
+          formatNumber(pos.pool_price, { maxDecimals: 2 })
+        )} ${sx}/${sy}\n`;
+      }
+    }
+
+    // Pool Price (Alternative)
+    if (pos.pool_price != null && pos.pool_price > 0) {
+      const inv = 1 / pos.pool_price;
+      if (pos.pool_price < 1) {
+        msg += `**Pool Price (alt):** ${bold(
+          formatNumber(inv, { maxDecimals: 2 })
+        )} ${sx}/${sy}\n`;
+      } else {
+        msg += `**Pool Price (alt):** ${bold(
+          formatNumber(inv, { maxDecimals: 8 })
+        )} ${sy}/${sx}\n`;
+      }
+    }
 
     msg += `\n`;
-    msg += `${feeTvlPart}**In Range:** ${pos.in_range ? "🟢" : "🔴"}\n`;
 
-    if (pos.created_at) {
-      msg += `**• Created Date:** ${new Date(pos.created_at).toLocaleString()}\n\n`;
+    // Unclaimed Fees
+    if (pos.unclaimed_fees_x != null && pos.unclaimed_fees_y != null) {
+      msg += `**Unclaimed Fees:** ${bold(formatTokenAmount(pos.unclaimed_fees_x, 6))} ${sx} / ${bold(formatTokenAmount(pos.unclaimed_fees_y, 6))} ${sy} (${bold(formatPrice(pos.total_unclaimed_fees_usd))})\n`;
+    } else {
+      msg += `**Unclaimed Fees:** ${bold(formatPrice(pos.total_unclaimed_fees_usd))}\n`;
     }
 
-    msg += `Net Profit: View on [Instafin](https://instafin.com)`;
+    // Claimed Fees
+    if (pos.claimed_fees_x != null && pos.claimed_fees_y != null) {
+      msg += `**Claimed Fees:** ${bold(formatTokenAmount(pos.claimed_fees_x, 6))} ${sx} / ${bold(formatTokenAmount(pos.claimed_fees_y, 6))} ${sy} (${bold(formatPrice(pos.total_claimed_fees_usd))})\n`;
+    } else {
+      msg += `**Claimed Fees:** ${bold(formatPrice(pos.total_claimed_fees_usd))}\n`;
+    }
+
+    // Fee/TVL and In Range Status
+    const feeTvlPercent =
+      pos.position_fee_tvl_24h ??
+      (pos.pool_fee_tvl_24h != null
+        ? pos.pool_fee_tvl_24h > 1
+          ? pos.pool_fee_tvl_24h / 100
+          : pos.pool_fee_tvl_24h
+        : undefined);
+
+    const feeTvlPart =
+      feeTvlPercent != null
+        ? `**24h Fee / TVL:** ${bold(formatPercentage(feeTvlPercent))}    `
+        : "";
+
+    msg += `\n${feeTvlPart}**In Range:** ${pos.in_range ? "🟢" : "🔴"}\n`;
+
+    // Take Profit and Stop Loss indicators (placeholder - showing as disabled)
+    msg += `**Take Profit:** 🔴    **Stop Loss:** 🔴\n\n`;
+
+    // Created Date
+    if (pos.created_at) {
+      msg += `**Created Date:** ${new Date(pos.created_at).toLocaleString()}\n`;
+    }
+
     return msg;
   }
 
