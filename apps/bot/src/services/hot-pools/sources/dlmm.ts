@@ -1,5 +1,9 @@
-import { MeteoraDlmmPoolResponse } from "@/types/meteora.types";
-import { HotPoolFilters, HotPoolItem, MeteoraPoolData } from "../types";
+import {
+  DlmmPoolResponse,
+  HotPoolFilters,
+  HotPoolItem,
+  MeteoraPoolData,
+} from "../types";
 import { applyFilters } from "../utils";
 
 export class DlmmSource {
@@ -10,17 +14,17 @@ export class DlmmSource {
     limit: number,
     filters: HotPoolFilters
   ): Promise<HotPoolItem[]> {
-    // const sortKey =
-    //   filters.sortBy === 'feetvlratio'
-    //     ? "feetvlratio12h"
-    //     : filters.sortBy === "fee24h"
-    //       ? "volume12h"
-    //       : "tvl";
+    const sortKey =
+      filters.sortBy === "fee_tvl_ratio"
+        ? "feetvlratio12h"
+        : filters.sortBy === "fee24h"
+          ? "volume12h"
+          : "tvl";
 
     const url = new URL(`${this.baseUrl}/pair/all_with_pagination`);
     url.searchParams.set("page", String(page));
     url.searchParams.set("limit", String(limit));
-    url.searchParams.set("sort_key", filters.sortBy);
+    url.searchParams.set("sort_key", sortKey);
     url.searchParams.set("order_by", "desc");
     url.searchParams.set("include_unknown", String(!!filters.includeUnknown));
     url.searchParams.set(
@@ -40,12 +44,7 @@ export class DlmmSource {
     }
 
     const json = await res.json();
-    const pairs = (json?.pairs ?? []) as MeteoraDlmmPoolResponse[];
-
-    console.log(
-      "DLMM result",
-      pairs.map((p) => `${p.name} - ${p.liquidity}`)
-    );
+    const pairs = (json?.pairs ?? []) as DlmmPoolResponse[];
 
     let items = pairs
       .filter((p: any) => !(p.hide || p.is_blacklisted))
@@ -54,16 +53,16 @@ export class DlmmSource {
 
     items = applyFilters(items, filters);
 
-    // if (filters.sortBy === 'tvl') items = items.sort((a, b) => b.apy - a.apy);
-    // if (filters.sortBy === 'feetvlratio')
-    //   items = items.sort((a, b) => b.feeTvlRatio! - a.feeTvlRatio!);
+    if (filters.sortBy === "apy") items = items.sort((a, b) => b.apy - a.apy);
+    if (filters.sortBy === "fee24h")
+      items = items.sort((a, b) => b.fee24h - a.fee24h);
 
     return items;
   }
 
-  private convertToHotPool(pool: MeteoraDlmmPoolResponse): HotPoolItem | null {
+  private convertToHotPool(pool: DlmmPoolResponse): HotPoolItem | null {
     try {
-      const [aSym, bSym] = (pool.name || "").split("-").map((s) => s?.trim());
+      const [aSym, bSym] = (pool.name || "").split("-").map((s: string) => s?.trim());
 
       const fees24h = pool.fees_24h ?? 0;
       const ratio24h =
@@ -88,7 +87,7 @@ export class DlmmSource {
     }
   }
 
-  private mapToPoolData(d: MeteoraDlmmPoolResponse): MeteoraPoolData {
+  private mapToPoolData(d: DlmmPoolResponse): MeteoraPoolData {
     return {
       pool_address: d.address,
       pool_name: d.name,

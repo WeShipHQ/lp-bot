@@ -22,15 +22,15 @@
 
 //   /**
 //    * Fetch DLMM pool information
-//    * @param poolAddress - Pool address
+//    * @param poolId - Pool address
 //    * @returns Promise<MeteoraPoolData | null>
 //    */
-//   async getDlmmPoolInfo(poolAddress: string): Promise<MeteoraPoolData | null> {
+//   async getDlmmPoolInfo(poolId: string): Promise<MeteoraPoolData | null> {
 //     try {
-//       console.log(`[Meteora] Fetching DLMM pool: ${poolAddress}`);
+//       console.log(`[Meteora] Fetching DLMM pool: ${poolId}`);
 
 //       const response = await this.fetchWithRetry(
-//         `${this.dlmmApiUrl}/pair/${poolAddress}`
+//         `${this.dlmmApiUrl}/pair/${poolId}`
 //       );
 
 //       if (!response.ok) {
@@ -44,7 +44,7 @@
 
 //       return this.mapDlmmToMeteoraPoolData(data);
 //     } catch (error) {
-//       console.error(`[Meteora] Error fetching DLMM pool ${poolAddress}:`, error);
+//       console.error(`[Meteora] Error fetching DLMM pool ${poolId}:`, error);
 //       return null;
 //     }
 //   }
@@ -109,6 +109,8 @@
 //         return null;
 //       }
 
+//       console.log("data", data);
+
 //       return this.mapDammV2ToMeteoraPoolData(data.data);
 //     } catch (error) {
 //       console.error(`[Meteora] Error fetching DAMM v2 pool ${poolId}:`, error);
@@ -145,6 +147,7 @@
 //    */
 //   async validatePool(poolId: string): Promise<boolean> {
 //     try {
+//       // Try each pool type to see if the pool exists
 //       const dlmmPool = await this.getDlmmPoolInfo(poolId);
 //       if (dlmmPool) return true;
 

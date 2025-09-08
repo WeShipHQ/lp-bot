@@ -1,7 +1,11 @@
 import { PoolTrendingItem } from "@/types/trending.types";
 import { PoolSource } from "./hot-pools/types";
 import { solanaService } from "./solana.service";
-import { DammV1Detail, DammV2Detail, DlmmDetail } from "@/types/pool-details.types";
+import {
+  DammV1Detail,
+  DammV2Detail,
+  DlmmDetail,
+} from "@/types/pool-details.types";
 
 function short(addr?: string, head = 4, tail = 4) {
   if (!addr) return "";
