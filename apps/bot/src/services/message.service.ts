@@ -11,12 +11,8 @@ import { PortfolioData, PortfolioPosition } from "@/types/portfolio.types";
 import { getPositionStartCommand } from "@/utils/link";
 import { LbPosition } from "@meteora-ag/dlmm";
 
-// const bold = (s: string) => `**${s}**`;
-
 const formatPairSymbol = (p: PortfolioPosition) =>
   `${p.token_x_info.symbol}-${p.token_y_info.symbol}`;
-
-// removed: replaced by inline normalization where used
 
 export class MessageService {
   /**

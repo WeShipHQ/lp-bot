@@ -142,7 +142,6 @@ export class PoolService {
   async getPoolV2(poolAddress: string): Promise<Pool> {
     // for now we mainly support DLMM so we only fetch DLMM pool
     const dlmmPool = await this.meteoraApiService.getDlmmPool(poolAddress);
-    console.log("dlmmPool", dlmmPool);
     return this.meteoraAdapter.transformDlmmPool(dlmmPool);
   }
 }

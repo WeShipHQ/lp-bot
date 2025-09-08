@@ -1,9 +1,12 @@
 import {
   AddressLookupTableAccount,
+  Blockhash,
+  BlockhashWithExpiryBlockHeight,
   ComputeBudgetProgram,
   Connection,
   PublicKey,
   Signer,
+  SystemProgram,
   Transaction,
   TransactionInstruction,
   TransactionMessage,
@@ -20,6 +23,28 @@ import type {
   SignedTransactionInput,
   PollTransactionOptions,
 } from "@/types/transaction.types";
+
+// https://jito-foundation.gitbook.io/mev/mev-payment-and-distribution/on-chain-addresses
+export const JITO_TIP_ACCOUNTS: string[] = [
+  "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
+  "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
+  "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
+  "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49",
+  "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh",
+  "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt",
+  "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL",
+  "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT",
+];
+
+export type JitoRegion = "Default" | "NY" | "Amsterdam" | "Frankfurt" | "Tokyo";
+// https://jito-labs.gitbook.io/mev/searcher-resources/json-rpc-api-reference/url
+export const JITO_API_URLS: Record<JitoRegion, string> = {
+  Default: "https://mainnet.block-engine.jito.wtf",
+  NY: "https://ny.mainnet.block-engine.jito.wtf",
+  Amsterdam: "https://amsterdam.mainnet.block-engine.jito.wtf",
+  Frankfurt: "https://frankfurt.mainnet.block-engine.jito.wtf",
+  Tokyo: "https://tokyo.mainnet.block-engine.jito.wtf",
+};
 
 async function getPriorityFeeEstimate(
   connection: Connection,
@@ -105,6 +130,66 @@ async function getComputeUnits(
   return rpcResponse.value.unitsConsumed || null;
 }
 
+async function sendJitoBundle(
+  serializedTransactions: string[],
+  jitoApiUrl: string
+): Promise<string> {
+  try {
+    const response = await fetch(jitoApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: `panda-${Date.now()}`,
+        method: "sendBundle",
+        params: [serializedTransactions],
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || data.error) {
+      throw new Error(
+        `Error sending bundles: ${JSON.stringify(data.error || data, null, 2)}`
+      );
+    }
+
+    return data.result as string;
+  } catch (error: any) {
+    throw new Error(`Error sending bundles: ${error?.message || error}`);
+  }
+}
+
+async function getBundleStatuses(
+  bundleIds: string[],
+  jitoApiUrl: string
+): Promise<any> {
+  try {
+    const response = await fetch(jitoApiUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: `panda-${Date.now()}`,
+        method: "getBundleStatuses",
+        params: [bundleIds],
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || data.error) {
+      throw new Error(
+        `Error sending bundles: ${JSON.stringify(data.error || data, null, 2)}`
+      );
+    }
+
+    return data.result;
+  } catch (error) {
+    throw new Error(`Error getting bundle statuses: ${error}`);
+  }
+}
+
 export async function createSmartTransaction(
   connection: Connection,
   instructions: TransactionInstruction[],
@@ -114,16 +199,6 @@ export async function createSmartTransaction(
   options: CreateSmartTransactionOptions = {}
 ): Promise<SmartTransactionContext> {
   const { feePayer, priorityFeeCap } = options;
-
-  const existingComputeBudgetInstructions = instructions.filter((instruction) =>
-    instruction.programId.equals(ComputeBudgetProgram.programId)
-  );
-
-  // if (existingComputeBudgetInstructions.length > 0) {
-  //   throw new Error(
-  //     "Cannot provide instructions that set the compute unit price and/or limit"
-  //   );
-  // }
 
   // Determine the fee payer key (override if provided)
   const payerKey = feePayer ? feePayer.publicKey : payer;
@@ -182,7 +257,7 @@ export async function createSmartTransaction(
     });
   }
 
-  console.log("priorityFeeResponse", priorityFeeResponse);
+  // console.log("priorityFeeResponse", priorityFeeResponse);
 
   const { priorityFeeEstimate } = priorityFeeResponse;
 
@@ -202,6 +277,16 @@ export async function createSmartTransaction(
   });
   instructions.unshift(computeBudgetPriceIx);
 
+  const existingComputeBudgetInstructions = instructions.filter((instruction) =>
+    instruction.programId.equals(ComputeBudgetProgram.programId)
+  );
+
+  // if (existingComputeBudgetInstructions.length > 0) {
+  //   throw new Error(
+  //     "Cannot provide instructions that set the compute unit price and/or limit"
+  //   );
+  // }
+
   if (existingComputeBudgetInstructions.length === 0) {
     // Simulate the tx to get the CUs consumed
     let units = await getComputeUnits(
@@ -213,13 +298,13 @@ export async function createSmartTransaction(
     console.log("compute unit", units);
 
     if (!units) {
-      // throw new Error(
-      //   "Error fetching compute units for the instructions provided"
-      // );
-      console.warn(
-        "Error fetching compute units for the instructions provided, defaulting to 1_400_000"
+      throw new Error(
+        "Error fetching compute units for the instructions provided"
       );
-      units = 800_000;
+      // console.warn(
+      //   "Error fetching compute units for the instructions provided, defaulting to 1_400_000"
+      // );
+      // units = 800_000;
     }
 
     // For very small transactions, default to 1,000 CUs; otherwise, add a 10% margin
@@ -343,9 +428,9 @@ export async function broadcastTransaction(
 ): Promise<string> {
   const {
     lastValidBlockHeightOffset = 150,
-    pollTimeoutMs = 60000,
-    pollIntervalMs = 2000,
-    pollChunkMs = 10000,
+    pollTimeoutMs = 30_000, // 30s
+    pollIntervalMs = 2000, // 2s
+    pollChunkMs = 10000, // 10s
     skipPreflight = false,
     preflightCommitment = "confirmed",
     maxRetries = 0,
@@ -407,6 +492,7 @@ export async function broadcastTransaction(
           preflightCommitment,
           maxRetries,
         });
+        console.log("-------> send raw success");
       } catch (sendError) {
         console.warn(
           `sendRawTransaction attempt ${attemptCount} failed: ${sendError}`
@@ -450,7 +536,7 @@ export async function broadcastTransaction(
           }
         }
 
-        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs / 2));
         continue;
       }
     }
@@ -459,85 +545,95 @@ export async function broadcastTransaction(
   }
 }
 
-// interface CreateTransactionsParams {
-//   commitment?: Commitment;
-//   onSuccess?: (txId: string, idx: number) => Promise<void>;
-//   onError?: (reason: string, idx: number) => Promise<boolean>;
-//   blockhash?: Blockhash;
-//   maxRetries?: number;
-//   stopOnError?: boolean;
-// }
+export async function sendSmartTransactionWithTip(
+  connection: Connection,
+  transaction: Transaction | VersionedTransaction,
+  blockhash: BlockhashWithExpiryBlockHeight,
+  // instructions: TransactionInstruction[],
+  // signers: Signer[],
+  // lookupTables: AddressLookupTableAccount[] = [],
+  // tipAmount: number = 1000,
+  region: JitoRegion = "Default",
+  options: SendSmartTransactionOptions = {}
+): Promise<string> {
+  const lastValidBlockHeightOffset = options.lastValidBlockHeightOffset ?? 150;
+  if (lastValidBlockHeightOffset < 0)
+    throw new Error("lastValidBlockHeightOffset must be a positive integer");
 
-// export const createAndSendTransactions = async (
-//   connection: Connection,
-//   payer: PublicKey,
-//   signAllTransactions: SignerWalletAdapterProps["signAllTransactions"],
-//   instructionSet: TransactionInstruction[][],
-//   signersSet: Keypair[][],
-//   {
-//     maxRetries = 3,
-//     onSuccess,
-//     onError,
-//     stopOnError,
-//   }: CreateTransactionsParams = {}
-// ) => {
-//   const transactions: Transaction[] = [];
+  const serializedTransaction = bs58.encode(transaction.serialize());
 
-//   const {
-//     context: { slot: minContextSlot },
-//     value: { blockhash },
-//   } = await connection.getLatestBlockhashAndContext("finalized");
+  // Get the Jito API URL for the specified region
+  const jitoApiUrl = `${JITO_API_URLS[region]}/api/v1/bundles`;
 
-//   for (let i = 0; i < instructionSet.length; i++) {
-//     const instructions = instructionSet[i] ?? [];
-//     if (instructions.length === 0) {
-//       continue;
-//     }
-//     const transaction = new Transaction({ feePayer: payer });
-//     transaction.add(...instructions);
-//     transaction.recentBlockhash = blockhash;
-//     const signers = signersSet[i] ?? [];
-//     if (signers.length > 0) {
-//       transaction.partialSign(...signers);
-//     }
-//     transactions.push(transaction);
-//   }
+  // Send the transaction as a Jito Bundle
+  const bundleId = await sendJitoBundle([serializedTransaction], jitoApiUrl);
 
-//   const signedTransactions = await signAllTransactions(transactions);
-//   const pendingTransactions: Promise<string>[] = [];
+  const currentBlockHeight = await connection.getBlockHeight();
+  const lastValidBlockHeight = Math.min(
+    blockhash.lastValidBlockHeight,
+    currentBlockHeight + lastValidBlockHeightOffset
+  );
 
-//   let i = 0;
-//   for (const signedTransaction of signedTransactions) {
-//     const rawTransaction = signedTransaction.serialize();
+  // Poll for confirmation status
+  const timeout = 60000; // 60 second timeout
+  const interval = 5000; // 5 second interval
+  const startTime = Date.now();
 
-//     const pendingTransaction = connection.sendRawTransaction(rawTransaction, {
-//       skipPreflight: true,
-//       maxRetries,
-//       minContextSlot,
-//       preflightCommitment: "confirmed",
-//     } as SendOptions);
+  while (
+    Date.now() - startTime < timeout ||
+    (await connection.getBlockHeight()) <= lastValidBlockHeight
+  ) {
+    const bundleStatuses = await getBundleStatuses([bundleId], jitoApiUrl);
 
-//     try {
-//       const txId = await pendingTransaction;
-//       console.log(`TX(#${i}) Signature:`, txId);
-//       if (i === transactions.length - 1) {
-//         if (onSuccess) {
-//           await onSuccess(txId, i);
-//         }
-//       }
-//     } catch (e: any) {
-//       console.log(`TX(#${i}) Error:`, e);
-//       if (onError) {
-//         await onError(e, i);
-//       }
-//       if (stopOnError) {
-//         return await Promise.all(pendingTransactions);
-//       }
-//     }
+    if (
+      bundleStatuses &&
+      bundleStatuses.value &&
+      bundleStatuses.value.length > 0
+    ) {
+      const status = bundleStatuses.value[0].confirmation_status;
 
-//     pendingTransactions.push(pendingTransaction);
-//     i++;
-//   }
+      if (status === "confirmed") {
+        return bundleStatuses.value[0].transactions[0];
+      }
+    }
 
-//   return await Promise.all(pendingTransactions);
-// };
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+
+  throw new Error("Bundle failed to confirm within the timeout period");
+}
+
+// tip
+export async function createSmartTransactionWithTip(
+  connection: Connection,
+  instructions: TransactionInstruction[],
+  payer: PublicKey,
+  signers: Signer[],
+  lookupTables: AddressLookupTableAccount[] = [],
+  tipAmount: number = 1000,
+  options: CreateSmartTransactionOptions = {}
+): Promise<SmartTransactionContext> {
+  // Select a random tip account
+  const randomTipAccount =
+    JITO_TIP_ACCOUNTS[Math.floor(Math.random() * JITO_TIP_ACCOUNTS.length)];
+
+  // Set the fee payer and add the tip instruction
+  const payerKey = options.feePayer ? options.feePayer.publicKey : payer;
+
+  const tipInstruction = SystemProgram.transfer({
+    fromPubkey: payerKey,
+    toPubkey: new PublicKey(randomTipAccount),
+    lamports: tipAmount,
+  });
+
+  instructions.push(tipInstruction);
+
+  return createSmartTransaction(
+    connection,
+    instructions,
+    payer,
+    signers,
+    lookupTables,
+    options
+  );
+}

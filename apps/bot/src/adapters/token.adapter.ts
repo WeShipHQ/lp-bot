@@ -4,7 +4,7 @@ import { TokenInfo } from "@/types/token.types";
 export class TokenAdapter {
   transformToken(jupToken: JupiterTokenInfo): TokenInfo {
     return {
-      address: jupToken.address,
+      address: jupToken.id,
       symbol: jupToken.symbol,
       name: jupToken.name,
       decimals: jupToken.decimals,

@@ -48,7 +48,7 @@ poolDetailScene.enter(async (ctx) => {
       return ctx.scene.leave();
     }
 
-    const message = MessageService.formatPoolInfoV2(poolData);
+    const message = `${poolData.name}\n}\n${poolData.address}`; //MessageService.formatPoolInfoV2(poolData);
     const keyboard = getPoolInfoKeyboard(poolData.address);
 
     await ctx.telegram.editMessageText(
@@ -95,7 +95,7 @@ poolDetailScene.action("refresh_pool_detail", async (ctx) => {
     return ctx.scene.leave();
   }
 
-  const poolData = await poolService.getPool(poolAddress, "dlmm");
+  const poolData = await poolService.getPoolV2(poolAddress);
   ctx.scene.state = {
     pool: poolData,
     ...ctx.scene.state,
@@ -120,8 +120,8 @@ poolDetailScene.action("refresh_pool_detail", async (ctx) => {
     return ctx.scene.leave();
   }
 
-  const message = MessageService.formatPoolInfo(poolData);
-  const keyboard = getPoolInfoKeyboard(poolData.pool_address);
+  const message = `${poolData.name}\n}\n${poolData.address}`; //MessageService.formatPoolInfo(poolData);
+  const keyboard = getPoolInfoKeyboard(poolData.address);
 
   if (ctx.callbackQuery.message) {
     await ctx.telegram.editMessageText(

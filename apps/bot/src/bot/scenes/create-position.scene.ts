@@ -624,7 +624,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
   // Step 7: Summary & Final Confirmation
   async (ctx) => {
     const user = ctx.user;
-    const { strategy, selectedToken, amount, percentage, poolData } = ctx.scene
+    const { strategy, amount, percentage, poolData } = ctx.scene
       .state as WizardState;
 
     try {
@@ -1030,7 +1030,6 @@ createPositionScene.action("cancel", async (ctx) => {
   return ctx.scene.leave();
 });
 
-// Handle text inputs (for custom amount and custom price change)
 createPositionScene.on(message("text"), async (ctx, next) => {
   const state = ctx.scene.state as WizardState;
 
@@ -1102,7 +1101,6 @@ createPositionScene.on(message("text"), async (ctx, next) => {
   return await next();
 });
 
-// @ts-expect-error
 createPositionScene.command("back", (ctx: BotContext) => ctx.wizard.back());
 
 createPositionScene.command("cancel", async (ctx) => {
@@ -1115,49 +1113,58 @@ export async function calculateTokenDistributionForBalancedPosition(
   poolInfo: Pool,
   enteredAmount: number
 ) {
+  console.log("token a", poolInfo.tokenA.address);
+  console.log("token b", poolInfo.tokenB.address);
+  console.log("SOL_MINT", SOL_MINT);
+  console.log("enteredAmount", enteredAmount);
+
   const feeAmount = enteredAmount * (OPEN_POSITION_FEE / 100);
   const amount = enteredAmount - feeAmount;
+  console.log("amount", amount);
 
   // For balanced, split amount 50/50
   const halfAmount = amount / 2;
   const halfAmountLamports = (halfAmount * 1e9).toString();
 
-  let tokenAAmount = 0;
-  let tokenBAmount = 0;
-
-  try {
+  const [tokenAAmount, tokenBAmount] = await Promise.all([
     // Calculate token A amount
-    if (poolInfo.tokenA.address === SOL_MINT) {
-      tokenAAmount = halfAmount;
-    } else {
-      const orderResponseA = await jupiterService.getOrder({
-        inputMint: SOL_MINT,
-        outputMint: poolInfo.tokenA.address,
-        amount: halfAmountLamports,
-      });
-      tokenAAmount =
-        parseInt(orderResponseA.outAmount) /
-        Math.pow(10, poolInfo.tokenA.decimals);
-    }
+    (async () => {
+      if (poolInfo.tokenA.address === SOL_MINT) {
+        return halfAmount;
+      } else {
+        const orderResponseA = await jupiterService.getOrder({
+          inputMint: SOL_MINT,
+          outputMint: poolInfo.tokenA.address,
+          amount: halfAmountLamports,
+        });
 
+        return (
+          parseInt(orderResponseA.outAmount) /
+          Math.pow(10, poolInfo.tokenA.decimals)
+        );
+      }
+    })(),
     // Calculate token B amount
-    if (poolInfo.tokenB.address === SOL_MINT) {
-      tokenBAmount = halfAmount;
-    } else {
-      const orderResponseB = await jupiterService.getOrder({
-        inputMint: SOL_MINT,
-        outputMint: poolInfo.tokenB.address,
-        amount: halfAmountLamports,
-      });
-      tokenBAmount =
-        parseInt(orderResponseB.outAmount) /
-        Math.pow(10, poolInfo.tokenB.decimals);
-    }
-  } catch (error) {
-    console.error("Error getting Jupiter quotes:", error);
-    tokenAAmount = 0;
-    tokenBAmount = 0;
-  }
+    (async () => {
+      if (poolInfo.tokenB.address === SOL_MINT) {
+        return halfAmount;
+      } else {
+        const orderResponseB = await jupiterService.getOrder({
+          inputMint: SOL_MINT,
+          outputMint: poolInfo.tokenB.address,
+          amount: halfAmountLamports,
+        });
+
+        return (
+          parseInt(orderResponseB.outAmount) /
+          Math.pow(10, poolInfo.tokenB.decimals)
+        );
+      }
+    })(),
+  ]);
+
+  console.log("token a amount", tokenAAmount);
+  console.log("token b amount", tokenBAmount);
 
   return {
     tokenAAmount,

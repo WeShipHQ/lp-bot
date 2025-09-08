@@ -7,8 +7,10 @@ import {
   pgEnum,
   uuid,
   integer,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import { Token } from "@/types/token.types";
 
 // Enums
 export const strategyTypeEnum = pgEnum("StrategyType", [
@@ -40,6 +42,23 @@ export const pointTypeEnum = pgEnum("PointType", [
   "REFERRAL_BONUS",
   "FEE_EARNING",
   "ACTIVITY_REWARD",
+]);
+
+export const operationTypeEnum = pgEnum("OperationType", [
+  "CREATE_POSITION",
+  "CLOSE_POSITION",
+  "ADD_LIQUIDITY",
+  "REMOVE_LIQUIDITY",
+  "CLAIM_FEES",
+  "REBALANCE",
+]);
+
+export const pendingTransactionStatusEnum = pgEnum("PendingTransactionStatus", [
+  "PENDING",
+  "PROCESSING",
+  "COMPLETED",
+  "FAILED",
+  "RETRY",
 ]);
 
 // Tables
@@ -80,21 +99,85 @@ export const positions = pgTable("Position", {
   userId: uuid("userId")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  tokenAddress: text("tokenAddress").notNull(),
+  positionAddress: text("positionAddress").notNull(),
   poolAddress: text("poolAddress").notNull(),
+  tokenX: jsonb("tokenX").$type<Token>(),
+  tokenY: jsonb("tokenY").$type<Token>(),
   strategyType: strategyTypeEnum("strategyType").notNull(),
-  initialAmount: decimal("initialAmount", {
+
+  status: positionStatusEnum("status").notNull().default("ACTIVE"),
+  lastRebalanceAt: timestamp("lastRebalanceAt"),
+  creationSignature: text("creationSignature"),
+  closureSignature: text("closureSignature"),
+
+  // for pnl
+  depositTokenXAmount: decimal("depositTokenXAmount", {
     precision: 20,
     scale: 8,
   }).notNull(),
-  currentValue: decimal("currentValue", { precision: 20, scale: 8 }).notNull(),
-  feesEarned: decimal("feesEarned", { precision: 20, scale: 8 })
-    .notNull()
-    .default("0"),
-  status: positionStatusEnum("status").notNull().default("ACTIVE"),
-  lastRebalanceAt: timestamp("lastRebalanceAt"),
-  priceRangeMin: decimal("priceRangeMin", { precision: 20, scale: 8 }),
-  priceRangeMax: decimal("priceRangeMax", { precision: 20, scale: 8 }),
+  depositTokenYAmount: decimal("depositTokenYAmount", {
+    precision: 20,
+    scale: 8,
+  }).notNull(),
+  tokenXPriceAtCreation: decimal("tokenXPriceAtCreation", {
+    precision: 20,
+    scale: 8,
+  }).notNull(), // Price in SOL/USD when position created
+  tokenYPriceAtCreation: decimal("tokenYPriceAtCreation", {
+    precision: 20,
+    scale: 8,
+  }).notNull(),
+  // withdraw
+  withdrawTokenXAmount: decimal("withdrawTokenXAmount", {
+    precision: 20,
+    scale: 8,
+  }).notNull(),
+  withdrawTokenYAmount: decimal("withdrawTokenYAmount", {
+    precision: 20,
+    scale: 8,
+  }).notNull(),
+  tokenXPriceAtClosure: decimal("tokenXPriceAtClosure", {
+    precision: 20,
+    scale: 8,
+  }),
+  tokenYPriceAtClosure: decimal("tokenYPriceAtClosure", {
+    precision: 20,
+    scale: 8,
+  }),
+  // fee
+  feeTokenXAmount: decimal("feeTokenXAmount", {
+    precision: 20,
+    scale: 8,
+  }).notNull(),
+  feeTokenYAmount: decimal("feeTokenYAmount", {
+    precision: 20,
+    scale: 8,
+  }).notNull(),
+  initialValueInSol: decimal("initialValueInSol", {
+    precision: 20,
+    scale: 8,
+  }).notNull(),
+  finalValueInSol: decimal("finalValueInSol", {
+    precision: 20,
+    scale: 8,
+  }),
+  feesEarnedInSol: decimal("feesEarnedInSol", {
+    precision: 20,
+    scale: 8,
+  }).default("0"), // Total fees earned in SOL
+  pnlInSol: decimal("pnlInSol", {
+    precision: 20,
+    scale: 8,
+  }),
+  pnlInUsd: decimal("pnlInUsd", {
+    precision: 20,
+    scale: 8,
+  }),
+  pnlPercentage: decimal("pnlPercentage", {
+    precision: 10,
+    scale: 4,
+  }),
+
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });
@@ -153,6 +236,23 @@ export const points = pgTable("Points", {
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 });
 
+export const pendingTransactions = pgTable("PendingTransaction", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  signature: text("signature").notNull().unique(),
+  operationType: operationTypeEnum("operationType").notNull(),
+  userId: uuid("userId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  status: pendingTransactionStatusEnum("status").notNull().default("PENDING"),
+  metadata: text("metadata"),
+  retryCount: integer("retryCount").notNull().default(0),
+  maxRetries: integer("maxRetries").notNull().default(3),
+  lastProcessedAt: timestamp("lastProcessedAt"),
+  errorMessage: text("errorMessage"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   wallets: many(wallets),
@@ -198,12 +298,12 @@ export const rebalanceEventsRelations = relations(
 export const referralsRelations = relations(referrals, ({ one, many }) => ({
   referrer: one(users, {
     fields: [referrals.referrerId],
-    references: [users.telegramId], 
+    references: [users.telegramId],
     relationName: "referrer",
   }),
   referred: one(users, {
     fields: [referrals.referredId],
-    references: [users.telegramId], 
+    references: [users.telegramId],
     relationName: "referred",
   }),
   points: many(points),
@@ -212,13 +312,23 @@ export const referralsRelations = relations(referrals, ({ one, many }) => ({
 export const pointsRelations = relations(points, ({ one }) => ({
   user: one(users, {
     fields: [points.userId],
-    references: [users.telegramId], 
+    references: [users.telegramId],
   }),
   referral: one(referrals, {
     fields: [points.referralId],
     references: [referrals.id],
   }),
 }));
+
+export const pendingTransactionsRelations = relations(
+  pendingTransactions,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [pendingTransactions.userId],
+      references: [users.id],
+    }),
+  })
+);
 
 // Export types
 export type User = typeof users.$inferSelect;
@@ -235,6 +345,8 @@ export type Referral = typeof referrals.$inferSelect;
 export type NewReferral = typeof referrals.$inferInsert;
 export type Points = typeof points.$inferSelect;
 export type NewPoints = typeof points.$inferInsert;
+export type PendingTransaction = typeof pendingTransactions.$inferSelect;
+export type NewPendingTransaction = typeof pendingTransactions.$inferInsert;
 
 // Export enum types
 export type StrategyType = (typeof strategyTypeEnum.enumValues)[number];
@@ -245,3 +357,6 @@ export type TransactionStatus =
 export type RebalanceStrategy =
   (typeof rebalanceStrategyEnum.enumValues)[number];
 export type PointType = (typeof pointTypeEnum.enumValues)[number];
+export type OperationType = (typeof operationTypeEnum.enumValues)[number];
+export type PendingTransactionStatus =
+  (typeof pendingTransactionStatusEnum.enumValues)[number];

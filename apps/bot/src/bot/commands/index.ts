@@ -10,9 +10,12 @@ import { walletCommand } from "./wallet";
 import { generateImageCommand } from "./genarate-images";
 import { referralCommand } from "./referral";
 import { settingsCommand } from "./settings";
+import { devCommand } from "./dev";
 
-
-export function registerCommands(bot: Telegraf<BotContext>, server: FastifyInstance) {
+export function registerCommands(
+  bot: Telegraf<BotContext>,
+  server: FastifyInstance
+) {
   startCommand(bot, server);
   helpCommand(bot, server);
   portfolioCommand(bot, server);
@@ -22,4 +25,6 @@ export function registerCommands(bot: Telegraf<BotContext>, server: FastifyInsta
   generateImageCommand(bot, server);
   referralCommand(bot, server);
   settingsCommand(bot, server);
+  // for dev
+  devCommand(bot, server);
 }

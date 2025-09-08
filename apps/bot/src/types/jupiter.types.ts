@@ -58,7 +58,7 @@ export interface JupiterToken {
 export type JupiterTokenSearchResponse = Array<JupiterToken>;
 
 export interface JupiterTokenInfo {
-  address: string;
+  id: string;
   name: string;
   symbol: string;
   icon?: string;
