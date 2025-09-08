@@ -1,6 +1,6 @@
 import { Context } from "telegraf";
 import { FastifyInstance } from "fastify";
-import { TRENDING_MESSAGES } from "@/bot/config/constants";
+import { TRENDING_MESSAGES } from "../constants/trending.constants";
 import { trendingService } from "@/services/trending.service";
 import { getTrendingKeyboard } from "../keyboards/trending-menu";
 import { buildPoolDetailMarkdown } from "@/services/pool-detail.service";
@@ -17,7 +17,7 @@ export async function trendingHandler(
     const loading = await ctx.reply(TRENDING_MESSAGES.FETCHING);
     const chatId = ctx.chat!.id;
 
-    await trendingService.loadHotPoolsPage(chatId, 0, "tvl", "dlmm");
+    await trendingService.loadHotPoolsPage(chatId, 0, "apy", "dlmm");
 
     const state = trendingService.getState(chatId)!;
 
@@ -123,12 +123,13 @@ export async function handleTrendingCallback(
 
     let currentState = trendingService.getState(chatId);
     if (!currentState) {
-      await trendingService.loadHotPoolsPage(chatId, 0, "tvl", "dlmm");
+      await trendingService.loadHotPoolsPage(chatId, 0, "apy", "dlmm");
       currentState = trendingService.getState(chatId)!;
     }
 
     const beforeApi = currentState.apiPage ?? 0;
-    const currentSort = currentState.sortBy || "tvl";
+    const currentSort: "apy" | "fee24h" | "fee_tvl_ratio" =
+      currentState.sortBy || "apy";
     const currentSource: "dlmm" | "dammv1" | "dammv2" =
       source || currentState.poolSource || "dlmm";
 
