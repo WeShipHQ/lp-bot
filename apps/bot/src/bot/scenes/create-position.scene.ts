@@ -250,6 +250,8 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         return ctx.scene.leave();
       }
 
+      console.log('poolData', poolData);
+
       // Store pool data in wizard state
       (ctx.scene.state as WizardState).poolData = poolData;
       (ctx.scene.state as WizardState).step = "strategy_selection";

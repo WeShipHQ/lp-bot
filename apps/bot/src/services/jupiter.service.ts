@@ -15,67 +15,6 @@ import { api } from "@/bot/utils/http-client.util";
 export class JupiterService {
   private readonly baseUrl = "https://lite-api.jup.ag";
   private readonly tokenBaseUrl = "https://lite-api.jup.ag/tokens/v2";
-  // private readonly maxRetries = 3;
-  // private readonly retryDelay = 1000;
-
-  // private tokenInfoCache = new Map<string, { data: any; timestamp: number }>();
-  // private readonly CACHE_TTL = 1 * 60 * 1000;
-
-  // async getTokenInfo(tokenAddress: string): Promise<JupiterTokenInfo | null> {
-  //   // Check cache first
-  //   const cachedToken = this.tokenInfoCache.get(tokenAddress);
-  //   const now = Date.now();
-
-  //   if (cachedToken && now - cachedToken.timestamp < this.CACHE_TTL) {
-  //     return cachedToken.data;
-  //   }
-
-  //   let lastError: Error | null = null;
-
-  //   for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
-  //     try {
-  //       if (attempt > 1) {
-  //         console.log(
-  //           `[Jupiter] Retrying token info for: ${tokenAddress} (attempt ${attempt})`
-  //         );
-  //       }
-
-  //       const searchResponse = await fetch(
-  //         `${this.baseUrl}/tokens/v2/search?query=${tokenAddress}`
-  //       );
-
-  //       if (!searchResponse.ok) {
-  //         throw new Error(`HTTP error! status: ${searchResponse.status}`);
-  //       }
-
-  //       const tokens: JupiterToken[] = await searchResponse.json();
-
-  //       if (!tokens || tokens.length === 0) {
-  //         return null;
-  //       }
-
-  //       const token = tokens.find((t) => t.id === tokenAddress) || tokens[0];
-  //       const tokenInfo = this.mapJupiterTokenToTokenInfo(token);
-
-  //       // Cache the result
-  //       this.tokenInfoCache.set(tokenAddress, {
-  //         data: tokenInfo,
-  //         timestamp: now,
-  //       });
-
-  //       return tokenInfo;
-  //     } catch (error) {
-  //       lastError = error as Error;
-  //       console.error(`[Jupiter] API error for ${tokenAddress}:`, error);
-
-  //       if (attempt < this.maxRetries) {
-  //         await this.delay(this.retryDelay * Math.pow(2, attempt - 1));
-  //       }
-  //     }
-  //   }
-
-  //   throw new Error(`Failed to fetch token information: ${lastError?.message}`);
-  // }
 
   private mapJupiterTokenToTokenInfo(
     jupiterToken: JupiterToken
@@ -124,37 +63,41 @@ export class JupiterService {
   }
 
   async getTokenPairInfo(
-    tokenX: string,
-    tokenY: string
+    tokenXAddress: string,
+    tokenYAddress: string
   ): Promise<{
     tokenX: JupiterTokenInfo;
     tokenY: JupiterTokenInfo;
   }> {
     try {
-      console.log(`[Jupiter] Fetching token info for: ${tokenX}, ${tokenY}`);
+      console.log(
+        `[Jupiter] Fetching token info for: ${tokenXAddress}, ${tokenYAddress}`
+      );
 
       const response = await api.getWithRetry<JupiterTokenSearchResponse>(
-        `${this.tokenBaseUrl}/search?query=${tokenX},${tokenY}`
+        `${this.tokenBaseUrl}/search?query=${tokenXAddress},${tokenYAddress}`
       );
 
       if (!Array.isArray(response) || response.length < 2) {
         throw new Error(
-          `[Jupiter] Error fetching token info ${tokenX}, ${tokenY}`
+          `[Jupiter] Error fetching token info ${tokenXAddress}, ${tokenYAddress}`
         );
       }
 
-      const tokX =
-        response.find((t) => t.id === tokenX) || (response[0] as JupiterToken);
-      const tokY =
-        response.find((t) => t.id === tokenY) || (response[1] as JupiterToken);
+      const tokenX =
+        response.find((t) => t.id === tokenXAddress) ||
+        (response[0] as JupiterToken);
+      const tokenY =
+        response.find((t) => t.id === tokenYAddress) ||
+        (response[1] as JupiterToken);
 
       return {
-        tokenX: this.mapJupiterTokenToTokenInfo(tokX),
-        tokenY: this.mapJupiterTokenToTokenInfo(tokY),
+        tokenX: this.mapJupiterTokenToTokenInfo(tokenX),
+        tokenY: this.mapJupiterTokenToTokenInfo(tokenY),
       };
     } catch (error) {
       console.error(
-        `[Jupiter] Error fetching token info ${tokenX}, ${tokenY}:`,
+        `[Jupiter] Error fetching token info ${tokenXAddress}, ${tokenYAddress}:`,
         error
       );
       throw error;

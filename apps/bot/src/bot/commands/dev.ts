@@ -38,12 +38,18 @@ export function devCommand(
     // close position
     // const closePosId =
     //   "3DP1SbuWJbEdJn22gvRiEJzXerpkTAJx5YXrjt3n29PYKw2NnNPr5BzqFkgeQB1iZvkf5hB8AiXNLKa5JkenvdVp";
-    const posAddress = "G8Rrhq9mNjjPakapTqbT9jC4KoQDHpqrfiJwEMAtgPZg";
+    const posAddress = "Bgnzyo4LHcN7msbGDY96Eudrz22D9jqQaUfGxEyBuZq2";
 
     // await positionService.closePositionV2(ctx.user, posAddress, posAddress);
 
     await ctx.scene.enter(SCENE_IDS.POSITION_DETAIL_SCENE, {
       positionAddress: posAddress,
     });
+
+    // await positionService.checkClaimFeeTx(
+    //   "2YUKK6Hy6VZcDQr7ZZh52uCV95Skncs8UR4XFU6Pbhe8ddgBDCASQct4UMKq2YpwgmUizwLCqBMFxBQPr36whb7Z"
+    // );
+
+    // return ctx.reply("Dev command");
   });
 }

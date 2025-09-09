@@ -1,20 +1,24 @@
 import { asc, eq } from "drizzle-orm";
 import { db } from ".";
-import { 
-  NewPosition, 
-  NewUser, 
+import {
+  NewPosition,
+  NewUser,
   NewWallet,
   NewTransaction,
   NewRebalanceEvent,
-  positions, 
-  User, 
+  positions,
+  User,
   users,
   wallets,
   Wallet,
   transactions,
   Transaction,
   rebalanceEvents,
-  RebalanceEvent
+  RebalanceEvent,
+  claimHistory,
+  NewClaimHistory,
+  positionSnapshots,
+  NewPositionSnapshot,
 } from "./schema";
 
 // users -----
@@ -46,7 +50,8 @@ export async function findUserById(id: string): Promise<User | undefined> {
 }
 
 export async function updateUser(id: string, updates: Partial<NewUser>) {
-  const [user] = await db.update(users)
+  const [user] = await db
+    .update(users)
     .set({ ...updates, updatedAt: new Date() })
     .where(eq(users.id, id))
     .returning();
@@ -84,7 +89,9 @@ export async function findWalletById(id: string): Promise<Wallet | undefined> {
   }
 }
 
-export async function findWalletByAddress(address: string): Promise<Wallet | undefined> {
+export async function findWalletByAddress(
+  address: string
+): Promise<Wallet | undefined> {
   try {
     return await db.query.wallets.findFirst({
       where: eq(wallets.address, address),
@@ -94,7 +101,9 @@ export async function findWalletByAddress(address: string): Promise<Wallet | und
   }
 }
 
-export async function findActiveWalletByUserId(userId: string): Promise<Wallet | undefined> {
+export async function findActiveWalletByUserId(
+  userId: string
+): Promise<Wallet | undefined> {
   try {
     return await db.query.wallets.findFirst({
       where: eq(wallets.userId, userId) && eq(wallets.isActive, true),
@@ -105,7 +114,8 @@ export async function findActiveWalletByUserId(userId: string): Promise<Wallet |
 }
 
 export async function updateWallet(id: string, updates: Partial<NewWallet>) {
-  const [wallet] = await db.update(wallets)
+  const [wallet] = await db
+    .update(wallets)
     .set({ ...updates, updatedAt: new Date() })
     .where(eq(wallets.id, id))
     .returning();
@@ -143,8 +153,12 @@ export async function getPositionsById(id: string) {
   }
 }
 
-export async function updatePosition(id: string, updates: Partial<NewPosition>) {
-  const [position] = await db.update(positions)
+export async function updatePosition(
+  id: string,
+  updates: Partial<NewPosition>
+) {
+  const [position] = await db
+    .update(positions)
     .set({ ...updates, updatedAt: new Date() })
     .where(eq(positions.id, id))
     .returning();
@@ -155,13 +169,38 @@ export async function deletePosition(id: string) {
   await db.delete(positions).where(eq(positions.id, id));
 }
 
+// claimHistory -----
+export async function createClaimHistory(newClaimHistory: NewClaimHistory) {
+  const [createdClaimHistory] = await db
+    .insert(claimHistory)
+    .values(newClaimHistory)
+    .returning();
+  return createdClaimHistory;
+}
+
+// snapshot -----
+export async function createPositionSnapshot(
+  newPositionSnapshot: NewPositionSnapshot
+) {
+  const [createdPositionSnapshot] = await db
+    .insert(positionSnapshots)
+    .values(newPositionSnapshot)
+    .returning();
+  return createdPositionSnapshot;
+}
+
 // transactions -----
 export async function createTransaction(newTransaction: NewTransaction) {
-  const [transaction] = await db.insert(transactions).values(newTransaction).returning();
+  const [transaction] = await db
+    .insert(transactions)
+    .values(newTransaction)
+    .returning();
   return transaction;
 }
 
-export async function findTransactionsByPositionId(positionId: string): Promise<Transaction[]> {
+export async function findTransactionsByPositionId(
+  positionId: string
+): Promise<Transaction[]> {
   try {
     return await db.query.transactions.findMany({
       where: eq(transactions.positionId, positionId),
@@ -172,7 +211,9 @@ export async function findTransactionsByPositionId(positionId: string): Promise<
   }
 }
 
-export async function findTransactionById(id: string): Promise<Transaction | undefined> {
+export async function findTransactionById(
+  id: string
+): Promise<Transaction | undefined> {
   try {
     return await db.query.transactions.findFirst({
       where: eq(transactions.id, id),
@@ -182,7 +223,9 @@ export async function findTransactionById(id: string): Promise<Transaction | und
   }
 }
 
-export async function findTransactionByTxHash(txHash: string): Promise<Transaction | undefined> {
+export async function findTransactionByTxHash(
+  txHash: string
+): Promise<Transaction | undefined> {
   try {
     return await db.query.transactions.findFirst({
       where: eq(transactions.txHash, txHash),
@@ -192,8 +235,12 @@ export async function findTransactionByTxHash(txHash: string): Promise<Transacti
   }
 }
 
-export async function updateTransaction(id: string, updates: Partial<NewTransaction>) {
-  const [transaction] = await db.update(transactions)
+export async function updateTransaction(
+  id: string,
+  updates: Partial<NewTransaction>
+) {
+  const [transaction] = await db
+    .update(transactions)
     .set({ ...updates, updatedAt: new Date() })
     .where(eq(transactions.id, id))
     .returning();
@@ -205,12 +252,19 @@ export async function deleteTransaction(id: string) {
 }
 
 // rebalanceEvents -----
-export async function createRebalanceEvent(newRebalanceEvent: NewRebalanceEvent) {
-  const [rebalanceEvent] = await db.insert(rebalanceEvents).values(newRebalanceEvent).returning();
+export async function createRebalanceEvent(
+  newRebalanceEvent: NewRebalanceEvent
+) {
+  const [rebalanceEvent] = await db
+    .insert(rebalanceEvents)
+    .values(newRebalanceEvent)
+    .returning();
   return rebalanceEvent;
 }
 
-export async function findRebalanceEventsByPositionId(positionId: string): Promise<RebalanceEvent[]> {
+export async function findRebalanceEventsByPositionId(
+  positionId: string
+): Promise<RebalanceEvent[]> {
   try {
     return await db.query.rebalanceEvents.findMany({
       where: eq(rebalanceEvents.positionId, positionId),
@@ -221,7 +275,9 @@ export async function findRebalanceEventsByPositionId(positionId: string): Promi
   }
 }
 
-export async function findRebalanceEventById(id: string): Promise<RebalanceEvent | undefined> {
+export async function findRebalanceEventById(
+  id: string
+): Promise<RebalanceEvent | undefined> {
   try {
     return await db.query.rebalanceEvents.findFirst({
       where: eq(rebalanceEvents.id, id),

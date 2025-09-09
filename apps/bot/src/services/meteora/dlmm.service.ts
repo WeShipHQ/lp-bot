@@ -131,6 +131,30 @@ export class MeteoraDlmmService {
     };
   }
 
+  async claimFeesIx(
+    ownerAddress: PublicKey,
+    poolAddress: PublicKey,
+    positionAddress: PublicKey
+  ): Promise<{
+    instructions: TransactionInstruction[];
+  }> {
+    const dlmmPool = await this.createInstance(poolAddress);
+    const position = await dlmmPool.getPosition(positionAddress);
+
+    if (!position) {
+      throw new Error("Position not found");
+    }
+
+    const claimFeeTxs = await dlmmPool.claimSwapFee({
+      owner: ownerAddress,
+      position,
+    });
+
+    return {
+      instructions: claimFeeTxs.flatMap((tx) => tx.instructions),
+    };
+  }
+
   async getPriceRange(
     poolAddress: string,
     rangeInterval: number
@@ -242,7 +266,7 @@ export class MeteoraDlmmService {
     positionAddress: string | PublicKey,
     poolAddress: string | PublicKey
   ): Promise<{
-    lpPair: LbPair;
+    lbPair: LbPair;
     lbPosition: LbPosition;
   }> {
     const dlmmPool = await this.createInstance(poolAddress);
@@ -254,7 +278,7 @@ export class MeteoraDlmmService {
     );
 
     return {
-      lpPair: dlmmPool.lbPair,
+      lbPair: dlmmPool.lbPair,
       lbPosition,
     };
   }

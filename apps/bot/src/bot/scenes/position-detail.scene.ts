@@ -10,6 +10,9 @@ import {
 } from "../keyboards/position-detail-menu";
 import { MeteoraDlmmPosition } from "@/types/meteora.types";
 import { answerCallbackSafely, DISABLE_LINK_PREVIEW } from "../handlers";
+import { db } from "@/db";
+import { poolService } from "@/services/pool.service";
+import { getTokenPriceService } from "@/services/token-price.service";
 
 type SceneState = {
   positionAddress?: string;
@@ -146,7 +149,7 @@ positionDetailScene.action("pos_close_yes", async (ctx) => {
 
   try {
     const { success, transactionId, error } =
-      await positionService.closePositionV2(
+      await positionService.closePosition(
         ctx.user,
         position.pair_address,
         position.address
@@ -208,6 +211,19 @@ positionDetailScene.action("pos_close_no", async (ctx) => {
 positionDetailScene.action(/^pos_claim_(.+)$/, async (ctx) => {
   await ctx.answerCbQuery();
   const positionAddress = ctx.match[1];
+
+  const position = await db.query.positions.findFirst({
+    where: (positions, { eq }) =>
+      eq(positions.positionAddress, positionAddress),
+  });
+
+  if (position) {
+    console.log("claimming", position.id);
+    const results = await positionService.claimFee(ctx.user, position.id);
+
+    console.log("results", results);
+  }
+
   // TODO: Implement claim fees logic
   await ctx.reply(`💰 Claiming fees for position ${positionAddress}...`);
 });

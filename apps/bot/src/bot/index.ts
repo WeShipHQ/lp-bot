@@ -1,6 +1,7 @@
 import { Telegraf, Scenes, session } from "telegraf";
 import { message } from "telegraf/filters";
 import { FastifyInstance } from "fastify";
+import Decimal from "decimal.js";
 import { setupMiddleware } from "./middleware";
 import { registerCommands } from "./commands";
 import { messageHandler } from "./handlers";
@@ -9,6 +10,13 @@ import { logger } from "@/utils/logger";
 import { positionDetailScene } from "./scenes";
 import { poolDetailScene } from "./scenes/pool-detail.scene";
 import { createPositionScene } from "./scenes";
+
+Decimal.set({
+  precision: 28,           // High precision for financial calculations
+  rounding: Decimal.ROUND_DOWN,  // Conservative rounding for financial apps
+  toExpNeg: -18,          // Avoid scientific notation for small numbers
+  toExpPos: 18            // Avoid scientific notation for large numbers
+});
 
 export async function setupBotCommands(
   bot: Telegraf<BotContext>,
@@ -40,28 +48,6 @@ export async function setupBotCommands(
   bot.on(message("text"), messageHandler);
 
   registerCommands(bot, server);
-
-  // Register callback query handlers
-  // bot.action(
-  //   /^position_(token|pool)_[1-9A-HJ-NP-Za-km-z]{32,44}_(damm_v1|damm_v2|dlmm)?$/,
-  //   (ctx) => {
-  //     console.log("handlePositionCallback", ctx.callbackQuery);
-  //     return handlePositionCallback(ctx, server);
-  //   }
-  // );
-
-  // bot.action(/^select-pool_[1-9A-HJ-NP-Za-km-z]{32,44}$/, (ctx) => {
-  //   console.log("handlePoolSelection", ctx.callbackQuery);
-  //   return handlePoolSelection(ctx, server);
-  // });
-
-  // bot.action(
-  //   /^create-position_(spot|curve|single)_[1-9A-HJ-NP-Za-km-z]{32,44}$/,
-  //   (ctx) => {
-  //     console.log("handlePositionCreation", ctx.callbackQuery);
-  //     return handlePositionCreation(ctx, server);
-  //   }
-  // );
 
   // Global error handler
   bot.catch((err, ctx) => {

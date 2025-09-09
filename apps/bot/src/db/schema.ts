@@ -110,6 +110,44 @@ export const positions = pgTable("Position", {
   creationSignature: text("creationSignature"),
   closureSignature: text("closureSignature"),
 
+  // Stop Loss / Take Profit
+  slPercentage: decimal("slPercentage", { precision: 5, scale: 2 }), // e.g., 10.0 for -10%
+  tpPercentage: decimal("tpPercentage", { precision: 5, scale: 2 }), // e.g., 20.0 for +20%
+  trailingStopPercentage: decimal("trailingStopPercentage", {
+    precision: 5,
+    scale: 2,
+  }),
+  timeBasedSLPercentage: decimal("timeBasedSLPercentage", {
+    precision: 5,
+    scale: 2,
+  }),
+  volatilityAdjusted: boolean("volatilityAdjusted").default(false),
+
+  // pnl tracking
+  initialValueUSD: decimal("initialValueUSD", {
+    precision: 18,
+    scale: 2,
+  }).notNull(),
+  initialValueSOL: decimal("initialValueSOL", {
+    precision: 18,
+    scale: 9,
+  }).notNull(),
+  cumulativeAbsolutePnlUSD: decimal("cumulativeAbsolutePnlUSD", {
+    precision: 18,
+    scale: 2,
+  }).default("0"),
+  currentSegmentInitialUSD: decimal("currentSegmentInitialUSD", {
+    precision: 18,
+    scale: 2,
+  }),
+
+  // Rebalancing
+  isRebalancingEnabled: boolean("isRebalancingEnabled").default(false),
+  rebalanceThreshold: decimal("rebalanceThreshold", {
+    precision: 5,
+    scale: 2,
+  }).default("20.0"),
+
   // for pnl
   depositTokenXAmount: decimal("depositTokenXAmount", {
     precision: 20,
@@ -153,11 +191,15 @@ export const positions = pgTable("Position", {
     precision: 20,
     scale: 8,
   }).notNull(),
-  initialValueInSol: decimal("initialValueInSol", {
-    precision: 20,
-    scale: 8,
+  // initialValueInSol: decimal("initialValueInSol", {
+  //   precision: 20,
+  //   scale: 8,
+  // }).notNull(),
+  finalValueUSD: decimal("finalValueUSD", {
+    precision: 18,
+    scale: 2,
   }).notNull(),
-  finalValueInSol: decimal("finalValueInSol", {
+  finalValueSol: decimal("finalValueSol", {
     precision: 20,
     scale: 8,
   }),
@@ -197,20 +239,20 @@ export const transactions = pgTable("Transaction", {
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });
 
-export const rebalanceEvents = pgTable("RebalanceEvent", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  positionId: uuid("positionId")
-    .notNull()
-    .references(() => positions.id, { onDelete: "cascade" }),
-  oldValue: decimal("oldValue", { precision: 20, scale: 8 }).notNull(),
-  newValue: decimal("newValue", { precision: 20, scale: 8 }).notNull(),
-  feesCollected: decimal("feesCollected", { precision: 20, scale: 8 })
-    .notNull()
-    .default("0"),
-  reason: text("reason").notNull(),
-  txHash: text("txHash"),
-  createdAt: timestamp("createdAt").notNull().defaultNow(),
-});
+// export const rebalanceEvents = pgTable("RebalanceEvent", {
+//   id: uuid("id").primaryKey().defaultRandom(),
+//   positionId: uuid("positionId")
+//     .notNull()
+//     .references(() => positions.id, { onDelete: "cascade" }),
+//   oldValue: decimal("oldValue", { precision: 20, scale: 8 }).notNull(),
+//   newValue: decimal("newValue", { precision: 20, scale: 8 }).notNull(),
+//   feesCollected: decimal("feesCollected", { precision: 20, scale: 8 })
+//     .notNull()
+//     .default("0"),
+//   reason: text("reason").notNull(),
+//   txHash: text("txHash"),
+//   createdAt: timestamp("createdAt").notNull().defaultNow(),
+// });
 
 export const referrals = pgTable("Referral", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -251,6 +293,79 @@ export const pendingTransactions = pgTable("PendingTransaction", {
   errorMessage: text("errorMessage"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+});
+
+export const positionSnapshots = pgTable("PositionSnapshot", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  positionId: uuid("positionId")
+    .notNull()
+    .references(() => positions.id, { onDelete: "cascade" }),
+  snapshotTimestamp: timestamp("snapshotTimestamp").notNull().defaultNow(),
+  currentValueUSD: decimal("currentValueUSD", {
+    precision: 18,
+    scale: 2,
+  }).notNull(),
+  unrealizedPnlUSD: decimal("unrealizedPnlUSD", {
+    precision: 18,
+    scale: 2,
+  }).notNull(),
+  unrealizedPnlPct: decimal("unrealizedPnlPct", {
+    precision: 5,
+    scale: 2,
+  }).notNull(),
+  tokenXAmount: decimal("tokenXAmount", { precision: 28, scale: 9 }).notNull(),
+  tokenYAmount: decimal("tokenYAmount", { precision: 28, scale: 9 }).notNull(),
+  unclaimedFeesUSD: decimal("unclaimedFeesUSD", {
+    precision: 18,
+    scale: 2,
+  }).notNull(),
+  priceXUSD: decimal("priceXUSD", { precision: 18, scale: 9 }).notNull(),
+  priceYUSD: decimal("priceYUSD", { precision: 18, scale: 9 }).notNull(),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+});
+
+export const claimHistory = pgTable("ClaimHistory", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  positionId: uuid("positionId")
+    .notNull()
+    .references(() => positions.id, { onDelete: "cascade" }),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  claimedAmountX: decimal("claimedAmountX", {
+    precision: 28,
+    scale: 9,
+  }).notNull(),
+  claimedAmountY: decimal("claimedAmountY", {
+    precision: 28,
+    scale: 9,
+  }).notNull(),
+  claimedRewardsOther: jsonb("claimedRewardsOther"), // {'token_mint': amount}
+  claimedUSD: decimal("claimedUSD", { precision: 18, scale: 2 }).notNull(),
+  isDuringRebalance: boolean("isDuringRebalance").default(false),
+  txHash: text("txHash"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+});
+
+export const rebalanceEvents = pgTable("RebalanceEvent", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  positionId: uuid("positionId")
+    .notNull()
+    .references(() => positions.id, { onDelete: "cascade" }),
+  timestamp: timestamp("timestamp").notNull().defaultNow(),
+  oldPositionAddress: text("oldPositionAddress").notNull(),
+  newPositionAddress: text("newPositionAddress").notNull(),
+  segmentFinalUSD: decimal("segmentFinalUSD", { precision: 18, scale: 2 }).notNull(),
+  segmentPnlUSD: decimal("segmentPnlUSD", { precision: 18, scale: 2 }).notNull(),
+  segmentPnlPct: decimal("segmentPnlPct", { precision: 5, scale: 2 }).notNull(),
+  oldValue: decimal("oldValue", { precision: 20, scale: 8 }).notNull(),
+  newValue: decimal("newValue", { precision: 20, scale: 8 }).notNull(),
+  feesCollected: decimal("feesCollected", { precision: 20, scale: 8 })
+    .notNull()
+    .default("0"),
+  reason: text("reason").notNull(),
+  txHash: text("txHash"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
 });
 
 // Relations
@@ -347,6 +462,11 @@ export type Points = typeof points.$inferSelect;
 export type NewPoints = typeof points.$inferInsert;
 export type PendingTransaction = typeof pendingTransactions.$inferSelect;
 export type NewPendingTransaction = typeof pendingTransactions.$inferInsert;
+export type NewClaimHistory = typeof claimHistory.$inferInsert;
+export type ClaimHistory = typeof claimHistory.$inferSelect;
+export type NewPositionSnapshot = typeof positionSnapshots.$inferInsert;
+export type PositionSnapshot = typeof positionSnapshots.$inferSelect;
+
 
 // Export enum types
 export type StrategyType = (typeof strategyTypeEnum.enumValues)[number];

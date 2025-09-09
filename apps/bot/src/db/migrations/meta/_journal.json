@@ -64,6 +64,13 @@
       "when": 1757329827674,
       "tag": "0008_empty_lady_deathstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1757402898533,
+      "tag": "0009_slimy_elektra",
+      "breakpoints": true
     }
   ]
 }
