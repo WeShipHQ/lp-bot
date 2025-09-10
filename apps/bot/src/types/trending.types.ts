@@ -81,6 +81,7 @@ export interface PoolTrendingItem {
   fee24h: number;
   tvl: number;
   feeTvlRatio?: number;
+  volume24h?: number;
   isVerified: boolean;
 }
 
@@ -100,7 +101,7 @@ export interface TrendingPageState {
   messageId?: number;
   displayMode?: "tokens" | "pools";
   poolSource?: "dlmm" | "dammv1" | "dammv2";
-  sortBy?: "apy" | "fee24h" | "fee_tvl_ratio";
+  sortBy?: "apy" | "tvl" | "volume24h" | "fee_tvl_ratio";
 }
 export interface DammV1SearchResponse {
   status?: number;

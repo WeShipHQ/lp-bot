@@ -1,6 +1,12 @@
 import { PoolTrendingItem, TrendingPageState } from "@/types/trending.types";
 import { HotPoolsService, hotPoolsService } from "./hot-pools.service";
-import { PoolSortCriteria, PoolSource } from "./hot-pools/types";
+import { PoolSortCriteria, PoolSource, HotPoolItem } from "./hot-pools/types";
+import {
+  formatNumber,
+  formatPrice,
+  formatPercentage,
+  formatAPR,
+} from "@/bot/utils/formatters";
 
 export class TrendingService {
   private readonly pageStates = new Map<number, TrendingPageState>();
@@ -8,8 +14,8 @@ export class TrendingService {
   async loadHotPoolsPage(
     chatId: number,
     apiPage = 0,
-    sortCriteria: PoolSortCriteria = "apy",
-    poolSource: PoolSource = "dlmm"
+    sortCriteria: PoolSortCriteria = "tvl",
+    poolSource: "dlmm" | "dammv1" | "dammv2" = "dlmm"
   ): Promise<PoolTrendingItem[]> {
     const clampedPage = Math.max(
       0,
@@ -27,17 +33,22 @@ export class TrendingService {
       }
     );
 
-    const poolItems: PoolTrendingItem[] = pools.map((pool) => ({
-      poolAddress: pool.address,
-      poolName: pool.name,
-      poolType: pool.type,
-      tokenPair: `${pool.tokenASymbol}/${pool.tokenBSymbol}`,
-      apy: pool.apy,
-      fee24h: pool.fee24h,
-      tvl: pool.tvl,
-      feeTvlRatio: pool.feeTvlRatio,
-      isVerified: pool.isVerified,
-    }));
+    const poolItems: PoolTrendingItem[] = pools.map((pool) => {
+      const volume24hValue = (pool as any).volume24h || 0;
+
+      return {
+        poolAddress: pool.address,
+        poolName: pool.name,
+        poolType: pool.type,
+        tokenPair: `${pool.tokenASymbol}/${pool.tokenBSymbol}`,
+        apy: pool.apy,
+        fee24h: pool.fee24h,
+        tvl: pool.tvl,
+        feeTvlRatio: pool.feeTvlRatio,
+        volume24h: volume24hValue,
+        isVerified: pool.isVerified,
+      };
+    });
 
     const pageState =
       this.pageStates.get(chatId) ||
@@ -84,24 +95,36 @@ export class TrendingService {
       ].join("\n");
     }
 
-    const formatCurrency = (value?: number | null) => {
-      if (value == null) return "N/A";
-      const absoluteValue = Math.abs(value);
-      if (absoluteValue >= 1e9) return `$${(value / 1e9).toFixed(2)}B`;
-      if (absoluteValue >= 1e6) return `$${(value / 1e6).toFixed(2)}M`;
-      if (absoluteValue >= 1e3) return `$${(value / 1e3).toFixed(2)}K`;
-      return `$${value.toFixed(2)}`;
-    };
-
-    const formatPercentage = (value: number) => `${value.toFixed(2)}%`;
+    // Using imported formatting functions
 
     const poolLines = poolItems.map((pool, index) => {
-      const apy = formatPercentage(pool.apy);
-      const fee24h = formatCurrency(pool.fee24h);
-      const tvl = formatCurrency(pool.tvl);
+      // Use the imported formatting functions with appropriate options
+      const apy = formatAPR(pool.apy, { cap: 10000 });
+      // Add $ prefix to monetary values
+      const fee24h =
+        "$" + formatNumber(pool.fee24h || 0, { useSuffixes: true });
+      const tvl = "$" + formatNumber(pool.tvl || 0, { useSuffixes: true });
+      const volume24h =
+        "$" + formatNumber(pool.volume24h || 0, { useSuffixes: true });
+      const feeTvlRatio = pool.feeTvlRatio
+        ? formatPercentage(pool.feeTvlRatio * 100, { decimals: 4 })
+        : "N/A";
       const displayIndex = (page - 1) * 5 + index + 1;
 
-      return `/t${displayIndex} ${pool.tokenPair} APY: *${apy}* | Fee24h: *${fee24h}* | TVL: *${tvl}*`;
+      // Show different data based on sort criteria
+      let displayData: string;
+      if (sortCriteria === "tvl") {
+        displayData = `TVL: *${tvl}* | APY: *${apy}* | Fee24h: *${fee24h}*`;
+      } else if (sortCriteria === "volume24h") {
+        displayData = `24h Vol: *${volume24h}* | TVL: *${tvl}* | APY: *${apy}*`;
+      } else if (sortCriteria === "fee_tvl_ratio") {
+        displayData = `Fee/TVL: *${feeTvlRatio}* | TVL: *${tvl}* | APY: *${apy}*`;
+      } else {
+        // Default to APY
+        displayData = `APY: *${apy}* | Fee24h: *${fee24h}* | TVL: *${tvl}*`;
+      }
+
+      return `/${displayIndex}${pool.tokenPair.replace("/", "")} ${displayData}`;
     });
 
     const spacedLines: string[] = [];
@@ -120,7 +143,11 @@ export class TrendingService {
       `💡 Sorted by ${
         sortCriteria === "fee_tvl_ratio"
           ? "Fee/TVL Ratio"
-          : sortCriteria.toUpperCase()
+          : sortCriteria === "tvl"
+            ? "TVL"
+            : sortCriteria === "volume24h"
+              ? "24h Vol"
+              : sortCriteria.toUpperCase()
       }. Page ${page}/${HotPoolsService.TOTAL_PAGES}`,
       "",
       "_Tap on the commands above to view pool details_",

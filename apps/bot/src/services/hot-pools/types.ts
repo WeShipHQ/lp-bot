@@ -15,11 +15,12 @@ export interface HotPoolItem {
   fee24h: number;
   tvl: number;
   feeTvlRatio?: number;
+  volume24h?: number;
   isVerified: boolean;
   poolData: MeteoraPoolData;
 }
 
-export type PoolSortCriteria = "apy" | "fee24h" | "fee_tvl_ratio";
+export type PoolSortCriteria = "apy" | "tvl" | "volume24h" | "fee_tvl_ratio";
 export type PoolSource = "dlmm" | "dammv1" | "dammv2";
 
 export interface HotPoolFilters {
