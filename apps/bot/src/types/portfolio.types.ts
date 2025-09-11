@@ -37,6 +37,9 @@ export type PortfolioPosition = {
   program_type: "DLMM";
   pool_address: string;
 
+  net_profit_usd: number;
+  net_profit_percentage: number;
+
   current_x_amount?: number;
   current_y_amount?: number;
 
@@ -55,18 +58,29 @@ export type PortfolioPosition = {
 
   unclaimed_fees_x?: number;
   unclaimed_fees_y?: number;
+  unclaimed_rewards_x?: number;
+  unclaimed_rewards_y?: number;
 
   claimed_fees_x?: number;
   claimed_fees_y?: number;
+  claimed_rewards_x?: number;
+  claimed_rewards_y?: number;
 
+  initial_deposit_value_usd: number;
   current_value_usd: number;
 
   total_deposits_usd: number;
   total_withdrawals_usd: number;
   total_claimed_fees_usd: number;
+  total_claimed_rewards_usd?: number;
   total_unclaimed_fees_usd: number;
-  position_fee_24h_usd?: number;
+  total_unclaimed_rewards_usd?: number;
 
+  // (fees + rewards)
+  total_claimed_usd?: number;
+  total_unclaimed_usd?: number;
+
+  position_fee_24h_usd?: number;
   position_fee_tvl_24h?: number;
 
   pnl_usd: number;
@@ -92,12 +106,19 @@ export type PortfolioPosition = {
 export type PortfolioTotals = {
   total_positions: number;
   total_current_value_usd: number;
+
   total_unclaimed_fees_usd: number;
+  total_unclaimed_rewards_usd: number;
+  total_unclaimed_usd: number; // fees + rewards
+
   total_claimed_fees_usd: number;
+  total_claimed_rewards_usd: number;
+  total_claimed_usd: number; // fees + rewards
+
   total_deposits_usd: number;
   total_withdrawals_usd: number;
   total_pnl_usd: number;
-  total_net_deposited_usd: number;
+  total_net_deposited_usd: number; // total deposits - total withdraws
 };
 
 export type PortfolioData = {

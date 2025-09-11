@@ -2,13 +2,14 @@ import { Scenes } from "telegraf";
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
 import { MessageService } from "@/services/message.service";
+import { portfolioService } from "@/services/portfolio.service";
 import { positionService } from "@/services/position.service";
 import {
   getPositionDetailKeyboard,
   getPositionCloseConfirmKeyboard,
 } from "../keyboards/position-detail-menu";
 import { MeteoraDlmmPosition } from "@/types/meteora.types";
-import { DISABLE_LINK_PREVIEW } from "../handlers";
+import { answerCallbackSafely, DISABLE_LINK_PREVIEW } from "../handlers";
 
 type SceneState = {
   positionAddress?: string;
@@ -34,7 +35,7 @@ positionDetailScene.enter(async (ctx) => {
       parse_mode: "Markdown",
     });
 
-    const { position, lbPosition, poolInfo } =
+    const { position, poolInfo } =
       await positionService.getPosition(positionAddress);
 
     ctx.scene.state = {
@@ -53,12 +54,29 @@ positionDetailScene.enter(async (ctx) => {
       return ctx.scene.leave();
     }
 
-    const message = MessageService.getPositionDetailMessageV1(
-      position,
-      lbPosition,
-      poolInfo
+    const mapped = await portfolioService.getPositionByAddress(
+      position.address,
+      poolInfo.address
     );
-    const keyboard = getPositionDetailKeyboard(positionAddress);
+
+    if (!mapped.success) {
+      await ctx.telegram.editMessageText(
+        ctx.chat?.id,
+        loadingMsg.message_id,
+        undefined,
+        MessageService.getErrorMessage(
+          mapped.message || "Failed to load position data"
+        ),
+        { parse_mode: "Markdown" }
+      );
+      return ctx.scene.leave();
+    }
+
+    const message = MessageService.getPositionDetailMessage(
+      mapped.data,
+      ctx.user.walletAddress
+    );
+    const keyboard = getPositionDetailKeyboard(position.address);
 
     await ctx.telegram.editMessageText(
       ctx.chat?.id,
@@ -162,7 +180,7 @@ positionDetailScene.action("pos_close_yes", async (ctx) => {
       successMessage,
       {
         parse_mode: "Markdown",
-        link_preview_options: { is_disabled: true },
+        ...DISABLE_LINK_PREVIEW,
       }
     );
   } catch (error) {
@@ -225,31 +243,60 @@ positionDetailScene.action(/^pos_stop_loss_(.+)$/, async (ctx) => {
 });
 
 positionDetailScene.action(/^pos_refresh_(.+)$/, async (ctx) => {
-  await ctx.answerCbQuery();
   const positionAddress = ctx.match[1];
 
   try {
-    const { position, lbPosition, poolInfo } =
+    const { position, poolInfo } =
       await positionService.getPosition(positionAddress);
 
-    if (!position || !lbPosition || !poolInfo) {
+    if (!position || !poolInfo) {
       await ctx.reply(
         MessageService.getErrorMessage("Position not found or failed to load")
       );
       return;
     }
 
-    const message = MessageService.getPositionDetailMessageV1(
-      position,
-      lbPosition,
-      poolInfo
+    const mapped = await portfolioService.getPositionByAddress(
+      position.address,
+      poolInfo.address
     );
-    const keyboard = getPositionDetailKeyboard(positionAddress);
 
-    await ctx.editMessageText(message, {
-      parse_mode: "Markdown",
-      reply_markup: keyboard,
-    });
+    if (!mapped.success) {
+      await ctx.reply(
+        MessageService.getErrorMessage(
+          mapped.message || "Failed to load position data"
+        )
+      );
+      return;
+    }
+
+    const message = MessageService.getPositionDetailMessage(
+      mapped.data,
+      ctx.user.walletAddress
+    );
+    const keyboard = getPositionDetailKeyboard(position.address);
+
+    try {
+      await ctx.editMessageText(message, {
+        parse_mode: "Markdown",
+        reply_markup: keyboard,
+        ...DISABLE_LINK_PREVIEW,
+      });
+
+      await answerCallbackSafely(ctx, "Position refreshed successfully");
+    } catch (editError) {
+      const error = editError as {
+        response?: { error_code?: number; description?: string };
+      };
+      if (
+        error?.response?.error_code === 400 &&
+        error?.response?.description?.includes("message is not modified")
+      ) {
+        await answerCallbackSafely(ctx, "Position refreshed successfully");
+        return;
+      }
+      throw editError;
+    }
   } catch (error) {
     console.error(error);
     await ctx.reply(
