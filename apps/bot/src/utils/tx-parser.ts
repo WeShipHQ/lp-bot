@@ -5,7 +5,7 @@ import {
   BorshEventCoder,
   BorshInstructionCoder,
 } from "@coral-xyz/anchor";
-import { base64, bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes";
+import { base64, bs58 } from "@coral-xyz/anchor/dist/cjs/utils/bytes/index.js";
 import { CONFIG } from "@/config";
 import {
   AccountMeta,
