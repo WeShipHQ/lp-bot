@@ -208,8 +208,7 @@ export async function portfolioHandler(ctx: BotContext) {
     .message_id;
 
   const portfolioResponse = await portfolioService.getUserPortfolio(
-    // ctx.user.walletAddress!
-    "6ysgEDrZvtRebiRekqKtBfvht32M3jFL4qNckPi9xpVB"
+    ctx.user.walletAddress!
   );
 
   if (!portfolioResponse.success || !portfolioResponse.data) {
