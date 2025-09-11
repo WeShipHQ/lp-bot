@@ -15,7 +15,12 @@ import {
 } from "@solana/web3.js";
 import { User } from "@/db";
 import { CreateSmartTransactionOptions } from "@/types/transaction.types";
-import { broadcastTransaction, createSmartTransaction } from "@/utils/build-tx";
+import {
+  broadcastTransaction,
+  createSmartTransaction,
+  createSmartTransactionWithTip,
+  sendSmartTransactionWithTip,
+} from "@/utils/build-tx";
 
 export interface WalletExportResult {
   privateKey: string;
@@ -153,29 +158,62 @@ export class WalletService {
       options
     );
 
-    // const tipAmount = 100_000; // 100k microLamports = 0.0001 SOL
-    // const { transaction, blockhash } = await createSmartTransactionWithTip(
-    //   connection,
-    //   instructions,
-    //   payer,
-    //   signers,
-    //   lookupTables,
-    //   tipAmount,
-    //   options
-    // );
-
     const { signedTransaction } = await privy.walletApi.solana.signTransaction({
       walletId: user.walletId,
       transaction: transaction,
     });
 
     const result = await broadcastTransaction(connection, signedTransaction);
-    // const result = await sendSmartTransactionWithTip(
+
+    console.log("Sign message result:", result);
+
+    return result;
+  }
+
+  static async signAndSendTransactionWithJito(
+    user: User,
+    instructions: TransactionInstruction[],
+    signers: Signer[] = [],
+    lookupTables: AddressLookupTableAccount[] = [],
+    options: CreateSmartTransactionOptions = {}
+  ): Promise<string> {
+    console.log(`[Wallet] Starting signAndSendTransaction for user ${user.id}`);
+
+    const connection = new Connection(CONFIG.SOLANA.RPC_URL);
+    const payer = new PublicKey(user.walletAddress!);
+
+    // const { transaction } = await createSmartTransaction(
     //   connection,
-    //   signedTransaction,
-    //   blockhash,
-    //   'NY'
+    //   instructions,
+    //   payer,
+    //   signers,
+    //   lookupTables,
+    //   options
     // );
+
+    const tipAmount = 1_000_000; // 100k microLamports = 0.0001 SOL
+    const { transaction, blockhash } = await createSmartTransactionWithTip(
+      connection,
+      instructions,
+      payer,
+      signers,
+      lookupTables,
+      tipAmount,
+      options
+    );
+
+    const { signedTransaction } = await privy.walletApi.solana.signTransaction({
+      walletId: user.walletId,
+      transaction: transaction,
+    });
+
+    // const result = await broadcastTransaction(connection, signedTransaction);
+    const result = await sendSmartTransactionWithTip(
+      connection,
+      signedTransaction,
+      blockhash,
+      "NY"
+    );
 
     console.log("Sign message result:", result);
 

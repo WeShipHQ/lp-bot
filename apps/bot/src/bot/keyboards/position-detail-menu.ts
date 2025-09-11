@@ -8,10 +8,9 @@ export function getPositionDetailKeyboard(
       [
         {
           text: "Close position",
-          // callback_data: `pos_close_${positionAddress}`,
           callback_data: "pos_close_confirmation",
         },
-        { text: "Claim fees", callback_data: `pos_claim_${positionAddress}` },
+        { text: "Claim fees", callback_data: "pos_claim_confirmation" },
       ],
       [
         {
@@ -52,6 +51,28 @@ export function getPositionCloseConfirmKeyboard(
           text: "❌ No, Cancel",
           // callback_data: `1pos_close_cancel_${positionAddress}`,
           callback_data: `pos_close_no`,
+        },
+      ],
+    ],
+  };
+}
+
+/**
+ * Get keyboard for claim fees confirmation
+ */
+export function getClaimFeesConfirmKeyboard(
+  positionAddress: string
+): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: "✅ Yes, Claim Fees",
+          callback_data: `pos_claim_yes_${positionAddress}`,
+        },
+        {
+          text: "❌ No, Cancel",
+          callback_data: `pos_claim_no`,
         },
       ],
     ],

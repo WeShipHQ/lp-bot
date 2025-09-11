@@ -7,16 +7,20 @@ import { positionService } from "@/services/position.service";
 import {
   getPositionDetailKeyboard,
   getPositionCloseConfirmKeyboard,
+  getClaimFeesConfirmKeyboard,
 } from "../keyboards/position-detail-menu";
 import { MeteoraDlmmPosition } from "@/types/meteora.types";
 import { answerCallbackSafely, DISABLE_LINK_PREVIEW } from "../handlers";
 import { db } from "@/db";
 import { poolService } from "@/services/pool.service";
 import { getTokenPriceService } from "@/services/token-price.service";
+import { formatNumber, formatPrice } from "../utils/formatters";
+import { getSolscanLink } from "@/utils/link";
+import { loading } from "../utils/text-formatters";
 
 type SceneState = {
   positionAddress?: string;
-  position?: MeteoraDlmmPosition;
+  position?: DbPosition;
 };
 
 export const positionDetailScene = new Scenes.BaseScene<BotContext>(
@@ -41,12 +45,12 @@ positionDetailScene.enter(async (ctx) => {
     const { position, poolInfo } =
       await positionService.getPosition(positionAddress);
 
-    ctx.scene.state = {
-      position: position,
-      ...ctx.scene.state,
-    };
+    const { dbPosition, lbPosition, lbPair } =
+      await positionService.getPositionDetail(positionAddress);
 
-    if (!position || !poolInfo) {
+    const poolInfo = await poolService.getPoolV2(dbPosition.poolAddress);
+
+    if (!dbPosition || !poolInfo) {
       await ctx.telegram.editMessageText(
         ctx.chat?.id,
         loadingMsg.message_id,
@@ -104,7 +108,6 @@ positionDetailScene.enter(async (ctx) => {
 positionDetailScene.action("pos_close_confirmation", async (ctx) => {
   await ctx.answerCbQuery();
   const position = (ctx.scene.state as SceneState).position;
-
   if (!position) {
     await ctx.reply(
       MessageService.getErrorMessage("Position not found or failed to load")
@@ -115,10 +118,10 @@ positionDetailScene.action("pos_close_confirmation", async (ctx) => {
   const confirmationMessage =
     `🔍 **Confirm Position Closure**\n\n` +
     `Are you sure you want to close this position?\n` +
-    `Position: \`${position.address}\`\n\n` +
+    `Position: \`${position.positionAddress}\`\n\n` +
     `This action cannot be undone.`;
 
-  const keyboard = getPositionCloseConfirmKeyboard(position.address);
+  const keyboard = getPositionCloseConfirmKeyboard(position.positionAddress);
 
   await ctx.reply(confirmationMessage, {
     parse_mode: "Markdown",
@@ -151,8 +154,8 @@ positionDetailScene.action("pos_close_yes", async (ctx) => {
     const { success, transactionId, error } =
       await positionService.closePosition(
         ctx.user,
-        position.pair_address,
-        position.address
+        position.poolAddress,
+        position.positionAddress
       );
 
     if (!success) {
@@ -208,24 +211,111 @@ positionDetailScene.action("pos_close_no", async (ctx) => {
   }
 });
 
-positionDetailScene.action(/^pos_claim_(.+)$/, async (ctx) => {
+positionDetailScene.action("pos_claim_confirmation", async (ctx) => {
+  await ctx.answerCbQuery();
+  const position = (ctx.scene.state as SceneState).position;
+
+  if (!position) {
+    await ctx.reply(
+      MessageService.getErrorMessage("Position not found or failed to load")
+    );
+    return ctx.scene.leave();
+  }
+
+  console.log("position xxxx", position);
+
+  const confirmationMessage =
+    `💰 *Claim LP Fees*\n\n` +
+    `Would you like to claim LP fees and swap it all to SOL? Confirm below\n\n` +
+    `Position: \`${position.positionAddress}\`\n\n` +
+    `This action will claim all available fees and convert them to SOL.`;
+
+  const keyboard = getClaimFeesConfirmKeyboard(position.positionAddress);
+
+  await ctx.reply(confirmationMessage, {
+    parse_mode: "Markdown",
+    reply_markup: keyboard,
+  });
+});
+
+positionDetailScene.action(/^pos_claim_yes_(.+)$/, async (ctx) => {
   await ctx.answerCbQuery();
   const positionAddress = ctx.match[1];
 
-  const position = await db.query.positions.findFirst({
-    where: (positions, { eq }) =>
-      eq(positions.positionAddress, positionAddress),
-  });
-
-  if (position) {
-    console.log("claimming", position.id);
-    const results = await positionService.claimFee(ctx.user, position.id);
-
-    console.log("results", results);
+  try {
+    await ctx.deleteMessage();
+  } catch (error) {
+    console.log("Could not delete confirmation message:", error);
   }
 
-  // TODO: Implement claim fees logic
-  await ctx.reply(`💰 Claiming fees for position ${positionAddress}...`);
+  const loadingMsg = await ctx.reply("⏳ **Claiming fees...**", {
+    parse_mode: "Markdown",
+  });
+
+  try {
+    const position = await db.query.positions.findFirst({
+      where: (positions, { eq }) =>
+        eq(positions.positionAddress, positionAddress),
+    });
+
+    if (!position) {
+      await ctx.telegram.editMessageText(
+        ctx.chat?.id,
+        loadingMsg.message_id,
+        undefined,
+        MessageService.getErrorMessage("Position not found"),
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
+
+    // await delay(1000);
+
+    const results = await positionService.claimFee(ctx.user, position.id);
+    console.log("results", results);
+
+    const successMessage =
+      `✅ *Fees Claimed Successfully*\n\n` +
+      `All available LP fees have been claimed and swapped to SOL.\n\n` +
+      `💰 *Claimed Details:*\n` +
+      `• ${position.tokenX?.symbol}: ${formatNumber(Number(results.claimedFeeXAmount), { maxDecimals: 5 })} (${formatPrice(Number(results.claimedFeeXValueUSD), { maxDecimals: 2 })})\n` +
+      `• ${position.tokenY?.symbol}: ${formatNumber(Number(results.claimedFeeYAmount), { maxDecimals: 5 })} (${formatPrice(Number(results.claimedFeeYValueUSD), { maxDecimals: 2 })})\n` +
+      `• Total USD Value: ${formatPrice(Number(results.totalClaimedFeeUSD), { maxDecimals: 2 })}\n` +
+      `• Transaction: [View on Solscan](${getSolscanLink("tx", results.transactionId || "")})\n\n` +
+      `📊 *Updated Position:*\n` +
+      `• Total Claimed Fees: ${formatPrice(Number(results.totalClaimedFees), { maxDecimals: 2 })}\n` +
+      `• Cumulative PnL: ${formatPrice(Number(results.cumulativePnL), { maxDecimals: 2 })}\n`;
+
+    await ctx.telegram.editMessageText(
+      ctx.chat?.id,
+      loadingMsg.message_id,
+      undefined,
+      successMessage,
+      {
+        parse_mode: "Markdown",
+        link_preview_options: { is_disabled: true },
+      }
+    );
+  } catch (error) {
+    console.error("Error claiming fees:", error);
+    await ctx.telegram.editMessageText(
+      ctx.chat?.id,
+      loadingMsg.message_id,
+      undefined,
+      MessageService.getErrorMessage("Failed to claim fees"),
+      { parse_mode: "Markdown" }
+    );
+  }
+});
+
+positionDetailScene.action("pos_claim_no", async (ctx) => {
+  await ctx.answerCbQuery();
+
+  try {
+    await ctx.deleteMessage();
+  } catch (error) {
+    console.log("Could not delete confirmation message:", error);
+  }
 });
 
 positionDetailScene.action(/^pos_rebalance_(.+)$/, async (ctx) => {
@@ -269,7 +359,7 @@ positionDetailScene.action(/^pos_refresh_(.+)$/, async (ctx) => {
       await ctx.reply(
         MessageService.getErrorMessage("Position not found or failed to load")
       );
-      return;
+      return ctx.scene.leave();
     }
 
     const mapped = await portfolioService.getPositionByAddress(
@@ -315,7 +405,7 @@ positionDetailScene.action(/^pos_refresh_(.+)$/, async (ctx) => {
     }
   } catch (error) {
     console.error(error);
-    await ctx.reply(
+    await ctx.replyWithMarkdown(
       MessageService.getErrorMessage("Failed to refresh position details")
     );
   }

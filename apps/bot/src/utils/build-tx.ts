@@ -14,14 +14,15 @@ import {
   VersionedTransaction,
 } from "@solana/web3.js";
 import bs58 from "bs58";
-import type {
-  CreateSmartTransactionOptions,
-  SendSmartTransactionOptions,
-  SmartTransactionContext,
-  GetPriorityFeeEstimateParams,
-  GetPriorityFeeEstimateResponse,
-  SignedTransactionInput,
-  PollTransactionOptions,
+import {
+  type CreateSmartTransactionOptions,
+  type SendSmartTransactionOptions,
+  type SmartTransactionContext,
+  type GetPriorityFeeEstimateParams,
+  type GetPriorityFeeEstimateResponse,
+  type SignedTransactionInput,
+  type PollTransactionOptions,
+  PriorityLevel,
 } from "@/types/transaction.types";
 
 // https://jito-foundation.gitbook.io/mev/mev-payment-and-distribution/on-chain-addresses
@@ -39,7 +40,7 @@ export const JITO_TIP_ACCOUNTS: string[] = [
 export type JitoRegion = "Default" | "NY" | "Amsterdam" | "Frankfurt" | "Tokyo";
 // https://jito-labs.gitbook.io/mev/searcher-resources/json-rpc-api-reference/url
 export const JITO_API_URLS: Record<JitoRegion, string> = {
-  Default: "https://mainnet.block-engine.jito.wtf",
+  Default: "https://mainnet.block-engine.jito.wtf:443",
   NY: "https://ny.mainnet.block-engine.jito.wtf",
   Amsterdam: "https://amsterdam.mainnet.block-engine.jito.wtf",
   Frankfurt: "https://frankfurt.mainnet.block-engine.jito.wtf",
@@ -140,7 +141,7 @@ async function sendJitoBundle(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         jsonrpc: "2.0",
-        id: `panda-${Date.now()}`,
+        id: 1,
         method: "sendBundle",
         params: [serializedTransactions],
       }),
@@ -200,7 +201,6 @@ export async function createSmartTransaction(
 ): Promise<SmartTransactionContext> {
   const { feePayer, priorityFeeCap } = options;
 
-  // Determine the fee payer key (override if provided)
   const payerKey = feePayer ? feePayer.publicKey : payer;
 
   const {
@@ -253,11 +253,11 @@ export async function createSmartTransaction(
   } else {
     priorityFeeResponse = await getPriorityFeeEstimate(connection, {
       transaction: serializedTransaction,
-      options: { recommended: true },
+      options: { priorityLevel: PriorityLevel.HIGH },
     });
   }
 
-  // console.log("priorityFeeResponse", priorityFeeResponse);
+  console.log("priorityFeeResponse", priorityFeeResponse);
 
   const { priorityFeeEstimate } = priorityFeeResponse;
 

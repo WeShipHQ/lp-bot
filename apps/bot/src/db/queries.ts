@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sum } from "drizzle-orm";
 import { db } from ".";
 import {
   NewPosition,
@@ -153,6 +153,16 @@ export async function getPositionsById(id: string) {
   }
 }
 
+export async function getPositionsByAddress(address: string) {
+  try {
+    return await db.query.positions.findFirst({
+      where: eq(positions.positionAddress, address),
+    });
+  } catch (error) {
+    throw error;
+  }
+}
+
 export async function updatePosition(
   id: string,
   updates: Partial<NewPosition>
@@ -176,6 +186,17 @@ export async function createClaimHistory(newClaimHistory: NewClaimHistory) {
     .values(newClaimHistory)
     .returning();
   return createdClaimHistory;
+}
+
+export async function getTotalClaimedFees(positionId: string) {
+  const totalClaimedFees = await db
+    .select({ total: sum(claimHistory.claimedUSD) })
+    .from(claimHistory)
+    .where(eq(claimHistory.positionId, positionId));
+
+  console.log("totalClaimedFees", totalClaimedFees);
+
+  return totalClaimedFees[0].total || "0";
 }
 
 // snapshot -----

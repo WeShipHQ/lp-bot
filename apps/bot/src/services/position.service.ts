@@ -14,6 +14,9 @@ import { JobQueueService } from "./job-queue.service";
 import {
   createClaimHistory,
   createPosition,
+  getPositionsByAddress,
+  getPositionsById,
+  getTotalClaimedFees,
   updatePosition,
 } from "@/db/queries";
 import { logger } from "@/utils/logger";
@@ -42,8 +45,9 @@ export class PositionService {
   async createBalancedPosition(
     user: User,
     poolAddress: string,
-    depositType: MeteoraCreatePositionStrategy,
-    enteredAmount: number
+    selectedStrategy: MeteoraCreatePositionStrategy,
+    enteredAmount: number,
+    autoRebalancing: boolean
   ): Promise<{
     success: boolean;
     transactionId?: string;
@@ -52,7 +56,7 @@ export class PositionService {
   }> {
     try {
       logger.info(
-        `[Position] Creating ${depositType} position for user ${user.id}`
+        `[Position] Creating ${selectedStrategy} position for user ${user.id}`
       );
 
       const feeAmount = enteredAmount * (OPEN_POSITION_FEE / 100);
@@ -63,7 +67,7 @@ export class PositionService {
         throw new Error("Pool not found");
       }
 
-      const { strategy, dbStrategyType } = this.getMeteoraStrategy(depositType);
+      const { strategy } = this.getMeteoraStrategy(selectedStrategy);
 
       const halfAmount = amount / 2;
       const halfAmountLamports = (halfAmount * 1e9).toString();
@@ -186,7 +190,7 @@ export class PositionService {
         [positionKp]
       );
 
-      this.handlePositionCreated(user, amount, signature);
+      this.handlePositionCreated(user, amount, autoRebalancing, signature);
 
       return {
         success: true,
@@ -250,7 +254,18 @@ export class PositionService {
   async claimFee(
     user: User,
     positionId: string
-  ): Promise<{ success: boolean; transactionId?: string; error?: string }> {
+  ): Promise<{
+    success: boolean;
+    transactionId?: string;
+    claimedFeeXAmount?: string;
+    claimedFeeXValueUSD?: string;
+    claimedFeeYAmount?: string;
+    claimedFeeYValueUSD?: string;
+    totalClaimedFeeUSD?: string;
+    totalClaimedFees?: string;
+    cumulativePnL?: string;
+    error?: string;
+  }> {
     try {
       logger.info(
         `[Position] Claiming fee for position ${positionId} for user ${user.id}`
@@ -278,11 +293,12 @@ export class PositionService {
 
       console.log("transactionId", transactionId);
 
-      await this.handleFeeClaimed(user, position, transactionId);
+      const result = await this.handleFeeClaimed(user, position, transactionId);
 
       return {
         success: true,
         transactionId,
+        ...result,
       };
     } catch (error) {
       return {
@@ -293,18 +309,19 @@ export class PositionService {
   }
 
   // FIXME
-  async getPosition(positionAddress: string) {
+  async getPositionDetail(positionAddress: string) {
     try {
-      const position =
-        await meteoraPositionService.getDlmmPosition(positionAddress);
-      // const poolInfo = await poolService.getPoolV2(position.pair_address);
+      const dbPosition = await getPositionsByAddress(positionAddress);
+      if (!dbPosition) {
+        throw new Error("Position not found");
+      }
 
-      const { lbPosition, lbPair } = await meteoraDlmmService.getPosition(
-        positionAddress,
-        position.pair_address
+      const { lbPosition, lbPair } = await this.getLbPositionAndLbPair(
+        dbPosition.poolAddress,
+        positionAddress
       );
 
-      return { lbPosition, lbPair };
+      return { dbPosition, lbPosition, lbPair };
     } catch (error) {
       console.error(
         `[Meteora] Error fetching DLMM position ${positionAddress}:`,
@@ -424,8 +441,7 @@ export class PositionService {
     };
   }
 
-  // helper
-  private getMeteoraStrategy(inputStrategy: any): {
+  private getMeteoraStrategy(inputStrategy: MeteoraCreatePositionStrategy): {
     strategy: StrategyType;
     dbStrategyType: "DLMM" | "DAMM" | "CONCENTRATED";
   } {
@@ -440,7 +456,7 @@ export class PositionService {
         strategy = StrategyType.Curve;
         dbStrategyType = "DLMM";
         break;
-      case "single-sided":
+      case "bid-ask":
         strategy = StrategyType.BidAsk;
         dbStrategyType = "DLMM";
         break;
@@ -455,6 +471,7 @@ export class PositionService {
   private async handlePositionCreated(
     user: User,
     amount: number,
+    autoRebalancing: boolean,
     signature: string
   ) {
     try {
@@ -564,7 +581,7 @@ export class PositionService {
         currentSegmentInitialUSD: initialValueUSD.toString(),
 
         // Rebalancing
-        isRebalancingEnabled: true,
+        isRebalancingEnabled: autoRebalancing,
 
         depositTokenXAmount: amountX.toString(),
         depositTokenYAmount: amountY.toString(),
@@ -692,7 +709,7 @@ export class PositionService {
           ?.amount ?? 0
       );
 
-      const [claimedFeeXSOL, claimedFeeYSOL] = await Promise.all([
+      const [_claimedFeeXSOL, _claimedFeeYSOL] = await Promise.all([
         // Token A swap
         (async () => {
           if (tokenMintX !== SOL_MINT) {
@@ -849,6 +866,24 @@ export class PositionService {
       logger.info(
         `[Position] Fee claimed successfully for position ${position.id}: ${totalClaimedFeeUSD.toString()} USD`
       );
+
+      // Calculate Total Claimed Fees
+      const totalClaimedFees = await getTotalClaimedFees(position.id);
+
+      const updatedPosition = await getPositionsById(position.id);
+
+      const cumulativePnL =
+        updatedPosition?.pnlInUsd || updatedPosition?.cumulativeAbsolutePnlUSD;
+
+      return {
+        claimedFeeXAmount: claimedFeeXAmount.toString(),
+        claimedFeeXValueUSD: claimedFeeXValueUSD.toJSON(),
+        claimedFeeYAmount: claimedFeeYAmount.toString(),
+        claimedFeeYValueUSD: claimedFeeYValueUSD.toJSON(),
+        totalClaimedFeeUSD: totalClaimedFeeUSD.toJSON(),
+        totalClaimedFees,
+        cumulativePnL: cumulativePnL || "0",
+      };
     } catch (error) {
       console.error(error);
       logger.error(
