@@ -18,11 +18,23 @@ export class MessageService {
   /**
    * Generate welcome message for new users
    */
-  static getWelcomeMessage(walletAddress?: string): string {
+  static getWelcomeMessage(walletAddress?: string, solBalance?: number, usdValue?: number, referralLink?: string): string {
     let walletInfo: string;
 
     if (walletAddress) {
-      walletInfo = `🏦 **Wallet Address:** \`${walletAddress}\` (tap to copy)\n\n`;
+      if (solBalance !== undefined && usdValue !== undefined) {
+        walletInfo = `🏦 **Your Wallet Balance:** ${solBalance.toFixed(2)} SOL ($${usdValue.toFixed(3)})\n\n`;
+      } else {
+        walletInfo = `🏦 **Wallet Status:** Creating wallet...\n\n` +
+          "⏳ Please wait while we set up your Solana wallet.\n" +
+          "This may take a few moments.\n\n";
+      }
+      
+      walletInfo += `**Wallet Address:** \`${walletAddress}\` (tap to copy)\n\n`;
+      
+      if (referralLink) {
+        walletInfo += `**Your Reflink:** ${referralLink} (tap to copy)\n\n`;
+      }
     } else {
       walletInfo =
         "🏦 **Wallet Status:** Creating wallet...\n\n" +
@@ -31,11 +43,10 @@ export class MessageService {
     }
 
     return (
-      `🚀 **Welcome to Weship Liquidity Bot!**\n\n` +
-      `The easiest way to LP on Solana DEXes.\n\n` +
+      `🏝️ **Welcome to Panda LP Bot: the easiest way to LP on Solana DEXes!**\n\n` +
       walletInfo +
       `Get started by depositing SOL in your wallet address.\n\n` +
-      `👉 Use /trending or paste a token address to create new positions!`
+      `Use /trending or enter token address in bot chat to create new positions!`
     );
   }
 
