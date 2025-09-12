@@ -81,7 +81,7 @@ export class JupiterService {
     jupiterToken: JupiterToken
   ): JupiterTokenInfo {
     return {
-      address: jupiterToken.id,
+      id: jupiterToken.id,
       name: jupiterToken.name,
       symbol: jupiterToken.symbol,
       icon: jupiterToken.icon,

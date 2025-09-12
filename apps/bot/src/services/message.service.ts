@@ -2,7 +2,7 @@ import {
   formatPrice,
   formatNumber,
   formatPercentage,
-  formatTokenAmount,
+  formatTokenAmountSmart,
 } from "@/bot/utils/formatters";
 import { bold, italic, link } from "@/bot/utils/text-formatters";
 import { MeteoraDlmmPosition } from "@/types/meteora.types";
@@ -15,6 +15,181 @@ const formatPairSymbol = (p: PortfolioPosition) =>
   `${p.token_x_info.symbol}-${p.token_y_info.symbol}`;
 
 export class MessageService {
+  private static formatPriceValue(v: number): string {
+    const abs = Math.abs(v);
+    if (abs > 0 && abs < 0.01) return formatPrice(v);
+    if (abs < 1) return formatNumber(v, { maxDecimals: 8 });
+    return formatNumber(v, { maxDecimals: 2 });
+  }
+
+  private static getFeeTvlPercent(pos: PortfolioPosition): number | undefined {
+    const value =
+      pos.position_fee_tvl_24h ??
+      (pos.pool_fee_tvl_24h != null
+        ? pos.pool_fee_tvl_24h > 1
+          ? pos.pool_fee_tvl_24h / 100
+          : pos.pool_fee_tvl_24h
+        : undefined);
+    return value ?? undefined;
+  }
+
+  private static buildTitle(
+    index: number,
+    pos: PortfolioPosition,
+    botName?: string
+  ): string {
+    const text = `/${index + 1} ${formatPairSymbol(pos)}`;
+    return botName
+      ? `[${text}](${getPositionStartCommand(botName, pos.position_address)})`
+      : text;
+  }
+
+  private static buildBasicInfo(pos: PortfolioPosition): string | undefined {
+    if (pos.is_tracked_in_db == null) return undefined;
+    return `**Tracked in DB:** ${pos.is_tracked_in_db ? "🟢 Yes" : "🟠 No"} ${italic(
+      "(Click to add to DB)"
+    )}`;
+  }
+
+  private static buildBalance(pos: PortfolioPosition): string {
+    if (pos.current_x_amount != null && pos.current_y_amount != null) {
+      return `**Position Balance:** ${bold(
+        formatTokenAmountSmart(pos.current_x_amount)
+      )} ${pos.token_x_info.symbol} / ${bold(
+        formatTokenAmountSmart(pos.current_y_amount)
+      )} ${pos.token_y_info.symbol} (${bold(
+        formatPrice(pos.current_value_usd)
+      )})`;
+    }
+    return `**Position Balance:** ${bold(formatPrice(pos.current_value_usd))}`;
+  }
+
+  private static buildPriceInfo(pos: PortfolioPosition): string | undefined {
+    const parts: string[] = [];
+    if (pos.price_min != null && pos.price_max != null) {
+      const low = Math.min(pos.price_min, pos.price_max);
+      const high = Math.max(pos.price_min, pos.price_max);
+      if (high < 1) {
+        parts.push(
+          `**Price Range:** ${bold(
+            MessageService.formatPriceValue(low)
+          )} - ${bold(
+            MessageService.formatPriceValue(high)
+          )} ${pos.token_y_info.symbol}/${pos.token_x_info.symbol}`
+        );
+      } else {
+        parts.push(
+          `**Price Range:** ${bold(
+            MessageService.formatPriceValue(low)
+          )} - ${bold(
+            MessageService.formatPriceValue(high)
+          )} ${pos.token_x_info.symbol}/${pos.token_y_info.symbol}`
+        );
+      }
+    }
+
+    if (pos.pool_price != null && pos.pool_price > 0) {
+      if (pos.pool_price < 1) {
+        parts.push(
+          `**Pool Price:** ${bold(
+            MessageService.formatPriceValue(pos.pool_price)
+          )} ${pos.token_y_info.symbol}/${pos.token_x_info.symbol}`
+        );
+      } else {
+        parts.push(
+          `**Pool Price:** ${bold(
+            MessageService.formatPriceValue(pos.pool_price)
+          )} ${pos.token_x_info.symbol}/${pos.token_y_info.symbol}`
+        );
+      }
+    }
+
+    return parts.length > 0 ? parts.join("\n") : undefined;
+  }
+
+  private static buildFeesInfo(pos: PortfolioPosition): string {
+    const parts: string[] = [];
+    if (pos.unclaimed_fees_x != null && pos.unclaimed_fees_y != null) {
+      parts.push(
+        `**Unclaimed Fees:** ${bold(
+          formatTokenAmountSmart(pos.unclaimed_fees_x)
+        )} ${pos.token_x_info.symbol} / ${bold(
+          formatTokenAmountSmart(pos.unclaimed_fees_y)
+        )} ${pos.token_y_info.symbol} (${bold(
+          formatPrice(pos.total_unclaimed_fees_usd)
+        )})`
+      );
+    } else {
+      parts.push(
+        `**Unclaimed Fees:** ${bold(formatPrice(pos.total_unclaimed_fees_usd))}`
+      );
+    }
+
+    if (pos.claimed_fees_x != null && pos.claimed_fees_y != null) {
+      parts.push(
+        `**Claimed Fees:** ${bold(
+          formatTokenAmountSmart(pos.claimed_fees_x)
+        )} ${pos.token_x_info.symbol} / ${bold(
+          formatTokenAmountSmart(pos.claimed_fees_y)
+        )} ${pos.token_y_info.symbol} (${bold(
+          formatPrice(pos.total_claimed_fees_usd)
+        )})`
+      );
+    } else {
+      parts.push(
+        `**Claimed Fees:** ${bold(formatPrice(pos.total_claimed_fees_usd))}`
+      );
+    }
+
+    return parts.join("\n");
+  }
+
+  private static buildStatusInfo(pos: PortfolioPosition): string {
+    const feeTvlPercent = MessageService.getFeeTvlPercent(pos);
+    const left =
+      feeTvlPercent != null
+        ? `**24h Fee / TVL:** ${bold(formatPercentage(feeTvlPercent))}.`
+        : `**24h Fee / TVL:** ${bold("N/A")}.`;
+    const right = `**In Range:** ${pos.in_range ? "🟢" : "🔴"}`;
+    // 7 spaces between the two parts to visually separate
+    const pnlLine = (() => {
+      const usd = pos.pnl_usd;
+      const pct = pos.pnl_pct;
+      const usdStr = bold(formatPrice(usd));
+      const pctStr =
+        pct != null
+          ? ` (${bold(
+              formatPercentage(pct, { decimals: 2, alwaysShowSign: true })
+            )})`
+          : "";
+      return `\n**PnL:** ${usdStr}${pctStr}`;
+    })();
+    return `${left}       ${right}${pnlLine}`;
+  }
+
+  private static buildPositionBlock(
+    pos: PortfolioPosition,
+    index: number,
+    botName?: string
+  ): string {
+    const sections: Array<string | undefined> = [];
+    sections.push(MessageService.buildTitle(index, pos, botName));
+    sections.push(MessageService.buildBasicInfo(pos));
+
+    // Merge balance and price info with a single newline between them (no extra blank line)
+    const balance = MessageService.buildBalance(pos);
+    const priceInfo = MessageService.buildPriceInfo(pos);
+    const balanceBlock = priceInfo ? `${balance}\n${priceInfo}` : balance;
+    sections.push(balanceBlock);
+
+    // Merge fees and status into a single block (no blank line between them)
+    const fees = MessageService.buildFeesInfo(pos);
+    const status = MessageService.buildStatusInfo(pos);
+    const feesBlock = `${fees}\n${status}`;
+    sections.push(feesBlock);
+    return sections.filter(Boolean).join("\n\n");
+  }
+
   /**
    * Generate welcome message for new users
    */
@@ -75,6 +250,7 @@ export class MessageService {
     botName?: string
   ): string {
     const positions = data.positions ?? [];
+
     const totals = data.totals;
 
     if (positions.length === 0) {
@@ -90,143 +266,11 @@ export class MessageService {
 
     // Display totals in 2 rows instead of 4
     msg += `**Total Positions:** ${bold(totals.total_positions)}    **Total Balance:** ${bold(formatPrice(totals.total_current_value_usd))}\n`;
-    msg += `**Total Unclaimed Fees:** ${bold(formatPrice(totals.total_unclaimed_fees_usd))}    **Total Deposits:** ${bold(formatPrice(totals.total_deposits_usd))}\n\n`;
+    msg += `**Total Deposits:** ${bold(formatPrice(totals.total_deposits_usd))}    **Total Withdrawals:** ${bold(formatPrice(totals.total_withdrawals_usd))}\n`;
+    msg += `**Net Deposited:** ${bold(formatPrice(totals.total_net_deposited_usd))}    **Total Unclaimed Fees:** ${bold(formatPrice(totals.total_unclaimed_fees_usd))}\n\n`;
 
     msg += positions
-      .map((pos, i) => {
-        // Create the link if botName is provided
-        const title = botName
-          ? `[/${i + 1} ${bold(formatPairSymbol(pos))}](${bold(getPositionStartCommand(botName, pos.position_address))})\n`
-          : `/${i + 1} ${bold(formatPairSymbol(pos))}`;
-
-        // Group 1: Basic Info
-        const basicInfo = [];
-        if (pos.is_tracked_in_db != null) {
-          basicInfo.push(
-            `**Tracked in DB:** ${pos.is_tracked_in_db ? "🟢 Yes" : "🟠 No"} ${italic("(Click to add to DB)")}`
-          );
-        }
-
-        // Group 2: Position Balance
-        const balance =
-          pos.current_x_amount != null && pos.current_y_amount != null
-            ? `**Position Balance:** ${bold(formatTokenAmount(pos.current_x_amount, 6))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.current_y_amount, 6))} ${pos.token_y_info.symbol} (${bold(formatPrice(pos.current_value_usd))})`
-            : `**Position Balance:** ${bold(formatPrice(pos.current_value_usd))}`;
-
-        // Group 3: Price Information
-        const priceInfo = [];
-        if (pos.price_min != null && pos.price_max != null) {
-          const low = Math.min(pos.price_min, pos.price_max);
-          const high = Math.max(pos.price_min, pos.price_max);
-          // Choose primary orientation based on magnitude (show smaller numbers with more precision)
-          if (high < 1) {
-            // Show Y/X as primary when prices are small
-            priceInfo.push(
-              `**Price Range:** ${bold(
-                formatNumber(low, { maxDecimals: 8 })
-              )} - ${bold(
-                formatNumber(high, { maxDecimals: 8 })
-              )} ${pos.token_y_info.symbol}/${pos.token_x_info.symbol}`
-            );
-          } else {
-            // Else show X/Y as primary
-            priceInfo.push(
-              `**Price Range:** ${bold(
-                formatNumber(low, { maxDecimals: 2 })
-              )} - ${bold(
-                formatNumber(high, { maxDecimals: 2 })
-              )} ${pos.token_x_info.symbol}/${pos.token_y_info.symbol}`
-            );
-          }
-        }
-
-        if (pos.pool_price != null && pos.pool_price > 0) {
-          if (pos.pool_price < 1) {
-            // Small number: show Y/X primary with higher precision
-            priceInfo.push(
-              `**Pool Price:** ${bold(
-                formatNumber(pos.pool_price, { maxDecimals: 8 })
-              )} ${pos.token_y_info.symbol}/${pos.token_x_info.symbol}`
-            );
-          } else {
-            // Large number: show X/Y primary
-            priceInfo.push(
-              `**Pool Price:** ${bold(
-                formatNumber(pos.pool_price, { maxDecimals: 2 })
-              )} ${pos.token_x_info.symbol}/${pos.token_y_info.symbol}`
-            );
-          }
-        }
-
-        // Group 4: Fees Information
-        const feesInfo = [];
-        if (pos.unclaimed_fees_x != null && pos.unclaimed_fees_y != null) {
-          feesInfo.push(
-            `**Unclaimed Fees:** ${bold(formatTokenAmount(pos.unclaimed_fees_x, 6))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.unclaimed_fees_y, 6))} ${pos.token_y_info.symbol} (${bold(formatPrice(pos.total_unclaimed_fees_usd))})`
-          );
-        } else {
-          feesInfo.push(
-            `**Unclaimed Fees:** ${bold(formatPrice(pos.total_unclaimed_fees_usd))}`
-          );
-        }
-
-        if (pos.claimed_fees_x != null && pos.claimed_fees_y != null) {
-          feesInfo.push(
-            `**Claimed Fees:** ${bold(formatTokenAmount(pos.claimed_fees_x, 6))} ${pos.token_x_info.symbol} / ${bold(formatTokenAmount(pos.claimed_fees_y, 6))} ${pos.token_y_info.symbol} (${bold(formatPrice(pos.total_claimed_fees_usd))})`
-          );
-        } else {
-          feesInfo.push(
-            `**Claimed Fees:** ${bold(formatPrice(pos.total_claimed_fees_usd))}`
-          );
-        }
-
-        // Group 5: Status Information
-        const feeTvlPercent =
-          pos.position_fee_tvl_24h ??
-          (pos.pool_fee_tvl_24h != null
-            ? pos.pool_fee_tvl_24h > 1
-              ? pos.pool_fee_tvl_24h / 100
-              : pos.pool_fee_tvl_24h
-            : undefined);
-        const statusInfo = [];
-        if (feeTvlPercent != null) {
-          statusInfo.push(
-            `**24h Fee / TVL:** ${bold(formatPercentage(feeTvlPercent))}`
-          );
-        }
-        statusInfo.push(`**In Range:** ${pos.in_range ? "🟢" : "🔴"}`);
-
-        // Combine all groups with proper spacing between sections
-        const sections = [];
-
-        // Section 1: Title
-        sections.push(title);
-
-        // Section 2: Basic Info
-        if (basicInfo.length > 0) {
-          sections.push(basicInfo.join("\n"));
-        }
-
-        // Section 3: Position Balance
-        sections.push(balance);
-
-        // Section 4: Price Information
-        if (priceInfo.length > 0) {
-          sections.push(priceInfo.join("\n"));
-        }
-
-        // Section 5: Fees Information
-        if (feesInfo.length > 0) {
-          sections.push(feesInfo.join("\n"));
-        }
-
-        // Section 6: Status Information
-        if (statusInfo.length > 0) {
-          sections.push(statusInfo.join("\n"));
-        }
-
-        return sections.filter(Boolean).join("\n\n");
-      })
+      .map((pos, i) => MessageService.buildPositionBlock(pos, i, botName))
       .join("\n\n");
 
     msg += `\n\n💡 Tap the inline button or type */1*, */2* ... to open details.`;
@@ -234,14 +278,38 @@ export class MessageService {
     return msg;
   }
 
-  static getPositionDetailMessage(pos: PortfolioPosition): string {
+  static getPositionDetailMessage(
+    pos: PortfolioPosition,
+    walletAddress?: string
+  ): string {
     const pairName = formatPairSymbol(pos);
     const sx = pos.token_x_info.symbol;
     const sy = pos.token_y_info.symbol;
 
-    let msg = `**${bold(pairName)}** | [Meteora](https://www.meteora.ag/dlmm/${pos.pool_address}) | [Meteorlens](https://meteorlens.com/position/${pos.position_address})\n\n`;
+    const meteoraUrl = `https://www.meteora.ag/dlmm/${pos.pool_address}`;
+    const meteorlensUrl = `https://meteorlens.com/pool?pool=${pos.pool_address}${walletAddress ? `&wallet=${walletAddress}` : ""}`;
+    let msg = `**${bold(pairName)}** | [Meteora](${meteoraUrl}) | [Meteorlens](${meteorlensUrl})\n\n`;
 
-    msg += `**Net Profit:** ${bold(`-$0`)}\n`;
+    console.log("pos.net_profit_usd => ", pos.net_profit_usd);
+    console.log("pos.net_profit_percentage => ", pos.net_profit_percentage);
+
+    // Calculate and display Net Profit (PnL commented out for now)
+    const netProfitFormatted =
+      pos.net_profit_usd != null
+        ? formatPrice(pos.net_profit_usd, { compact: true })
+        : "N/A";
+
+    const netProfitPerFormatted =
+      pos.net_profit_percentage != null
+        ? formatPercentage(pos.net_profit_percentage)
+        : "N/A";
+
+    msg += `**Net Profit:** ${bold(netProfitFormatted)} (${bold(netProfitPerFormatted)})\n`;
+
+    // Deposits / Withdrawals / Net Deposited
+    msg += `**Deposits:** ${bold(formatPrice(pos.total_deposits_usd))}    **Withdrawals:** ${bold(formatPrice(pos.total_withdrawals_usd))}\n`;
+    const netDeposited = pos.total_deposits_usd - pos.total_withdrawals_usd;
+    msg += `**Net Deposited:** ${bold(formatPrice(netDeposited))}\n\n`;
 
     // DB Tracking Status
     if (pos.is_tracked_in_db != null) {
@@ -250,7 +318,7 @@ export class MessageService {
 
     // Position Balance
     if (pos.current_x_amount != null && pos.current_y_amount != null) {
-      msg += `**Position Balance:** ${bold(formatTokenAmount(pos.current_x_amount, 6))} ${sx} / ${bold(formatTokenAmount(pos.current_y_amount, 6))} ${sy} (${bold(formatPrice(pos.current_value_usd))})\n\n`;
+      msg += `**Position Balance:** ${bold(formatTokenAmountSmart(pos.current_x_amount))} ${sx} / ${bold(formatTokenAmountSmart(pos.current_y_amount))} ${sy} (${bold(formatPrice(pos.current_value_usd))})\n\n`;
     } else {
       msg += `**Position Balance:** ${bold(formatPrice(pos.current_value_usd))}\n\n`;
     }
@@ -261,12 +329,12 @@ export class MessageService {
       const high = Math.max(pos.price_min, pos.price_max);
       if (high < 1) {
         msg += `**Price Range:** ${bold(
-          formatNumber(low, { maxDecimals: 8 })
-        )} - ${bold(formatNumber(high, { maxDecimals: 8 }))} ${sy}/${sx}\n`;
+          MessageService.formatPriceValue(low)
+        )} - ${bold(MessageService.formatPriceValue(high))} ${sy}/${sx}\n`;
       } else {
         msg += `**Price Range:** ${bold(
-          formatNumber(low, { maxDecimals: 2 })
-        )} - ${bold(formatNumber(high, { maxDecimals: 2 }))} ${sx}/${sy}\n`;
+          MessageService.formatPriceValue(low)
+        )} - ${bold(MessageService.formatPriceValue(high))} ${sx}/${sy}\n`;
       }
     }
 
@@ -291,11 +359,11 @@ export class MessageService {
     if (pos.pool_price != null && pos.pool_price > 0) {
       if (pos.pool_price < 1) {
         msg += `**Pool Price:** ${bold(
-          formatNumber(pos.pool_price, { maxDecimals: 8 })
+          MessageService.formatPriceValue(pos.pool_price)
         )} ${sy}/${sx}\n`;
       } else {
         msg += `**Pool Price:** ${bold(
-          formatNumber(pos.pool_price, { maxDecimals: 2 })
+          MessageService.formatPriceValue(pos.pool_price)
         )} ${sx}/${sy}\n`;
       }
     }
@@ -318,14 +386,14 @@ export class MessageService {
 
     // Unclaimed Fees
     if (pos.unclaimed_fees_x != null && pos.unclaimed_fees_y != null) {
-      msg += `**Unclaimed Fees:** ${bold(formatTokenAmount(pos.unclaimed_fees_x, 6))} ${sx} / ${bold(formatTokenAmount(pos.unclaimed_fees_y, 6))} ${sy} (${bold(formatPrice(pos.total_unclaimed_fees_usd))})\n`;
+      msg += `**Unclaimed Fees:** ${bold(formatTokenAmountSmart(pos.unclaimed_fees_x))} ${sx} / ${bold(formatTokenAmountSmart(pos.unclaimed_fees_y))} ${sy} (${bold(formatPrice(pos.total_unclaimed_fees_usd))})\n`;
     } else {
       msg += `**Unclaimed Fees:** ${bold(formatPrice(pos.total_unclaimed_fees_usd))}\n`;
     }
 
     // Claimed Fees
     if (pos.claimed_fees_x != null && pos.claimed_fees_y != null) {
-      msg += `**Claimed Fees:** ${bold(formatTokenAmount(pos.claimed_fees_x, 6))} ${sx} / ${bold(formatTokenAmount(pos.claimed_fees_y, 6))} ${sy} (${bold(formatPrice(pos.total_claimed_fees_usd))})\n`;
+      msg += `**Claimed Fees:** ${bold(formatTokenAmountSmart(pos.claimed_fees_x))} ${sx} / ${bold(formatTokenAmountSmart(pos.claimed_fees_y))} ${sy} (${bold(formatPrice(pos.total_claimed_fees_usd))})\n`;
     } else {
       msg += `**Claimed Fees:** ${bold(formatPrice(pos.total_claimed_fees_usd))}\n`;
     }
@@ -345,6 +413,19 @@ export class MessageService {
         : "";
 
     msg += `\n${feeTvlPart}**In Range:** ${pos.in_range ? "🟢" : "🔴"}\n`;
+    if (typeof pos.pnl_usd === "number") {
+      const pnlUsd = bold(formatPrice(pos.pnl_usd, { compact: true }));
+      const pnlPct =
+        typeof pos.pnl_pct === "number"
+          ? ` (${bold(
+              formatPercentage(pos.pnl_pct, {
+                decimals: 2,
+                alwaysShowSign: true,
+              })
+            )})`
+          : "";
+      msg += `**PnL:** ${pnlUsd}${pnlPct}\n`;
+    }
 
     // Take Profit and Stop Loss indicators (placeholder - showing as disabled)
     msg += `**Take Profit:** 🔴    **Stop Loss:** 🔴\n\n`;

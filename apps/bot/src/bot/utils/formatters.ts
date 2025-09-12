@@ -26,31 +26,37 @@ export function formatNumber(
   } = options;
 
   num = Number(num);
-  
+
   if (!isFinite(num) || isNaN(num)) return "N/A";
 
   // Apply suffixes only when requested
   if (useSuffixes) {
     if (num >= 1e9) {
       const value = num / 1e9;
-      return new Intl.NumberFormat(locale, {
-        minimumFractionDigits: minDecimals,
-        maximumFractionDigits: maxDecimals,
-      }).format(value) + "B";
+      return (
+        new Intl.NumberFormat(locale, {
+          minimumFractionDigits: minDecimals,
+          maximumFractionDigits: maxDecimals,
+        }).format(value) + "B"
+      );
     }
     if (num >= 1e6) {
       const value = num / 1e6;
-      return new Intl.NumberFormat(locale, {
-        minimumFractionDigits: minDecimals,
-        maximumFractionDigits: maxDecimals,
-      }).format(value) + "M";
+      return (
+        new Intl.NumberFormat(locale, {
+          minimumFractionDigits: minDecimals,
+          maximumFractionDigits: maxDecimals,
+        }).format(value) + "M"
+      );
     }
     if (num >= 1e3) {
       const value = num / 1e3;
-      return new Intl.NumberFormat(locale, {
-        minimumFractionDigits: minDecimals,
-        maximumFractionDigits: maxDecimals,
-      }).format(value) + "K";
+      return (
+        new Intl.NumberFormat(locale, {
+          minimumFractionDigits: minDecimals,
+          maximumFractionDigits: maxDecimals,
+        }).format(value) + "K"
+      );
     }
   }
 
@@ -261,7 +267,6 @@ export function formatAPR(
 
   // Cap extremely high APRs
   if (Math.abs(apr) > cap) {
-    const sign = apr < 0 ? "-" : "+";
     return `${cap > 0 && showSign ? "+" : ""}>${cap.toLocaleString(locale)}%`;
   }
 
@@ -348,5 +353,32 @@ export function formatTokenAmount(
   return new Intl.NumberFormat("en-US", {
     minimumFractionDigits: 2,
     maximumFractionDigits: decimals,
+  }).format(amount);
+}
+
+// Format token amounts with significant digits for very small values
+export function formatTokenAmountSmart(
+  amount: number,
+  options: { maxDecimals?: number; significant?: number } = {}
+): string {
+  const { maxDecimals = 8, significant = 8 } = options;
+  if (!isFinite(amount) || isNaN(amount)) return "N/A";
+  const abs = Math.abs(amount);
+  if (abs === 0) return "0";
+
+  if (abs < 0.01) {
+    // Show small amounts with significant digits (no currency symbol)
+    const precision = Math.max(2, Math.min(significant, 10));
+    // Use toPrecision to keep significant digits, then normalize locale formatting
+    const normalized = Number(amount.toPrecision(precision));
+    return new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: Math.max(2, Math.min(maxDecimals, 10)),
+    }).format(normalized);
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: Math.max(2, Math.min(maxDecimals, 6)),
   }).format(amount);
 }

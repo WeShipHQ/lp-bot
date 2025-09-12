@@ -56,12 +56,12 @@ function setPortfolio(context: BotContext, portfolio: PortfolioData): void {
 
 // Classify Telegram errors that are safe to ignore for delete/edit/answer operations.
 function isIgnorableTelegramError(err: unknown): boolean {
-  const e = err as {
+  const errorLike = err as {
     status?: number;
     response?: { error_code?: number; description?: string };
   };
-  const code = e?.status ?? e?.response?.error_code;
-  const desc = (e?.response?.description ?? "").toLowerCase();
+  const code = errorLike?.status ?? errorLike?.response?.error_code;
+  const desc = (errorLike?.response?.description ?? "").toLowerCase();
 
   return (
     (code === 400 &&
@@ -105,7 +105,7 @@ async function deleteMessageByIdSafely(
 }
 
 // Always try to answer callback to stop the spinner; ignore benign errors.
-async function answerCallbackSafely(
+export async function answerCallbackSafely(
   context: BotContext,
   text?: string,
   logger?: FastifyBaseLogger
@@ -154,7 +154,10 @@ async function renderPortfolioOverview(
   portfolio: PortfolioData,
   mode: "edit" | "reply" = "edit"
 ): Promise<boolean> {
-  const text = MessageService.getPortfolioOverviewMessage(portfolio, "weship");
+  const text = MessageService.getPortfolioOverviewMessage(
+    portfolio,
+    context.botInfo?.username
+  );
   const extra = {
     parse_mode: "Markdown" as const,
     ...DISABLE_LINK_PREVIEW,
@@ -180,7 +183,10 @@ async function renderPortfolioPosition(
       ? context.answerCbQuery?.("Position not found.")
       : context.reply("Position not found.");
   }
-  const text = MessageService.getPositionDetailMessage(position);
+  const text = MessageService.getPositionDetailMessage(
+    position,
+    portfolio.walletAddress
+  );
   const extra = {
     parse_mode: "Markdown" as const,
     ...DISABLE_LINK_PREVIEW,
@@ -215,11 +221,17 @@ export async function portfolioHandler(ctx: BotContext) {
   setPortfolio(ctx, portfolioData);
 
   await deleteMessageByIdSafely(ctx, loadingMessageId);
-  await ctx.reply(MessageService.getPortfolioOverviewMessage(portfolioData), {
-    parse_mode: "Markdown",
-    ...DISABLE_LINK_PREVIEW,
-    reply_markup: getOverviewKeyboard(),
-  });
+  await ctx.reply(
+    MessageService.getPortfolioOverviewMessage(
+      portfolioData,
+      ctx.botInfo?.username
+    ),
+    {
+      parse_mode: "Markdown",
+      ...DISABLE_LINK_PREVIEW,
+      reply_markup: getOverviewKeyboard(),
+    }
+  );
 }
 
 // --- Callback registrations ---
