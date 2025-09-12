@@ -8,6 +8,7 @@ import DLMM, {
 import { Connection, PublicKey, TransactionInstruction } from "@solana/web3.js";
 import BN from "bn.js";
 import { CONFIG } from "@/config";
+import Decimal from "decimal.js";
 
 export interface DepositAmountCalculation {
   tokenXAmount: BN;
@@ -59,8 +60,8 @@ export class MeteoraDlmmService {
     positionAddress: PublicKey,
     poolAddress: PublicKey,
     userPublicKey: PublicKey,
-    totalXAmount: BN,
-    totalYAmount: BN,
+    totalXAmount: Decimal,
+    totalYAmount: Decimal,
     strategy: StrategyType,
     rangeInterval: number
   ): Promise<{
@@ -85,8 +86,8 @@ export class MeteoraDlmmService {
       await dlmmPool.initializePositionAndAddLiquidityByStrategy({
         positionPubKey: positionAddress,
         user: userPublicKey,
-        totalXAmount,
-        totalYAmount,
+        totalXAmount: new BN(totalXAmount.toString()),
+        totalYAmount: new BN(totalYAmount.toString()),
         strategy: {
           maxBinId,
           minBinId,

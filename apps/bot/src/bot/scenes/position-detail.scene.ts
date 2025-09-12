@@ -8,6 +8,7 @@ import {
   getPositionDetailKeyboard,
   getPositionCloseConfirmKeyboard,
   getClaimFeesConfirmKeyboard,
+  getRebalanceConfirmKeyboard,
 } from "../keyboards/position-detail-menu";
 import { MeteoraDlmmPosition } from "@/types/meteora.types";
 import { answerCallbackSafely, DISABLE_LINK_PREVIEW } from "../handlers";
@@ -318,11 +319,85 @@ positionDetailScene.action("pos_claim_no", async (ctx) => {
   }
 });
 
-positionDetailScene.action(/^pos_rebalance_(.+)$/, async (ctx) => {
+positionDetailScene.action("pos_rebalance_confirmation", async (ctx) => {
+  await ctx.answerCbQuery();
+  const position = (ctx.scene.state as SceneState).position;
+
+  if (!position) {
+    await ctx.reply(
+      MessageService.getErrorMessage("Position not found or failed to load")
+    );
+    return ctx.scene.leave();
+  }
+
+  const confirmationMessage =
+    `⚖️ **Rebalance Position**\n\n` +
+    `Would you like to rebalance this position now? Confirm below\n\n` +
+    `Position: \`${position.positionAddress}\`\n\n` +
+    `This action will rebalance your position to optimize liquidity distribution.`;
+
+  const keyboard = getRebalanceConfirmKeyboard(position.positionAddress);
+
+  await ctx.reply(confirmationMessage, {
+    parse_mode: "Markdown",
+    reply_markup: keyboard,
+  });
+});
+
+positionDetailScene.action(/^pos_rebalance_yes_(.+)$/, async (ctx) => {
   await ctx.answerCbQuery();
   const positionAddress = ctx.match[1];
-  // TODO: Implement rebalance logic
-  await ctx.reply(`⚖️ Rebalancing position ${positionAddress}...`);
+
+  try {
+    await ctx.deleteMessage();
+  } catch (error) {
+    console.log("Could not delete confirmation message:", error);
+  }
+
+  const loadingMsg = await ctx.reply(loading("Rebalancing position..."), {
+    parse_mode: "Markdown",
+  });
+
+  try {
+    // TODO: Implement actual rebalance logic here
+    // const results = await positionService.rebalancePosition(ctx.user, positionAddress);
+
+    // For now, just show a placeholder success message
+    const successMessage =
+      `✅ **Position Rebalanced Successfully**\n\n` +
+      `Your position has been rebalanced to optimize liquidity distribution.\n` +
+      `Position: \`${positionAddress}\``;
+
+    await ctx.telegram.editMessageText(
+      ctx.chat?.id,
+      loadingMsg.message_id,
+      undefined,
+      successMessage,
+      {
+        parse_mode: "Markdown",
+        link_preview_options: { is_disabled: true },
+      }
+    );
+  } catch (error) {
+    console.error("Error rebalancing position:", error);
+    await ctx.telegram.editMessageText(
+      ctx.chat?.id,
+      loadingMsg.message_id,
+      undefined,
+      MessageService.getErrorMessage("Failed to rebalance position"),
+      { parse_mode: "Markdown" }
+    );
+  }
+});
+
+positionDetailScene.action("pos_rebalance_no", async (ctx) => {
+  await ctx.answerCbQuery();
+
+  try {
+    await ctx.deleteMessage();
+  } catch (error) {
+    console.log("Could not delete confirmation message:", error);
+  }
 });
 
 positionDetailScene.action(/^pos_settings_(.+)$/, async (ctx) => {

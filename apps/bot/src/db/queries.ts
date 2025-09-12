@@ -1,4 +1,4 @@
-import { asc, eq, sum } from "drizzle-orm";
+import { asc, eq, sum, desc } from "drizzle-orm";
 import { db } from ".";
 import {
   NewPosition,
@@ -6,19 +6,25 @@ import {
   NewWallet,
   NewTransaction,
   NewRebalanceEvent,
+  NewPositionSegment,
+  NewClaimHistory,
+  NewPositionSnapshot,
   positions,
+  positionSegments,
+  claimHistory,
+  rebalanceEvents,
+  positionSnapshots,
   User,
   users,
   wallets,
   Wallet,
   transactions,
   Transaction,
-  rebalanceEvents,
   RebalanceEvent,
-  claimHistory,
-  NewClaimHistory,
-  positionSnapshots,
-  NewPositionSnapshot,
+  Position,
+  PositionSegment,
+  ClaimHistory,
+  PositionSnapshot,
 } from "./schema";
 
 // users -----
@@ -136,7 +142,7 @@ export async function getPositionsByUserId(userId: string) {
   try {
     return await db.query.positions.findMany({
       where: eq(positions.userId, userId),
-      orderBy: asc(positions.createdAt),
+      orderBy: desc(positions.createdAt),
     });
   } catch (error) {
     throw error;
@@ -179,6 +185,46 @@ export async function deletePosition(id: string) {
   await db.delete(positions).where(eq(positions.id, id));
 }
 
+// position segments -----
+export async function createPositionSegment(newSegment: NewPositionSegment) {
+  const [segment] = await db.insert(positionSegments).values(newSegment).returning();
+  return segment;
+}
+
+export async function getPositionSegments(positionId: string): Promise<PositionSegment[]> {
+  try {
+    return await db.query.positionSegments.findMany({
+      where: eq(positionSegments.positionId, positionId),
+      orderBy: asc(positionSegments.segmentNumber),
+    });
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function getCurrentSegment(positionId: string): Promise<PositionSegment | undefined> {
+  try {
+    return await db.query.positionSegments.findFirst({
+      where: eq(positionSegments.positionId, positionId),
+      orderBy: desc(positionSegments.segmentNumber),
+    });
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function updatePositionSegment(
+  id: string,
+  updates: Partial<NewPositionSegment>
+) {
+  const [segment] = await db
+    .update(positionSegments)
+    .set(updates)
+    .where(eq(positionSegments.id, id))
+    .returning();
+  return segment;
+}
+
 // claimHistory -----
 export async function createClaimHistory(newClaimHistory: NewClaimHistory) {
   const [createdClaimHistory] = await db
@@ -188,15 +234,62 @@ export async function createClaimHistory(newClaimHistory: NewClaimHistory) {
   return createdClaimHistory;
 }
 
+export async function getClaimHistory(positionId: string): Promise<ClaimHistory[]> {
+  try {
+    return await db.query.claimHistory.findMany({
+      where: eq(claimHistory.positionId, positionId),
+      orderBy: desc(claimHistory.timestamp),
+    });
+  } catch (error) {
+    throw error;
+  }
+}
+
 export async function getTotalClaimedFees(positionId: string) {
   const totalClaimedFees = await db
-    .select({ total: sum(claimHistory.claimedUSD) })
+    .select({ total: sum(claimHistory.claimedUSDValue) })
     .from(claimHistory)
     .where(eq(claimHistory.positionId, positionId));
 
-  console.log("totalClaimedFees", totalClaimedFees);
-
   return totalClaimedFees[0].total || "0";
+}
+
+// rebalance events -----
+export async function createRebalanceEvent(newRebalanceEvent: NewRebalanceEvent) {
+  const [rebalanceEvent] = await db
+    .insert(rebalanceEvents)
+    .values(newRebalanceEvent)
+    .returning();
+  return rebalanceEvent;
+}
+
+export async function findRebalanceEventsByPositionId(
+  positionId: string
+): Promise<RebalanceEvent[]> {
+  try {
+    return await db.query.rebalanceEvents.findMany({
+      where: eq(rebalanceEvents.positionId, positionId),
+      orderBy: desc(rebalanceEvents.timestamp),
+    });
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function findRebalanceEventById(
+  id: string
+): Promise<RebalanceEvent | undefined> {
+  try {
+    return await db.query.rebalanceEvents.findFirst({
+      where: eq(rebalanceEvents.id, id),
+    });
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function deleteRebalanceEvent(id: string) {
+  await db.delete(rebalanceEvents).where(eq(rebalanceEvents.id, id));
 }
 
 // snapshot -----
@@ -208,6 +301,17 @@ export async function createPositionSnapshot(
     .values(newPositionSnapshot)
     .returning();
   return createdPositionSnapshot;
+}
+
+export async function getPositionSnapshots(positionId: string): Promise<PositionSnapshot[]> {
+  try {
+    return await db.query.positionSnapshots.findMany({
+      where: eq(positionSnapshots.positionId, positionId),
+      orderBy: desc(positionSnapshots.snapshotTimestamp),
+    });
+  } catch (error) {
+    throw error;
+  }
 }
 
 // transactions -----
@@ -270,44 +374,4 @@ export async function updateTransaction(
 
 export async function deleteTransaction(id: string) {
   await db.delete(transactions).where(eq(transactions.id, id));
-}
-
-// rebalanceEvents -----
-export async function createRebalanceEvent(
-  newRebalanceEvent: NewRebalanceEvent
-) {
-  const [rebalanceEvent] = await db
-    .insert(rebalanceEvents)
-    .values(newRebalanceEvent)
-    .returning();
-  return rebalanceEvent;
-}
-
-export async function findRebalanceEventsByPositionId(
-  positionId: string
-): Promise<RebalanceEvent[]> {
-  try {
-    return await db.query.rebalanceEvents.findMany({
-      where: eq(rebalanceEvents.positionId, positionId),
-      orderBy: asc(rebalanceEvents.createdAt),
-    });
-  } catch (error) {
-    throw error;
-  }
-}
-
-export async function findRebalanceEventById(
-  id: string
-): Promise<RebalanceEvent | undefined> {
-  try {
-    return await db.query.rebalanceEvents.findFirst({
-      where: eq(rebalanceEvents.id, id),
-    });
-  } catch (error) {
-    throw error;
-  }
-}
-
-export async function deleteRebalanceEvent(id: string) {
-  await db.delete(rebalanceEvents).where(eq(rebalanceEvents.id, id));
 }
