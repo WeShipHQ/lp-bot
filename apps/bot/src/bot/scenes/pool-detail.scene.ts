@@ -2,15 +2,95 @@ import { Scenes } from "telegraf";
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
 import { MessageService } from "@/services/message.service";
-import { MeteoraPoolData } from "@/types/meteora.types";
 import { poolService } from "@/services/pool.service";
 import { getPoolInfoKeyboard } from "../keyboards";
 import { loading } from "../utils/text-formatters";
 import { DISABLE_LINK_PREVIEW } from "../handlers";
+import { Pool } from "@/types/pool.types";
+import {
+  formatNumber,
+  formatPrice,
+  formatPercentage,
+  formatAPR,
+} from "../utils/formatters";
+
+
+function formatPoolDetails(pool: Pool): string {
+  if (!pool) {
+    return "Error: Pool data not available";
+  }
+
+  const tokenASymbol = pool.tokenA?.symbol || "Unknown";
+  const tokenBSymbol = pool.tokenB?.symbol || "Unknown";
+  const tokenPair = `${tokenASymbol}/${tokenBSymbol}`;
+  const poolType = pool.type || "DLMM";
+
+  const poolAddress = pool.address || "Unknown";
+  let shortPoolAddress = "Unknown";
+  let poolSolscanLink = "#";
+
+  if (poolAddress && poolAddress !== "Unknown") {
+    shortPoolAddress = `${poolAddress.substring(0, 4)}…${poolAddress.substring(poolAddress.length - 4)}`;
+    poolSolscanLink = `https://solscan.io/account/${poolAddress}`;
+  }
+
+  const tokenAMint = pool.tokenA?.address || "Unknown";
+  let shortTokenAMint = "Unknown";
+  let tokenASolscanLink = "#";
+
+  if (tokenAMint && tokenAMint !== "Unknown") {
+    shortTokenAMint = `${tokenAMint.substring(0, 4)}…${tokenAMint.substring(tokenAMint.length - 4)}`;
+    tokenASolscanLink = `https://solscan.io/token/${tokenAMint}`;
+  }
+
+  const tokenBMint = pool.tokenB?.address || "Unknown";
+  let shortTokenBMint = "Unknown";
+  let tokenBSolscanLink = "#";
+
+  if (tokenBMint && tokenBMint !== "Unknown") {
+    shortTokenBMint = `${tokenBMint.substring(0, 4)}…${tokenBMint.substring(tokenBMint.length - 4)}`;
+    tokenBSolscanLink = `https://solscan.io/token/${tokenBMint}`;
+  }
+
+  const tvl =
+    "$" + formatNumber(parseFloat(pool.tvl || "0"), { useSuffixes: true });
+  const apy = formatAPR(pool.apy, { cap: 10000 });
+
+  const fee24h =
+    "$" + formatNumber(pool.fees?.hour24 || 0, { useSuffixes: true });
+
+  const feeTvlRatio = pool.feeTvlRatio?.hour24
+    ? formatPercentage(pool.feeTvlRatio.hour24 * 100, { decimals: 2 })
+    : "N/A";
+
+  const volume24h =
+    "$" + formatNumber(pool.volume?.hour24 || 0, { useSuffixes: true });
+
+  const explorerLink = `[Explorer](${poolSolscanLink})`;
+  const dexscreenerLink =
+    poolAddress !== "Unknown"
+      ? `[Dexscreener](https://dexscreener.com/solana/${poolAddress})`
+      : "[Dexscreener](#)";
+
+  return `*${tokenPair} | ${poolType}*
+${shortPoolAddress} (${poolSolscanLink})
+A mint: ${shortTokenAMint} (${tokenASolscanLink})
+B mint: ${shortTokenBMint} (${tokenBSolscanLink})
+
+${explorerLink} | ${dexscreenerLink}
+
+*TVL:* ${tvl}
+*APY (24h):* ${apy}
+*Fee (24h):* ${fee24h}
+*Fee/TVL (24h):* ${feeTvlRatio}
+
+*Volume*
+24h: ${volume24h}`;
+}
 
 type SceneState = {
   poolAddress?: string;
-  pool?: MeteoraPoolData;
+  pool?: Pool;
 };
 
 export const poolDetailScene = new Scenes.BaseScene<BotContext>(
@@ -48,7 +128,7 @@ poolDetailScene.enter(async (ctx) => {
       return ctx.scene.leave();
     }
 
-    const message = `${poolData.name}\n}\n${poolData.address}`; //MessageService.formatPoolInfoV2(poolData);
+    const message = formatPoolDetails(poolData);
     const keyboard = getPoolInfoKeyboard(poolData.address);
 
     await ctx.telegram.editMessageText(
@@ -120,7 +200,7 @@ poolDetailScene.action("refresh_pool_detail", async (ctx) => {
     return ctx.scene.leave();
   }
 
-  const message = `${poolData.name}\n}\n${poolData.address}`; //MessageService.formatPoolInfo(poolData);
+  const message = formatPoolDetails(poolData);
   const keyboard = getPoolInfoKeyboard(poolData.address);
 
   if (ctx.callbackQuery.message) {

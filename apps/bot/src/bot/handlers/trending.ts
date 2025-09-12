@@ -17,7 +17,7 @@ export async function trendingHandler(
     const loading = await ctx.reply(TRENDING_MESSAGES.FETCHING);
     const chatId = ctx.chat!.id;
 
-    await trendingService.loadHotPoolsPage(chatId, 0, "apy", "dlmm");
+    await trendingService.loadHotPoolsPage(chatId, 0, "tvl");
 
     const state = trendingService.getState(chatId)!;
 
@@ -57,21 +57,23 @@ export async function handleTrendingCallback(
     const raw = String(ctx.callbackQuery?.data ?? ctx.match?.input ?? "");
 
     const paginationMatch = /^tr_(prev|next|refresh)_(\d+)$/.exec(raw);
-    const sourceMatch = /^tr_src_(dlmm|dammv1|dammv2)_(\d+)$/.exec(raw);
+    const sortMatch = /^tr_sort_(apy|tvl|volume24h|fee_tvl_ratio)_(\d+)$/.exec(
+      raw
+    );
     const openMatch = /^tr_open_(\d+)_(\d+)$/.exec(raw);
 
-    let action: "prev" | "next" | "refresh" | "source" | "open";
+    let action: "prev" | "next" | "refresh" | "sort" | "open";
     let chatIdStr = "";
-    let source: "dlmm" | "dammv1" | "dammv2" | undefined;
+    let sortBy: "apy" | "tvl" | "volume24h" | "fee_tvl_ratio" | undefined;
     let openIndex: number | undefined;
 
     if (paginationMatch) {
       action = paginationMatch[1] as "prev" | "next" | "refresh";
       chatIdStr = paginationMatch[2];
-    } else if (sourceMatch) {
-      action = "source";
-      source = sourceMatch[1] as "dlmm" | "dammv1" | "dammv2";
-      chatIdStr = sourceMatch[2];
+    } else if (sortMatch) {
+      action = "sort";
+      sortBy = sortMatch[1] as "apy" | "tvl" | "volume24h" | "fee_tvl_ratio";
+      chatIdStr = sortMatch[2];
     } else if (openMatch) {
       action = "open";
       openIndex = Number(openMatch[1]);
@@ -123,15 +125,15 @@ export async function handleTrendingCallback(
 
     let currentState = trendingService.getState(chatId);
     if (!currentState) {
-      await trendingService.loadHotPoolsPage(chatId, 0, "apy", "dlmm");
+      await trendingService.loadHotPoolsPage(chatId, 0, "tvl");
       currentState = trendingService.getState(chatId)!;
     }
 
     const beforeApi = currentState.apiPage ?? 0;
-    const currentSort: "apy" | "fee24h" | "fee_tvl_ratio" =
-      currentState.sortBy || "apy";
+    const currentSort: "apy" | "tvl" | "volume24h" | "fee_tvl_ratio" =
+      sortBy || currentState.sortBy || "tvl";
     const currentSource: "dlmm" | "dammv1" | "dammv2" =
-      source || currentState.poolSource || "dlmm";
+      currentState.poolSource || "dlmm";
 
     if (action === "next") {
       const nextPage = Math.min((beforeApi ?? 0) + 1, 4);
@@ -167,9 +169,11 @@ export async function handleTrendingCallback(
         currentSource
       );
       await ctx.answerCbQuery("Refreshed");
-    } else if (action === "source" && source) {
-      await trendingService.loadHotPoolsPage(chatId, 0, currentSort, source);
-      await ctx.answerCbQuery(`Source: ${source.toUpperCase()}`);
+    } else if (action === "sort" && sortBy) {
+      await trendingService.loadHotPoolsPage(chatId, 0, sortBy, "dlmm");
+      await ctx.answerCbQuery(
+        `Sorting by: ${sortBy === "fee_tvl_ratio" ? "Fee/TVL" : sortBy === "volume24h" ? "24h Vol" : sortBy.toUpperCase()}`
+      );
     }
 
     const state = trendingService.getState(chatId)!;

@@ -3,8 +3,7 @@ import { FastifyInstance } from "fastify";
 import { BotContext } from "@/types/bot.types";
 import { handleTrendingCallback, trendingHandler } from "../handlers/trending";
 import { trendingService } from "@/services/trending.service";
-import { buildPoolDetailMarkdown } from "@/services/pool-detail.service";
-import { getTrendingDetailKeyboard } from "../keyboards/pool-detail";
+import { SCENE_IDS } from "../config/scenes";
 
 export function trendingCommand(
   bot: Telegraf<BotContext>,
@@ -18,23 +17,24 @@ export function trendingCommand(
     handleTrendingCallback(context, server)
   );
 
-  // bot.action(/^tr_sort_(apy|fee24h|fee_tvl_ratio)_[0-9]+$/, (context) => {
-  //   return handleTrendingCallback(context, server);
-  // });
-
-  bot.action(/^tr_src_(dlmm|dammv1|dammv2)_[0-9]+$/, (context) =>
-    handleTrendingCallback(context, server)
+  bot.action(
+    /^tr_sort_(apy|tvl|volume24h|fee_tvl_ratio)_[0-9]+$/,
+    (context) => {
+      return handleTrendingCallback(context, server);
+    }
   );
 
   // Handle trending detail refresh
-  bot.action(/^tr_refresh_detail_(\d+)_(\d+)_(dlmm|dammv1|dammv2)$/, async (context) => {
+  bot.action(/^tr_refresh_detail_(\d+)_(\d+)_dlmm$/, async (context) => {
     try {
-      const match = (context.callbackQuery as any)?.data?.match(/^tr_refresh_detail_(\d+)_(\d+)_(dlmm|dammv1|dammv2)$/);
+      const match = (context.callbackQuery as any)?.data?.match(
+        /^tr_refresh_detail_(\d+)_(\d+)_dlmm$/
+      );
       if (!match) return;
 
       const chatId = Number(match[1]);
       const poolIndex = Number(match[2]);
-      const source = match[3] as "dlmm" | "dammv1" | "dammv2";
+      const source = "dlmm";
 
       if (chatId !== context.chat!.id) {
         await context.answerCbQuery("❌ This button is not for you.");
@@ -48,13 +48,11 @@ export function trendingCommand(
       }
 
       const selectedPoolItem = trendingState.poolItems[poolIndex];
-      const detailMarkdown = await buildPoolDetailMarkdown(source, selectedPoolItem);
-      const keyboard = getTrendingDetailKeyboard(chatId, poolIndex, source);
 
-      await context.editMessageText(detailMarkdown, {
-        parse_mode: "Markdown",
-        link_preview_options: { is_disabled: true },
-        reply_markup: keyboard.reply_markup,
+      // Delete current message and enter pool detail scene
+      await context.deleteMessage();
+      await context.scene.enter(SCENE_IDS.POOL_DETAIL_SCENE, {
+        poolAddress: selectedPoolItem.poolAddress,
       });
 
       await context.answerCbQuery("🔄 Refreshed");
@@ -65,9 +63,11 @@ export function trendingCommand(
   });
 
   // Handle trending detail close
-  bot.action(/^tr_close_detail_(\d+)_(\d+)_(dlmm|dammv1|dammv2)$/, async (context) => {
+  bot.action(/^tr_close_detail_(\d+)_(\d+)_dlmm$/, async (context) => {
     try {
-      const match = (context.callbackQuery as any)?.data?.match(/^tr_close_detail_(\d+)_(\d+)_(dlmm|dammv1|dammv2)$/);
+      const match = (context.callbackQuery as any)?.data?.match(
+        /^tr_close_detail_(\d+)_(\d+)_dlmm$/
+      );
       if (!match) return;
 
       const chatId = Number(match[1]);
@@ -85,14 +85,15 @@ export function trendingCommand(
     }
   });
 
-  bot.hears(/^\/t([1-5])(?:@[A-Za-z0-9_]+)?$/, async (context) => {
+  bot.hears(/^\/([1-5])([A-Z0-9]+)(?:@[A-Za-z0-9_]+)?$/, async (context) => {
     try {
       const match = context.message?.text?.match(
-        /^\/t([1-5])(?:@[A-Za-z0-9_]+)?$/
+        /^\/([1-5])([A-Z0-9]+)(?:@[A-Za-z0-9_]+)?$/
       );
       if (!match) return;
 
       const poolIndex = Number(match[1]) - 1;
+      const tokenPairCombined = match[2];
       const chatId = context.chat!.id;
 
       const trendingState = trendingService.getState(chatId);
@@ -104,21 +105,22 @@ export function trendingCommand(
       }
 
       const selectedPoolItem = trendingState.poolItems[poolIndex];
-      const detailMarkdown = await buildPoolDetailMarkdown(
-        trendingState.poolSource!,
-        selectedPoolItem
-      );
 
-      const keyboard = getTrendingDetailKeyboard(
-        chatId,
-        poolIndex,
-        trendingState.poolSource!
+      // Verify the token pair matches to ensure correct pool selection
+      const expectedTokenPairCombined = selectedPoolItem.tokenPair.replace(
+        "/",
+        ""
       );
+      if (expectedTokenPairCombined !== tokenPairCombined) {
+        await context.reply(
+          "❌ Pool not found or list expired. Try /trending."
+        );
+        return;
+      }
 
-      await context.reply(detailMarkdown, {
-        parse_mode: "Markdown",
-        link_preview_options: { is_disabled: true },
-        reply_markup: keyboard.reply_markup,
+      // Navigate to pool detail scene with the pool address
+      await context.scene.enter(SCENE_IDS.POOL_DETAIL_SCENE, {
+        poolAddress: selectedPoolItem.poolAddress,
       });
     } catch {
       await context.reply("❌ Error.");

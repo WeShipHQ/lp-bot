@@ -16,10 +16,12 @@ export class DlmmSource {
   ): Promise<HotPoolItem[]> {
     const sortKey =
       filters.sortBy === "fee_tvl_ratio"
-        ? "feetvlratio12h"
-        : filters.sortBy === "fee24h"
-          ? "volume12h"
-          : "tvl";
+        ? "feetvlratio" 
+        : filters.sortBy === "volume24h"
+          ? "volume"
+          : filters.sortBy === "tvl"
+            ? "tvl" // Use tvl instead of liquidity
+            : "tvl"; // Default to tvl since apy is not supported
 
     const url = new URL(`${this.baseUrl}/pair/all_with_pagination`);
     url.searchParams.set("page", String(page));
@@ -53,21 +55,36 @@ export class DlmmSource {
 
     items = applyFilters(items, filters);
 
+    // Sort based on criteria (API might already sort, but this ensures correct order)
     if (filters.sortBy === "apy") items = items.sort((a, b) => b.apy - a.apy);
-    if (filters.sortBy === "fee24h")
-      items = items.sort((a, b) => b.fee24h - a.fee24h);
+    if (filters.sortBy === "tvl") items = items.sort((a, b) => b.tvl - a.tvl);
+    if (filters.sortBy === "volume24h")
+      items = items.sort(
+        (a, b) => (b.poolData?.volume24h || 0) - (a.poolData?.volume24h || 0)
+      );
+    if (filters.sortBy === "fee_tvl_ratio")
+      items = items.sort((a, b) => (b.feeTvlRatio || 0) - (a.feeTvlRatio || 0));
 
     return items;
   }
 
   private convertToHotPool(pool: DlmmPoolResponse): HotPoolItem | null {
     try {
-      const [aSym, bSym] = (pool.name || "").split("-").map((s: string) => s?.trim());
+      const [aSym, bSym] = (pool.name || "")
+        .split("-")
+        .map((s: string) => s?.trim());
 
       const fees24h = pool.fees_24h ?? 0;
       const ratio24h =
-        pool.fee_tvl_ratio?.hour_24 ?? pool.fee_tvl_ratio?.hour_12 ?? 0;
-      const tvlUsd = ratio24h > 0 ? fees24h / ratio24h : 0;
+        pool.fee_tvl_ratio?.hour_24 ??
+        (typeof pool.fee_tvl_ratio === "number" ? pool.fee_tvl_ratio : 0);
+
+      const tvlUsd = pool.liquidity
+        ? parseFloat(pool.liquidity)
+        : ratio24h > 0
+          ? fees24h / ratio24h
+          : 0;
+      const volume24h = pool.trade_volume_24h ?? 0;
 
       return {
         address: pool.address,
@@ -79,6 +96,7 @@ export class DlmmSource {
         fee24h: fees24h,
         tvl: tvlUsd,
         feeTvlRatio: ratio24h,
+        volume24h: volume24h,
         isVerified: !!pool.is_verified,
         poolData: this.mapToPoolData(pool),
       };
@@ -88,6 +106,16 @@ export class DlmmSource {
   }
 
   private mapToPoolData(d: DlmmPoolResponse): MeteoraPoolData {
+    const fee_tvl_ratio =
+      typeof d.fee_tvl_ratio === "object"
+        ? (d.fee_tvl_ratio?.hour_24 ?? d.fee_tvl_ratio?.hour_12 ?? 0)
+        : (d.fee_tvl_ratio ?? 0);
+
+    const liquidity =
+      typeof d.liquidity === "string"
+        ? parseFloat(d.liquidity)
+        : (d.liquidity ?? 0);
+
     return {
       pool_address: d.address,
       pool_name: d.name,
@@ -103,7 +131,7 @@ export class DlmmSource {
       sqrt_max_price: "0",
       min_price: "0",
       max_price: "0",
-      liquidity: d.liquidity,
+      liquidity: String(liquidity),
       permanent_lock_liquidity: "0",
       sqrt_price: Math.sqrt(d.current_price ?? 0),
       token_a_amount: d.reserve_x_amount ?? 0,
@@ -116,21 +144,19 @@ export class DlmmSource {
       created_at_slot: 0,
       created_at_slot_timestamp: 0,
       updated_at: Date.now(),
-      tvl:
-        (d.reserve_x_amount ?? 0) * (d.current_price ?? 0) +
-        (d.reserve_y_amount ?? 0),
+      tvl: liquidity,
       apr: d.apr ?? d.apy ?? 0,
-      fee_tvl_ratio: d.fee_tvl_ratio?.hour_12 ?? d.fee_tvl_ratio?.hour_24 ?? 0,
+      fee_tvl_ratio: fee_tvl_ratio,
       fee24h: d.fees_24h ?? 0,
       volume24h: d.trade_volume_24h ?? 0,
-      base_fee: parseFloat((d as any).base_fee_percentage ?? "0"),
+      base_fee: parseFloat((d.base_fee_percentage ?? "0").toString()),
       dynamic_fee: 0,
       fee_scheduler_mode: 0,
       collect_fee_mode: 0,
-      launchpad: (d as any).launchpad,
+      launchpad: d.launchpad,
       tokens_verified: !!d.is_verified,
-      has_farm: (d as any).farm_apr > 0,
-      farm_active: (d as any).farm_apr > 0,
+      has_farm: (d.farm_apr ?? 0) > 0,
+      farm_active: (d.farm_apr ?? 0) > 0,
     };
   }
 }
