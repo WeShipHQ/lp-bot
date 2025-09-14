@@ -4,6 +4,7 @@ import { getMainKeyboard } from "../keyboards/main-menu";
 import { MessageService } from "@/services/message.service";
 import { referralService } from "@/services/referral.service";
 import { userSyncService } from "@/services/user-sync.service";
+import { solanaService } from "@/services/solana.service";
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
 
@@ -79,9 +80,28 @@ export function startCommand(
         console.log(`No referral code found in start command`);
       }
 
+      let solBalance = 0;
+      let solPrice = 0;
+
+      if (ctx.user.walletAddress) {
+        try {
+          [solBalance, solPrice] = await Promise.all([
+            solanaService.getBalance(ctx.user.walletAddress),
+            solanaService.getSolPrice(),
+          ]);
+        } catch (error) {
+          console.log("Failed to fetch balance:", error);
+        }
+      }
+
+      const usdValue = solBalance * solPrice;
+
       const welcomeMessage =
-        MessageService.getWelcomeMessage(ctx.user.walletAddress) +
-        referralMessage;
+        MessageService.getWelcomeMessage(
+          ctx.user.walletAddress,
+          solBalance,
+          usdValue
+        ) + referralMessage;
 
       await ctx.reply(welcomeMessage, {
         parse_mode: "Markdown",
