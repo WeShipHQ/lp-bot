@@ -1,9 +1,8 @@
 import { PoolTrendingItem, TrendingPageState } from "@/types/trending.types";
 import { HotPoolsService, hotPoolsService } from "./hot-pools.service";
-import { PoolSortCriteria, PoolSource, HotPoolItem } from "./hot-pools/types";
+import { PoolSortCriteria, PoolSource } from "./hot-pools/types";
 import {
   formatNumber,
-  formatPrice,
   formatPercentage,
   formatAPR,
 } from "@/bot/utils/formatters";

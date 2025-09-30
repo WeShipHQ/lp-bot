@@ -1,3 +1,5 @@
+import { PoolDex } from "@/types/pool.types";
+
 export const OPEN_POSITION_FEE = 1; // 1%
 export const REBALANCING_FEE = 0.15; // 0.15%
 
@@ -8,6 +10,8 @@ export const SLIPPAGE_LARGE = 0.05; // 5%
 export const BUFFER_AMOUNT = 0.01;
 
 export const TOTAL_RANGE_INTERVAL = 20;
+
+export const SELECTED_DEX: PoolDex = "saros";
 
 // trending
 export const TRENDING_CONSTANTS = {

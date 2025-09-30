@@ -4,10 +4,7 @@ import { TRENDING_MESSAGES } from "../constants/trending.constants";
 import { trendingService } from "@/services/trending.service";
 import { getTrendingKeyboard } from "../keyboards/trending-menu";
 import { buildPoolDetailMarkdown } from "@/services/pool-detail.service";
-
-interface BotContext extends Context {
-  userId?: string;
-}
+import { BotContext } from "@/types/bot.types";
 
 export async function trendingHandler(
   ctx: BotContext,

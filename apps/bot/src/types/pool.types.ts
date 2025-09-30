@@ -1,7 +1,7 @@
 import type { Token } from "./token.types";
 
 export type PoolType = "DLMM" | "DAMM" | "CLMM" | "AMM";
-export type PoolDex = "meteora" | "orca" | "raydium";
+export type PoolDex = "meteora" | "saros" | "orca" | "raydium";
 
 export interface Pool {
   id: string;
@@ -17,7 +17,6 @@ export interface Pool {
   tvl: string;
   isVerified: boolean;
   currentPrice: number;
-  //   volume24h: string;
   volume: {
     hour1: number;
     hour12: number;
@@ -26,7 +25,6 @@ export interface Pool {
     hour4: number;
     min30: number;
   };
-  //   fees24h: string;
   fees: {
     hour1: number;
     hour12: number;
