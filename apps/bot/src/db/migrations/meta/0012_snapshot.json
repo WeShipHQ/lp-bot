@@ -1,0 +1,1513 @@
+{
+  "id": "d1603e18-3f91-4c43-984d-5a1e6581381a",
+  "prevId": "5428734f-42ab-4418-82bb-2954a697f3ee",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.ClaimHistory": {
+      "name": "ClaimHistory",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "positionId": {
+          "name": "positionId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "segmentId": {
+          "name": "segmentId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "timestamp": {
+          "name": "timestamp",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "claimType": {
+          "name": "claimType",
+          "type": "ClaimType",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'manual'"
+        },
+        "claimedTokenXAmount": {
+          "name": "claimedTokenXAmount",
+          "type": "numeric(28, 9)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "claimedTokenYAmount": {
+          "name": "claimedTokenYAmount",
+          "type": "numeric(28, 9)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "claimedRewardsOther": {
+          "name": "claimedRewardsOther",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "claimedUSDValue": {
+          "name": "claimedUSDValue",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tokenXPriceUSD": {
+          "name": "tokenXPriceUSD",
+          "type": "numeric(18, 9)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tokenYPriceUSD": {
+          "name": "tokenYPriceUSD",
+          "type": "numeric(18, 9)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "solReceived": {
+          "name": "solReceived",
+          "type": "numeric(18, 9)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "solPriceUSD": {
+          "name": "solPriceUSD",
+          "type": "numeric(18, 9)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "transactionSignature": {
+          "name": "transactionSignature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "isDuringRebalance": {
+          "name": "isDuringRebalance",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "ClaimHistory_positionId_Position_id_fk": {
+          "name": "ClaimHistory_positionId_Position_id_fk",
+          "tableFrom": "ClaimHistory",
+          "tableTo": "Position",
+          "columnsFrom": [
+            "positionId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "ClaimHistory_segmentId_PositionSegment_id_fk": {
+          "name": "ClaimHistory_segmentId_PositionSegment_id_fk",
+          "tableFrom": "ClaimHistory",
+          "tableTo": "PositionSegment",
+          "columnsFrom": [
+            "segmentId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.PendingTransaction": {
+      "name": "PendingTransaction",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "signature": {
+          "name": "signature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operationType": {
+          "name": "operationType",
+          "type": "OperationType",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "userId": {
+          "name": "userId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "PendingTransactionStatus",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PENDING'"
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "retryCount": {
+          "name": "retryCount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "maxRetries": {
+          "name": "maxRetries",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 3
+        },
+        "lastProcessedAt": {
+          "name": "lastProcessedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "errorMessage": {
+          "name": "errorMessage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "PendingTransaction_userId_User_id_fk": {
+          "name": "PendingTransaction_userId_User_id_fk",
+          "tableFrom": "PendingTransaction",
+          "tableTo": "User",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "PendingTransaction_signature_unique": {
+          "name": "PendingTransaction_signature_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "signature"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.Points": {
+      "name": "Points",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "userId": {
+          "name": "userId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "PointType",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "referralId": {
+          "name": "referralId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "Points_referralId_Referral_id_fk": {
+          "name": "Points_referralId_Referral_id_fk",
+          "tableFrom": "Points",
+          "tableTo": "Referral",
+          "columnsFrom": [
+            "referralId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.PositionSegment": {
+      "name": "PositionSegment",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "positionId": {
+          "name": "positionId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "segmentNumber": {
+          "name": "segmentNumber",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "startTimestamp": {
+          "name": "startTimestamp",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "endTimestamp": {
+          "name": "endTimestamp",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "initialValueUSD": {
+          "name": "initialValueUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "finalValueUSD": {
+          "name": "finalValueUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "realizedPnlUSD": {
+          "name": "realizedPnlUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "realizedPnlPercentage": {
+          "name": "realizedPnlPercentage",
+          "type": "numeric(10, 4)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "feesClaimedUSD": {
+          "name": "feesClaimedUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'0'"
+        },
+        "closureReason": {
+          "name": "closureReason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "closureSignature": {
+          "name": "closureSignature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "startPositionAddress": {
+          "name": "startPositionAddress",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "endPositionAddress": {
+          "name": "endPositionAddress",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "PositionSegment_positionId_Position_id_fk": {
+          "name": "PositionSegment_positionId_Position_id_fk",
+          "tableFrom": "PositionSegment",
+          "tableTo": "Position",
+          "columnsFrom": [
+            "positionId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.PositionSnapshot": {
+      "name": "PositionSnapshot",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "positionId": {
+          "name": "positionId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "segmentId": {
+          "name": "segmentId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "snapshotTimestamp": {
+          "name": "snapshotTimestamp",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "snapshotType": {
+          "name": "snapshotType",
+          "type": "SnapshotType",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currentValueUSD": {
+          "name": "currentValueUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tokenXAmount": {
+          "name": "tokenXAmount",
+          "type": "numeric(28, 9)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tokenYAmount": {
+          "name": "tokenYAmount",
+          "type": "numeric(28, 9)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unclaimedFeesX": {
+          "name": "unclaimedFeesX",
+          "type": "numeric(28, 9)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unclaimedFeesY": {
+          "name": "unclaimedFeesY",
+          "type": "numeric(28, 9)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unclaimedFeesUSD": {
+          "name": "unclaimedFeesUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unrealizedPnlUSD": {
+          "name": "unrealizedPnlUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "unrealizedPnlPercentage": {
+          "name": "unrealizedPnlPercentage",
+          "type": "numeric(10, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "totalPnlUSD": {
+          "name": "totalPnlUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "totalPnlPercentage": {
+          "name": "totalPnlPercentage",
+          "type": "numeric(10, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tokenXPriceUSD": {
+          "name": "tokenXPriceUSD",
+          "type": "numeric(18, 9)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tokenYPriceUSD": {
+          "name": "tokenYPriceUSD",
+          "type": "numeric(18, 9)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "solPriceUSD": {
+          "name": "solPriceUSD",
+          "type": "numeric(18, 9)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "PositionSnapshot_positionId_Position_id_fk": {
+          "name": "PositionSnapshot_positionId_Position_id_fk",
+          "tableFrom": "PositionSnapshot",
+          "tableTo": "Position",
+          "columnsFrom": [
+            "positionId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "PositionSnapshot_segmentId_PositionSegment_id_fk": {
+          "name": "PositionSnapshot_segmentId_PositionSegment_id_fk",
+          "tableFrom": "PositionSnapshot",
+          "tableTo": "PositionSegment",
+          "columnsFrom": [
+            "segmentId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.Position": {
+      "name": "Position",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "userId": {
+          "name": "userId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "positionAddress": {
+          "name": "positionAddress",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "poolAddress": {
+          "name": "poolAddress",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "dex": {
+          "name": "dex",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'meteora'"
+        },
+        "strategyType": {
+          "name": "strategyType",
+          "type": "StrategyType",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tokenX": {
+          "name": "tokenX",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tokenY": {
+          "name": "tokenY",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "PositionStatus",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'ACTIVE'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "closedAt": {
+          "name": "closedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "initialValueUSD": {
+          "name": "initialValueUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "initialValueSOL": {
+          "name": "initialValueSOL",
+          "type": "numeric(18, 9)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "initialTokenXAmount": {
+          "name": "initialTokenXAmount",
+          "type": "numeric(28, 9)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "initialTokenYAmount": {
+          "name": "initialTokenYAmount",
+          "type": "numeric(28, 9)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "initialTokenXPriceUSD": {
+          "name": "initialTokenXPriceUSD",
+          "type": "numeric(18, 9)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "initialTokenYPriceUSD": {
+          "name": "initialTokenYPriceUSD",
+          "type": "numeric(18, 9)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currentSegmentNumber": {
+          "name": "currentSegmentNumber",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "currentSegmentInitialUSD": {
+          "name": "currentSegmentInitialUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currentSegmentStartAt": {
+          "name": "currentSegmentStartAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "totalRealizedPnlUSD": {
+          "name": "totalRealizedPnlUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "totalFeesClaimedUSD": {
+          "name": "totalFeesClaimedUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "finalValueUSD": {
+          "name": "finalValueUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "finalValueSOL": {
+          "name": "finalValueSOL",
+          "type": "numeric(18, 9)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "finalTokenXAmount": {
+          "name": "finalTokenXAmount",
+          "type": "numeric(28, 9)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "finalTokenYAmount": {
+          "name": "finalTokenYAmount",
+          "type": "numeric(28, 9)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "finalTokenXPriceUSD": {
+          "name": "finalTokenXPriceUSD",
+          "type": "numeric(18, 9)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "finalTokenYPriceUSD": {
+          "name": "finalTokenYPriceUSD",
+          "type": "numeric(18, 9)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "isRebalancingEnabled": {
+          "name": "isRebalancingEnabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "rebalanceThreshold": {
+          "name": "rebalanceThreshold",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'20.0'"
+        },
+        "slPercentage": {
+          "name": "slPercentage",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "tpPercentage": {
+          "name": "tpPercentage",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "creationSignature": {
+          "name": "creationSignature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "closureSignature": {
+          "name": "closureSignature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "Position_userId_User_id_fk": {
+          "name": "Position_userId_User_id_fk",
+          "tableFrom": "Position",
+          "tableTo": "User",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "Position_positionAddress_unique": {
+          "name": "Position_positionAddress_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "positionAddress"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.RebalanceEvent": {
+      "name": "RebalanceEvent",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "positionId": {
+          "name": "positionId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "timestamp": {
+          "name": "timestamp",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "triggerReason": {
+          "name": "triggerReason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "oldPositionAddress": {
+          "name": "oldPositionAddress",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "newPositionAddress": {
+          "name": "newPositionAddress",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "closedSegmentId": {
+          "name": "closedSegmentId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "segmentInitialUSD": {
+          "name": "segmentInitialUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "segmentFinalUSD": {
+          "name": "segmentFinalUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "segmentPnlUSD": {
+          "name": "segmentPnlUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "segmentPnlPercentage": {
+          "name": "segmentPnlPercentage",
+          "type": "numeric(10, 4)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "feesCollectedUSD": {
+          "name": "feesCollectedUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'0'"
+        },
+        "newSegmentId": {
+          "name": "newSegmentId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "newSegmentInitialUSD": {
+          "name": "newSegmentInitialUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "closeTransactionSignature": {
+          "name": "closeTransactionSignature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createTransactionSignature": {
+          "name": "createTransactionSignature",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "totalGasCostSOL": {
+          "name": "totalGasCostSOL",
+          "type": "numeric(18, 9)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "slippageCostUSD": {
+          "name": "slippageCostUSD",
+          "type": "numeric(18, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "RebalanceEvent_positionId_Position_id_fk": {
+          "name": "RebalanceEvent_positionId_Position_id_fk",
+          "tableFrom": "RebalanceEvent",
+          "tableTo": "Position",
+          "columnsFrom": [
+            "positionId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "RebalanceEvent_closedSegmentId_PositionSegment_id_fk": {
+          "name": "RebalanceEvent_closedSegmentId_PositionSegment_id_fk",
+          "tableFrom": "RebalanceEvent",
+          "tableTo": "PositionSegment",
+          "columnsFrom": [
+            "closedSegmentId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "RebalanceEvent_newSegmentId_PositionSegment_id_fk": {
+          "name": "RebalanceEvent_newSegmentId_PositionSegment_id_fk",
+          "tableFrom": "RebalanceEvent",
+          "tableTo": "PositionSegment",
+          "columnsFrom": [
+            "newSegmentId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.Referral": {
+      "name": "Referral",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "referrerId": {
+          "name": "referrerId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "referredId": {
+          "name": "referredId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "referralCode": {
+          "name": "referralCode",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'ACTIVE'"
+        },
+        "feesEarned": {
+          "name": "feesEarned",
+          "type": "numeric(20, 8)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "pointsEarned": {
+          "name": "pointsEarned",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.Transaction": {
+      "name": "Transaction",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "positionId": {
+          "name": "positionId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "type": {
+          "name": "type",
+          "type": "TransactionType",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "numeric(20, 8)",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "tokenAddress": {
+          "name": "tokenAddress",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "txHash": {
+          "name": "txHash",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "TransactionStatus",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PENDING'"
+        },
+        "errorMessage": {
+          "name": "errorMessage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "Transaction_positionId_Position_id_fk": {
+          "name": "Transaction_positionId_Position_id_fk",
+          "tableFrom": "Transaction",
+          "tableTo": "Position",
+          "columnsFrom": [
+            "positionId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.User": {
+      "name": "User",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "telegramId": {
+          "name": "telegramId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "walletId": {
+          "name": "walletId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "username": {
+          "name": "username",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "walletAddress": {
+          "name": "walletAddress",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "autoRebalanceEnabled": {
+          "name": "autoRebalanceEnabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "rebalanceThreshold": {
+          "name": "rebalanceThreshold",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'5.00'"
+        },
+        "rebalanceStrategy": {
+          "name": "rebalanceStrategy",
+          "type": "RebalanceStrategy",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'STANDARD'"
+        },
+        "balancedPositionBinRange": {
+          "name": "balancedPositionBinRange",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 10
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "User_telegramId_unique": {
+          "name": "User_telegramId_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "telegramId"
+          ]
+        },
+        "User_walletId_unique": {
+          "name": "User_walletId_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "walletId"
+          ]
+        },
+        "User_walletAddress_unique": {
+          "name": "User_walletAddress_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "walletAddress"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.Wallet": {
+      "name": "Wallet",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "userId": {
+          "name": "userId",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "privateKeyEncrypted": {
+          "name": "privateKeyEncrypted",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "isActive": {
+          "name": "isActive",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "Wallet_userId_User_id_fk": {
+          "name": "Wallet_userId_User_id_fk",
+          "tableFrom": "Wallet",
+          "tableTo": "User",
+          "columnsFrom": [
+            "userId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {
+    "public.ClaimType": {
+      "name": "ClaimType",
+      "schema": "public",
+      "values": [
+        "manual",
+        "rebalance",
+        "closure"
+      ]
+    },
+    "public.OperationType": {
+      "name": "OperationType",
+      "schema": "public",
+      "values": [
+        "CREATE_POSITION",
+        "CLOSE_POSITION",
+        "ADD_LIQUIDITY",
+        "REMOVE_LIQUIDITY",
+        "CLAIM_FEES",
+        "REBALANCE"
+      ]
+    },
+    "public.PendingTransactionStatus": {
+      "name": "PendingTransactionStatus",
+      "schema": "public",
+      "values": [
+        "PENDING",
+        "PROCESSING",
+        "COMPLETED",
+        "FAILED",
+        "RETRY"
+      ]
+    },
+    "public.PointType": {
+      "name": "PointType",
+      "schema": "public",
+      "values": [
+        "REFERRAL_BONUS",
+        "FEE_EARNING",
+        "ACTIVITY_REWARD"
+      ]
+    },
+    "public.PositionStatus": {
+      "name": "PositionStatus",
+      "schema": "public",
+      "values": [
+        "ACTIVE",
+        "CLOSED",
+        "REBALANCING"
+      ]
+    },
+    "public.RebalanceStrategy": {
+      "name": "RebalanceStrategy",
+      "schema": "public",
+      "values": [
+        "STANDARD",
+        "DIP_PROTECTION"
+      ]
+    },
+    "public.SnapshotType": {
+      "name": "SnapshotType",
+      "schema": "public",
+      "values": [
+        "creation",
+        "claim",
+        "rebalance",
+        "closure",
+        "periodic"
+      ]
+    },
+    "public.StrategyType": {
+      "name": "StrategyType",
+      "schema": "public",
+      "values": [
+        "DLMM",
+        "DAMM",
+        "CONCENTRATED"
+      ]
+    },
+    "public.TransactionStatus": {
+      "name": "TransactionStatus",
+      "schema": "public",
+      "values": [
+        "PENDING",
+        "CONFIRMED",
+        "FAILED"
+      ]
+    },
+    "public.TransactionType": {
+      "name": "TransactionType",
+      "schema": "public",
+      "values": [
+        "DEPOSIT",
+        "WITHDRAW",
+        "REBALANCE",
+        "FEE_COLLECTION"
+      ]
+    }
+  },
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

@@ -692,7 +692,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     }
 
     // FIXME handle single sided position
-    const result = await positionService.createBalancedPosition(
+    const result = await positionService.createBalancedPositionV1(
       ctx.user,
       poolData.address,
       strategy,

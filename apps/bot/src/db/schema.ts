@@ -114,57 +114,99 @@ export const positions = pgTable("Position", {
   userId: uuid("userId")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  
+
   // Position identification
   positionAddress: text("positionAddress").notNull().unique(),
   poolAddress: text("poolAddress").notNull(),
   dex: text("dex").notNull().default("meteora"),
   strategyType: strategyTypeEnum("strategyType").notNull(),
-  
+
   // Token information
   tokenX: jsonb("tokenX").$type<Token>().notNull(),
   tokenY: jsonb("tokenY").$type<Token>().notNull(),
-  
+
   // Position lifecycle
   status: positionStatusEnum("status").notNull().default("ACTIVE"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
   closedAt: timestamp("closedAt"),
-  
+
   // Initial investment tracking
-  initialValueUSD: decimal("initialValueUSD", { precision: 18, scale: 2 }).notNull(),
-  initialValueSOL: decimal("initialValueSOL", { precision: 18, scale: 9 }).notNull(),
-  initialTokenXAmount: decimal("initialTokenXAmount", { precision: 28, scale: 9 }).notNull(),
-  initialTokenYAmount: decimal("initialTokenYAmount", { precision: 28, scale: 9 }).notNull(),
-  initialTokenXPriceUSD: decimal("initialTokenXPriceUSD", { precision: 18, scale: 9 }).notNull(),
-  initialTokenYPriceUSD: decimal("initialTokenYPriceUSD", { precision: 18, scale: 9 }).notNull(),
-  
+  initialValueUSD: decimal("initialValueUSD", {
+    precision: 18,
+    scale: 2,
+  }).notNull(),
+  initialValueSOL: decimal("initialValueSOL", {
+    precision: 18,
+    scale: 9,
+  }).notNull(),
+  initialTokenXAmount: decimal("initialTokenXAmount", {
+    precision: 28,
+    scale: 9,
+  }).notNull(),
+  initialTokenYAmount: decimal("initialTokenYAmount", {
+    precision: 28,
+    scale: 9,
+  }).notNull(),
+  initialTokenXPriceUSD: decimal("initialTokenXPriceUSD", {
+    precision: 18,
+    scale: 9,
+  }).notNull(),
+  initialTokenYPriceUSD: decimal("initialTokenYPriceUSD", {
+    precision: 18,
+    scale: 9,
+  }).notNull(),
+
   // Current segment tracking (for rebalancing)
   currentSegmentNumber: integer("currentSegmentNumber").notNull().default(1),
-  currentSegmentInitialUSD: decimal("currentSegmentInitialUSD", { precision: 18, scale: 2 }).notNull(),
-  currentSegmentStartAt: timestamp("currentSegmentStartAt").notNull().defaultNow(),
-  
+  currentSegmentInitialUSD: decimal("currentSegmentInitialUSD", {
+    precision: 18,
+    scale: 2,
+  }).notNull(),
+  currentSegmentStartAt: timestamp("currentSegmentStartAt")
+    .notNull()
+    .defaultNow(),
+
   // Cumulative PnL tracking
-  totalRealizedPnlUSD: decimal("totalRealizedPnlUSD", { precision: 18, scale: 2 }).notNull().default("0"),
-  totalFeesClaimedUSD: decimal("totalFeesClaimedUSD", { precision: 18, scale: 2 }).notNull().default("0"),
-  
+  totalRealizedPnlUSD: decimal("totalRealizedPnlUSD", {
+    precision: 18,
+    scale: 2,
+  })
+    .notNull()
+    .default("0"),
+  totalFeesClaimedUSD: decimal("totalFeesClaimedUSD", {
+    precision: 18,
+    scale: 2,
+  })
+    .notNull()
+    .default("0"),
+
   // Final values (populated when closed)
   finalValueUSD: decimal("finalValueUSD", { precision: 18, scale: 2 }),
   finalValueSOL: decimal("finalValueSOL", { precision: 18, scale: 9 }),
   finalTokenXAmount: decimal("finalTokenXAmount", { precision: 28, scale: 9 }),
   finalTokenYAmount: decimal("finalTokenYAmount", { precision: 28, scale: 9 }),
-  finalTokenXPriceUSD: decimal("finalTokenXPriceUSD", { precision: 18, scale: 9 }),
-  finalTokenYPriceUSD: decimal("finalTokenYPriceUSD", { precision: 18, scale: 9 }),
-  
+  finalTokenXPriceUSD: decimal("finalTokenXPriceUSD", {
+    precision: 18,
+    scale: 9,
+  }),
+  finalTokenYPriceUSD: decimal("finalTokenYPriceUSD", {
+    precision: 18,
+    scale: 9,
+  }),
+
   // Risk management
   isRebalancingEnabled: boolean("isRebalancingEnabled").default(false),
-  rebalanceThreshold: decimal("rebalanceThreshold", { precision: 5, scale: 2 }).default("20.0"),
+  rebalanceThreshold: decimal("rebalanceThreshold", {
+    precision: 5,
+    scale: 2,
+  }).default("20.0"),
   slPercentage: decimal("slPercentage", { precision: 5, scale: 2 }),
   tpPercentage: decimal("tpPercentage", { precision: 5, scale: 2 }),
-  
+
   // Transaction references
   creationSignature: text("creationSignature").notNull(),
   closureSignature: text("closureSignature"),
-  
+
   updatedAt: timestamp("updatedAt").notNull().defaultNow(),
 });
 
@@ -174,31 +216,40 @@ export const positionSegments = pgTable("PositionSegment", {
   positionId: uuid("positionId")
     .notNull()
     .references(() => positions.id, { onDelete: "cascade" }),
-  
+
   // Segment identification
   segmentNumber: integer("segmentNumber").notNull(),
   startTimestamp: timestamp("startTimestamp").notNull(),
   endTimestamp: timestamp("endTimestamp"),
-  
+
   // Segment values
-  initialValueUSD: decimal("initialValueUSD", { precision: 18, scale: 2 }).notNull(),
+  initialValueUSD: decimal("initialValueUSD", {
+    precision: 18,
+    scale: 2,
+  }).notNull(),
   finalValueUSD: decimal("finalValueUSD", { precision: 18, scale: 2 }),
-  
+
   // Segment PnL
   realizedPnlUSD: decimal("realizedPnlUSD", { precision: 18, scale: 2 }),
-  realizedPnlPercentage: decimal("realizedPnlPercentage", { precision: 10, scale: 4 }),
-  
+  realizedPnlPercentage: decimal("realizedPnlPercentage", {
+    precision: 10,
+    scale: 4,
+  }),
+
   // Fees claimed during this segment
-  feesClaimedUSD: decimal("feesClaimedUSD", { precision: 18, scale: 2 }).default("0"),
-  
+  feesClaimedUSD: decimal("feesClaimedUSD", {
+    precision: 18,
+    scale: 2,
+  }).default("0"),
+
   // Closure reason
   closureReason: text("closureReason"),
   closureSignature: text("closureSignature"),
-  
+
   // Position state at segment start/end
   startPositionAddress: text("startPositionAddress").notNull(),
   endPositionAddress: text("endPositionAddress"),
-  
+
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 });
 
@@ -208,34 +259,48 @@ export const claimHistory = pgTable("ClaimHistory", {
   positionId: uuid("positionId")
     .notNull()
     .references(() => positions.id, { onDelete: "cascade" }),
-  segmentId: uuid("segmentId")
-    .references(() => positionSegments.id),
-  
+  segmentId: uuid("segmentId").references(() => positionSegments.id),
+
   // Claim details
   timestamp: timestamp("timestamp").notNull().defaultNow(),
   claimType: claimTypeEnum("claimType").notNull().default("manual"),
-  
+
   // Claimed amounts (raw token amounts)
-  claimedTokenXAmount: decimal("claimedTokenXAmount", { precision: 28, scale: 9 }).notNull(),
-  claimedTokenYAmount: decimal("claimedTokenYAmount", { precision: 28, scale: 9 }).notNull(),
+  claimedTokenXAmount: decimal("claimedTokenXAmount", {
+    precision: 28,
+    scale: 9,
+  }).notNull(),
+  claimedTokenYAmount: decimal("claimedTokenYAmount", {
+    precision: 28,
+    scale: 9,
+  }).notNull(),
   claimedRewardsOther: jsonb("claimedRewardsOther"),
-  
+
   // USD values at claim time
-  claimedUSDValue: decimal("claimedUSDValue", { precision: 18, scale: 2 }).notNull(),
-  tokenXPriceUSD: decimal("tokenXPriceUSD", { precision: 18, scale: 9 }).notNull(),
-  tokenYPriceUSD: decimal("tokenYPriceUSD", { precision: 18, scale: 9 }).notNull(),
-  
+  claimedUSDValue: decimal("claimedUSDValue", {
+    precision: 18,
+    scale: 2,
+  }).notNull(),
+  tokenXPriceUSD: decimal("tokenXPriceUSD", {
+    precision: 18,
+    scale: 9,
+  }).notNull(),
+  tokenYPriceUSD: decimal("tokenYPriceUSD", {
+    precision: 18,
+    scale: 9,
+  }).notNull(),
+
   // Post-swap values (if swapped to SOL)
   solReceived: decimal("solReceived", { precision: 18, scale: 9 }),
   solPriceUSD: decimal("solPriceUSD", { precision: 18, scale: 9 }),
-  
+
   // Transaction reference
   transactionSignature: text("transactionSignature").notNull(),
-  
+
   // Context
   isDuringRebalance: boolean("isDuringRebalance").default(false),
   notes: text("notes"),
-  
+
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 });
 
@@ -245,39 +310,57 @@ export const rebalanceEvents = pgTable("RebalanceEvent", {
   positionId: uuid("positionId")
     .notNull()
     .references(() => positions.id, { onDelete: "cascade" }),
-  
+
   // Rebalance timing
   timestamp: timestamp("timestamp").notNull().defaultNow(),
   triggerReason: text("triggerReason").notNull(),
-  
+
   // Position addresses
   oldPositionAddress: text("oldPositionAddress").notNull(),
   newPositionAddress: text("newPositionAddress").notNull(),
-  
+
   // Segment closure data
-  closedSegmentId: uuid("closedSegmentId")
-    .references(() => positionSegments.id),
-  segmentInitialUSD: decimal("segmentInitialUSD", { precision: 18, scale: 2 }).notNull(),
-  segmentFinalUSD: decimal("segmentFinalUSD", { precision: 18, scale: 2 }).notNull(),
-  segmentPnlUSD: decimal("segmentPnlUSD", { precision: 18, scale: 2 }).notNull(),
-  segmentPnlPercentage: decimal("segmentPnlPercentage", { precision: 10, scale: 4 }).notNull(),
-  
+  closedSegmentId: uuid("closedSegmentId").references(
+    () => positionSegments.id
+  ),
+  segmentInitialUSD: decimal("segmentInitialUSD", {
+    precision: 18,
+    scale: 2,
+  }).notNull(),
+  segmentFinalUSD: decimal("segmentFinalUSD", {
+    precision: 18,
+    scale: 2,
+  }).notNull(),
+  segmentPnlUSD: decimal("segmentPnlUSD", {
+    precision: 18,
+    scale: 2,
+  }).notNull(),
+  segmentPnlPercentage: decimal("segmentPnlPercentage", {
+    precision: 10,
+    scale: 4,
+  }).notNull(),
+
   // Fees collected during rebalance
-  feesCollectedUSD: decimal("feesCollectedUSD", { precision: 18, scale: 2 }).default("0"),
-  
+  feesCollectedUSD: decimal("feesCollectedUSD", {
+    precision: 18,
+    scale: 2,
+  }).default("0"),
+
   // New segment data
-  newSegmentId: uuid("newSegmentId")
-    .references(() => positionSegments.id),
-  newSegmentInitialUSD: decimal("newSegmentInitialUSD", { precision: 18, scale: 2 }).notNull(),
-  
+  newSegmentId: uuid("newSegmentId").references(() => positionSegments.id),
+  newSegmentInitialUSD: decimal("newSegmentInitialUSD", {
+    precision: 18,
+    scale: 2,
+  }).notNull(),
+
   // Transaction references
   closeTransactionSignature: text("closeTransactionSignature"),
   createTransactionSignature: text("createTransactionSignature"),
-  
+
   // Gas and slippage costs
   totalGasCostSOL: decimal("totalGasCostSOL", { precision: 18, scale: 9 }),
   slippageCostUSD: decimal("slippageCostUSD", { precision: 18, scale: 2 }),
-  
+
   notes: text("notes"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 });
@@ -288,34 +371,60 @@ export const positionSnapshots = pgTable("PositionSnapshot", {
   positionId: uuid("positionId")
     .notNull()
     .references(() => positions.id, { onDelete: "cascade" }),
-  segmentId: uuid("segmentId")
-    .references(() => positionSegments.id),
-  
+  segmentId: uuid("segmentId").references(() => positionSegments.id),
+
   // Snapshot timing
   snapshotTimestamp: timestamp("snapshotTimestamp").notNull().defaultNow(),
   snapshotType: snapshotTypeEnum("snapshotType").notNull(),
-  
+
   // Current position value
-  currentValueUSD: decimal("currentValueUSD", { precision: 18, scale: 2 }).notNull(),
+  currentValueUSD: decimal("currentValueUSD", {
+    precision: 18,
+    scale: 2,
+  }).notNull(),
   tokenXAmount: decimal("tokenXAmount", { precision: 28, scale: 9 }).notNull(),
   tokenYAmount: decimal("tokenYAmount", { precision: 28, scale: 9 }).notNull(),
-  
+
   // Unclaimed fees at snapshot time
-  unclaimedFeesX: decimal("unclaimedFeesX", { precision: 28, scale: 9 }).notNull(),
-  unclaimedFeesY: decimal("unclaimedFeesY", { precision: 28, scale: 9 }).notNull(),
-  unclaimedFeesUSD: decimal("unclaimedFeesUSD", { precision: 18, scale: 2 }).notNull(),
-  
+  unclaimedFeesX: decimal("unclaimedFeesX", {
+    precision: 28,
+    scale: 9,
+  }).notNull(),
+  unclaimedFeesY: decimal("unclaimedFeesY", {
+    precision: 28,
+    scale: 9,
+  }).notNull(),
+  unclaimedFeesUSD: decimal("unclaimedFeesUSD", {
+    precision: 18,
+    scale: 2,
+  }).notNull(),
+
   // PnL at snapshot time
-  unrealizedPnlUSD: decimal("unrealizedPnlUSD", { precision: 18, scale: 2 }).notNull(),
-  unrealizedPnlPercentage: decimal("unrealizedPnlPercentage", { precision: 10, scale: 4 }).notNull(),
+  unrealizedPnlUSD: decimal("unrealizedPnlUSD", {
+    precision: 18,
+    scale: 2,
+  }).notNull(),
+  unrealizedPnlPercentage: decimal("unrealizedPnlPercentage", {
+    precision: 10,
+    scale: 4,
+  }).notNull(),
   totalPnlUSD: decimal("totalPnlUSD", { precision: 18, scale: 2 }).notNull(),
-  totalPnlPercentage: decimal("totalPnlPercentage", { precision: 10, scale: 4 }).notNull(),
-  
+  totalPnlPercentage: decimal("totalPnlPercentage", {
+    precision: 10,
+    scale: 4,
+  }).notNull(),
+
   // Token prices at snapshot
-  tokenXPriceUSD: decimal("tokenXPriceUSD", { precision: 18, scale: 9 }).notNull(),
-  tokenYPriceUSD: decimal("tokenYPriceUSD", { precision: 18, scale: 9 }).notNull(),
+  tokenXPriceUSD: decimal("tokenXPriceUSD", {
+    precision: 18,
+    scale: 9,
+  }).notNull(),
+  tokenYPriceUSD: decimal("tokenYPriceUSD", {
+    precision: 18,
+    scale: 9,
+  }).notNull(),
   solPriceUSD: decimal("solPriceUSD", { precision: 18, scale: 9 }).notNull(),
-  
+
   createdAt: timestamp("createdAt").notNull().defaultNow(),
 });
 
@@ -403,14 +512,17 @@ export const positionsRelations = relations(positions, ({ one, many }) => ({
   transactions: many(transactions),
 }));
 
-export const positionSegmentsRelations = relations(positionSegments, ({ one, many }) => ({
-  position: one(positions, {
-    fields: [positionSegments.positionId],
-    references: [positions.id],
-  }),
-  claims: many(claimHistory),
-  snapshots: many(positionSnapshots),
-}));
+export const positionSegmentsRelations = relations(
+  positionSegments,
+  ({ one, many }) => ({
+    position: one(positions, {
+      fields: [positionSegments.positionId],
+      references: [positions.id],
+    }),
+    claims: many(claimHistory),
+    snapshots: many(positionSnapshots),
+  })
+);
 
 export const claimHistoryRelations = relations(claimHistory, ({ one }) => ({
   position: one(positions, {
@@ -423,31 +535,37 @@ export const claimHistoryRelations = relations(claimHistory, ({ one }) => ({
   }),
 }));
 
-export const rebalanceEventsRelations = relations(rebalanceEvents, ({ one }) => ({
-  position: one(positions, {
-    fields: [rebalanceEvents.positionId],
-    references: [positions.id],
-  }),
-  closedSegment: one(positionSegments, {
-    fields: [rebalanceEvents.closedSegmentId],
-    references: [positionSegments.id],
-  }),
-  newSegment: one(positionSegments, {
-    fields: [rebalanceEvents.newSegmentId],
-    references: [positionSegments.id],
-  }),
-}));
+export const rebalanceEventsRelations = relations(
+  rebalanceEvents,
+  ({ one }) => ({
+    position: one(positions, {
+      fields: [rebalanceEvents.positionId],
+      references: [positions.id],
+    }),
+    closedSegment: one(positionSegments, {
+      fields: [rebalanceEvents.closedSegmentId],
+      references: [positionSegments.id],
+    }),
+    newSegment: one(positionSegments, {
+      fields: [rebalanceEvents.newSegmentId],
+      references: [positionSegments.id],
+    }),
+  })
+);
 
-export const positionSnapshotsRelations = relations(positionSnapshots, ({ one }) => ({
-  position: one(positions, {
-    fields: [positionSnapshots.positionId],
-    references: [positions.id],
-  }),
-  segment: one(positionSegments, {
-    fields: [positionSnapshots.segmentId],
-    references: [positionSegments.id],
-  }),
-}));
+export const positionSnapshotsRelations = relations(
+  positionSnapshots,
+  ({ one }) => ({
+    position: one(positions, {
+      fields: [positionSnapshots.positionId],
+      references: [positions.id],
+    }),
+    segment: one(positionSegments, {
+      fields: [positionSnapshots.segmentId],
+      references: [positionSegments.id],
+    }),
+  })
+);
 
 export const transactionsRelations = relations(transactions, ({ one }) => ({
   position: one(positions, {
@@ -519,10 +637,13 @@ export type NewPendingTransaction = typeof pendingTransactions.$inferInsert;
 export type StrategyType = (typeof strategyTypeEnum.enumValues)[number];
 export type PositionStatus = (typeof positionStatusEnum.enumValues)[number];
 export type TransactionType = (typeof transactionTypeEnum.enumValues)[number];
-export type TransactionStatus = (typeof transactionStatusEnum.enumValues)[number];
-export type RebalanceStrategy = (typeof rebalanceStrategyEnum.enumValues)[number];
+export type TransactionStatus =
+  (typeof transactionStatusEnum.enumValues)[number];
+export type RebalanceStrategy =
+  (typeof rebalanceStrategyEnum.enumValues)[number];
 export type PointType = (typeof pointTypeEnum.enumValues)[number];
 export type OperationType = (typeof operationTypeEnum.enumValues)[number];
-export type PendingTransactionStatus = (typeof pendingTransactionStatusEnum.enumValues)[number];
+export type PendingTransactionStatus =
+  (typeof pendingTransactionStatusEnum.enumValues)[number];
 export type ClaimType = (typeof claimTypeEnum.enumValues)[number];
 export type SnapshotType = (typeof snapshotTypeEnum.enumValues)[number];

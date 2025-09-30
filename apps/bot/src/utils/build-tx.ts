@@ -253,7 +253,7 @@ export async function createSmartTransaction(
   } else {
     priorityFeeResponse = await getPriorityFeeEstimate(connection, {
       transaction: serializedTransaction,
-      options: { priorityLevel: PriorityLevel.HIGH },
+      options: { priorityLevel: PriorityLevel.VERY_HIGH },
     });
   }
 

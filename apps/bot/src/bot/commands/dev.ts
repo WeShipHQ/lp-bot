@@ -24,7 +24,7 @@ export function devCommand(
     // });
 
     await ctx.scene.enter(SCENE_IDS.POSITION_DETAIL_SCENE, {
-      positionAddress: "gwSUe1nAfV752b7ihfXPxQVHKvCQW9nKyWHdekArFCW",
+      positionAddress: "5Zj1WS7rzUWtR1EgC9Xaf2Hr8yvSHPXHhntviW6R85Mt",
     });
 
     // await positionService.checkClaimFeeTx(
@@ -39,9 +39,15 @@ export function devCommand(
     //   )
     // );
 
-    // return ctx.replyWithMarkdown(
-    //   `Dev command  ${meteoraUrl}`,
-    //   DISABLE_LINK_PREVIEW
+    // const positionService = new PositionService();
+    // positionService.handlePositionCreatedV1(
+    //   ctx.user,
+    //   0.198,
+    //   true,
+    //   "38GgwAR66wBu4HxFr18M2rD9Q4nxED82pFTnPPFvmV1unCNZyGKmKhr8pjSNaJ6M4f2RC4926pgvAoRmcHYU9yiH",
+    //   "Ga8ocnu2nkMsmJKYr7Ujmj4LrmcEYXmKpzX5tsQJ6ZBK"
     // );
+
+    // return ctx.replyWithMarkdown(`Dev command`, DISABLE_LINK_PREVIEW);
   });
 }

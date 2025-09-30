@@ -91,12 +91,12 @@ export interface RebalanceResult {
 
 export class PositionService {
   private jupiterService: JupiterService;
-  private jobQueueService: JobQueueService;
+  // private jobQueueService: JobQueueService;
   private tokenPriceService: TokenPriceService;
   private tokenAdapter: TokenAdapter;
 
   constructor() {
-    this.jobQueueService = new JobQueueService();
+    // this.jobQueueService = new JobQueueService();
     this.jupiterService = new JupiterService();
     this.tokenPriceService = new TokenPriceService();
     this.tokenAdapter = new TokenAdapter();
@@ -190,7 +190,7 @@ export class PositionService {
   /**
    * Handle position creation with enhanced database operations
    */
-  private async handlePositionCreatedV1(
+  async handlePositionCreatedV1(
     user: User,
     amount: number,
     autoRebalancing: boolean,
@@ -361,6 +361,7 @@ export class PositionService {
         `[Position] Position created successfully: ${newPosition.id}, Initial value: $${initialValueUSD.toString()}`
       );
     } catch (error) {
+      console.error("Error handling position created:", error);
       logger.error(
         `[Position] Error handling position created: ${error}`,
         error
@@ -412,6 +413,8 @@ export class PositionService {
         currentSegment,
         transactionId
       );
+
+      console.log("result", result);
 
       return {
         success: true,
@@ -553,6 +556,22 @@ export class PositionService {
 
       // Database operations in transaction
       await db.transaction(async (tx) => {
+        console.log("inserr to claim history:", {
+          positionId: position.id,
+          segmentId: currentSegment.id,
+          timestamp: new Date(),
+          claimType: "manual",
+          claimedTokenXAmount: claimedTokenXAmount.toString(),
+          claimedTokenYAmount: claimedTokenYAmount.toString(),
+          claimedUSDValue: totalClaimedUSD.toString(),
+          tokenXPriceUSD: priceXUSD.toString(),
+          tokenYPriceUSD: priceYUSD.toString(),
+          solReceived: totalSolReceived.toString(),
+          solPriceUSD: solPriceUSD.toString(),
+          transactionSignature: signature,
+          isDuringRebalance: false,
+          notes: "Manual fee claim",
+        });
         // 1. Create claim history record
         await tx.insert(claimHistory).values({
           positionId: position.id,
@@ -580,6 +599,15 @@ export class PositionService {
           position.totalRealizedPnlUSD || "0"
         ).add(totalClaimedUSD);
 
+        console.log(
+          "newTotalFeesClaimedUSD",
+          newTotalFeesClaimedUSD.toString()
+        );
+        console.log(
+          "newTotalRealizedPnlUSD",
+          newTotalRealizedPnlUSD.toString()
+        );
+
         await tx
           .update(positions)
           .set({
@@ -594,12 +622,39 @@ export class PositionService {
           currentSegment.feesClaimedUSD || "0"
         ).add(totalClaimedUSD);
 
+        console.log(
+          "newSegmentFeesClaimedUSD",
+          newSegmentFeesClaimedUSD.toString()
+        );
+
         await tx
           .update(positionSegments)
           .set({
             feesClaimedUSD: newSegmentFeesClaimedUSD.toString(),
           })
           .where(eq(positionSegments.id, currentSegment.id));
+
+        console.log("positionSnapshot:", {
+          positionId: position.id,
+          segmentId: currentSegment.id,
+          snapshotType: "claim",
+          currentValueUSD: position.currentSegmentInitialUSD, // Current liquidity value (would need to fetch from chain)
+          tokenXAmount: "0", // Would need current position data
+          tokenYAmount: "0", // Would need current position data
+          unclaimedFeesX: "0", // Fees just claimed
+          unclaimedFeesY: "0", // Fees just claimed
+          unclaimedFeesUSD: "0",
+          unrealizedPnlUSD: "0", // Would calculate based on current position value
+          unrealizedPnlPercentage: "0",
+          totalPnlUSD: newTotalRealizedPnlUSD.toString(),
+          totalPnlPercentage: newTotalRealizedPnlUSD
+            .div(new Decimal(position.initialValueUSD))
+            .mul(100)
+            .toString(),
+          tokenXPriceUSD: priceXUSD.toString(),
+          tokenYPriceUSD: priceYUSD.toString(),
+          solPriceUSD: solPriceUSD.toString(),
+        });
 
         // 4. Create position snapshot after claim
         await this.createPositionSnapshotV1(tx, {
@@ -716,6 +771,7 @@ export class PositionService {
           priceX,
           priceY
         );
+        console.log("pnlResult", pnlResult);
         const segmentFinalUSD = new Decimal(pnlResult.currentValueUSD);
         const segmentInitialUSD = new Decimal(currentSegment.initialValueUSD);
         const segmentPnlUSD = segmentFinalUSD.minus(segmentInitialUSD);
@@ -734,6 +790,8 @@ export class PositionService {
           poolInfo
         );
 
+        console.log("totalSolReceived", totalSolReceived);
+
         // Step 2: Close current segment
         await updatePositionSegment(currentSegment.id, {
           endTimestamp: new Date(),
@@ -744,11 +802,17 @@ export class PositionService {
           endPositionAddress: positionAddress,
         });
 
+        console.log("updatePositionSegment ok");
+
         // Step 3: Create new balanced position
         const newPositionAmount = totalSolReceived.toNumber();
         const strategyType =
           dbPosition.strategyType as MeteoraCreatePositionStrategy;
-
+        console.log(
+          "newPositionAmount & strategyType",
+          newPositionAmount,
+          strategyType
+        );
         const createResult = await this.createBalancedPositionV1(
           user,
           dbPosition.poolAddress,
@@ -757,11 +821,15 @@ export class PositionService {
           dbPosition.isRebalancingEnabled || false
         );
 
+        console.log("re-createResult", createResult);
+
         if (!createResult.success || !createResult.transactionId) {
           throw new Error(
             `Failed to create new position: ${createResult.error}`
           );
         }
+
+        console.log("re-create syccess");
 
         // Step 4: Create new segment
         const newSegmentInitialUSD = totalSolReceived.mul(priceX?.price || 1);
@@ -772,6 +840,8 @@ export class PositionService {
           initialValueUSD: newSegmentInitialUSD.toString(),
           startPositionAddress: createResult.positionId || "pending",
         });
+
+        console.log("createPositionSegment ok");
 
         // Step 5: Create rebalance event
         const rebalanceEvent = await createRebalanceEvent({
@@ -791,6 +861,8 @@ export class PositionService {
           createTransactionSignature: createResult.transactionId,
           notes: `Rebalanced from ${positionAddress} to new position`,
         });
+
+        console.log("createRebalanceEvent ok");
 
         // Step 6: Update position
         const newTotalRealizedPnl = new Decimal(
@@ -884,6 +956,11 @@ export class PositionService {
         transactionId
       );
 
+      console.log("result", result);
+
+      // const pnl = await this.calculatePositionPnl(position);
+      // console.log("pnl", pnl);
+
       return {
         success: true,
         transactionId,
@@ -960,6 +1037,10 @@ export class PositionService {
       const priceYUSD = new Decimal(prices[tokenMintY].price);
       const solPriceUSD = new Decimal(prices[SOL_MINT]?.price || "0");
 
+      console.log("priceXUSD", priceXUSD);
+      console.log("priceYUSD", priceYUSD);
+      console.log("solPriceUSD", solPriceUSD);
+
       const withdrawnTokenXAmount = new Decimal(
         removeIx.tokenTransfers.find((transfer) => transfer.mint === tokenMintX)
           ?.amount ?? 0
@@ -1009,6 +1090,7 @@ export class PositionService {
         claimedTokenYValueUSD
       );
       const finalValueUSD = totalWithdrawnUSD.add(totalClaimedFeesUSD);
+      console.log("finalValueUSD", finalValueUSD);
 
       // Swap all tokens to SOL
       let totalSolReceived = new Decimal(0);
@@ -1028,11 +1110,16 @@ export class PositionService {
         // Swap claimed fee Token Y to SOL
         this.swapTokenToSol(user, tokenMintY, claimedTokenYAmount.toString()),
       ]);
+      console.log("solFromWithdrawnX", solFromWithdrawnX);
+      console.log("solFromWithdrawnY", solFromWithdrawnY);
+      console.log("solFromClaimedX", solFromClaimedX);
+      console.log("solFromClaimedY", solFromClaimedY);
 
       totalSolReceived = solFromWithdrawnX
         .add(solFromWithdrawnY)
         .add(solFromClaimedX)
         .add(solFromClaimedY);
+      console.log("totalSolReceived", totalSolReceived);
 
       // Calculate final PnL
       const initialValueUSD = new Decimal(position.initialValueUSD);
@@ -1053,8 +1140,14 @@ export class PositionService {
         .div(initialValueUSD)
         .mul(100);
 
+      console.log("finalSegmentPnlUSD", finalSegmentPnlUSD);
+      console.log("finalSegmentPnlPercentage", finalSegmentPnlPercentage);
+      console.log("totalFinalPnlUSD", totalFinalPnlUSD);
+      console.log("totalFinalPnlPercentage", totalFinalPnlPercentage);
+
       // Database operations in transaction
       await db.transaction(async (tx) => {
+        console.log("txxxx");
         // 1. Close current segment
         await tx
           .update(positionSegments)
@@ -1068,7 +1161,7 @@ export class PositionService {
             endPositionAddress: position.positionAddress,
           })
           .where(eq(positionSegments.id, currentSegment.id));
-
+        console.log("txxxx111");
         // 2. Update position as closed
         await tx
           .update(positions)
@@ -1091,7 +1184,7 @@ export class PositionService {
             updatedAt: new Date(),
           })
           .where(eq(positions.id, position.id));
-
+        console.log("txxxx222");
         // 3. Record final claim (if fees were claimed during closure)
         if (claimedTokenXAmount.gt(0) || claimedTokenYAmount.gt(0)) {
           await tx.insert(claimHistory).values({
@@ -1111,7 +1204,7 @@ export class PositionService {
             notes: "Final fees claimed during position closure",
           });
         }
-
+        console.log("txxxx333");
         // 4. Create final position snapshot
         await tx.insert(positionSnapshots).values({
           positionId: position.id,
@@ -1132,7 +1225,7 @@ export class PositionService {
           solPriceUSD: solPriceUSD.toString(),
         });
       });
-
+      console.log("txxxx444");
       logger.info(
         `[Position] Position closed successfully: ${position.id}, Final PnL: ${totalFinalPnlUSD.toString()} USD (${totalFinalPnlPercentage.toString()}%)`
       );
@@ -1344,6 +1437,45 @@ export class PositionService {
     });
   }
 
+  async getPositionDetail(positionAddress: string) {
+    try {
+      const dbPosition = await getPositionsByAddress(positionAddress);
+      if (!dbPosition) {
+        throw new Error("Position not found");
+      }
+
+      const { lbPosition, lbPair } = await this.getLbPositionAndLbPair(
+        dbPosition.poolAddress,
+        positionAddress
+      );
+
+      return { dbPosition, lbPosition, lbPair };
+    } catch (error) {
+      console.error(
+        `[Meteora] Error fetching DLMM position ${positionAddress}:`,
+        error
+      );
+      throw error;
+    }
+  }
+
+  async getLbPositionAndLbPair(poolAddress: string, positionAddress: string) {
+    try {
+      const { lbPosition, lbPair } = await meteoraDlmmService.getPosition(
+        positionAddress,
+        poolAddress
+      );
+
+      return { lbPosition, lbPair };
+    } catch (error) {
+      console.error(
+        `[Meteora] Error fetching DLMM position ${positionAddress}:`,
+        error
+      );
+      throw error;
+    }
+  }
+
   /**
    * Calculate position PnL with enhanced logic
    */
@@ -1353,6 +1485,7 @@ export class PositionService {
     priceX?: TokenPrice,
     priceY?: TokenPrice
   ): PositionPnlResult & { currentValueUSD: string } {
+    console.log("calculatePositionPnl", lbPosition?.version, position.id);
     const initialValueUsd = new Decimal(position.initialValueUSD || "0");
     const totalRealizedPnlUsd = new Decimal(
       position.totalRealizedPnlUSD || "0"
@@ -1411,7 +1544,7 @@ export class PositionService {
     // Calculate unrealized PNL based on rebalancing status
     let unrealizedPnlUsd: Decimal;
     let unrealizedPnlPercentage: Decimal;
-
+    console.log("calculatePositionPnl xxx", position.isRebalancingEnabled);
     if (position.isRebalancingEnabled) {
       // With rebalancing: Calculate segment unrealized + cumulative
       const segmentUnrealizedUsd = currentValueUsd.minus(
@@ -1431,6 +1564,12 @@ export class PositionService {
         .minus(1)
         .times(100);
     }
+
+    console.log(
+      "calculatePositionPnl xxx",
+      unrealizedPnlUsd,
+      unrealizedPnlPercentage
+    );
 
     return {
       pnlUsd: unrealizedPnlUsd.toNumber(),
