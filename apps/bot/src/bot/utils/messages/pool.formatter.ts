@@ -8,7 +8,7 @@ import {
 } from "../formatters";
 import { TrendingPoolsSortCriteria } from "@/types/trending.types";
 import { link } from "../text-formatters";
-import { getPoolLink } from "../misc";
+import { getPoolDeeplink } from "../misc";
 
 export class PoolsFormatter extends BaseFormatter {
   static formatTrendingPoolsMessage(
@@ -46,7 +46,7 @@ export class PoolsFormatter extends BaseFormatter {
         displayData = `APY: *${apy}* | Fee24h: *${fee24h}* | TVL: *${tvl}*`;
       }
 
-      return `${link(`/${displayIndex} ${pool.name.toUpperCase()}`, getPoolLink("pandalpbot", pool.address))} \n ${displayData}`;
+      return `${link(`/${displayIndex} ${pool.name.toUpperCase()}`, getPoolDeeplink("pandalpbot", "saros", pool.address))} \n ${displayData}`;
     });
 
     const spacedLines: string[] = [];

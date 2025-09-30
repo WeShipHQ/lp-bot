@@ -4,25 +4,15 @@ import { SCENE_IDS } from "../config/scenes";
 import { MessageService } from "@/services/message.service";
 import { poolService } from "@/services/pool.service";
 import { getPoolInfoKeyboard } from "../keyboards";
-import { loading } from "../utils/text-formatters";
+import { code, loading } from "../utils/text-formatters";
 import { DISABLE_LINK_PREVIEW } from "../handlers";
-import { Pool } from "@/types/pool.types";
-import {
-  formatNumber,
-  formatPrice,
-  formatPercentage,
-  formatAPR,
-} from "../utils/formatters";
-
+import { Pool, PoolDex } from "@/types/pool.types";
+import { formatNumber, formatPercentage, formatAPR } from "../utils/formatters";
 
 function formatPoolDetails(pool: Pool): string {
-  if (!pool) {
-    return "Error: Pool data not available";
-  }
-
   const tokenASymbol = pool.tokenA?.symbol || "Unknown";
   const tokenBSymbol = pool.tokenB?.symbol || "Unknown";
-  const tokenPair = `${tokenASymbol}/${tokenBSymbol}`;
+  const tokenPair = `${tokenASymbol.toUpperCase()}/${tokenBSymbol.toUpperCase()}`;
   const poolType = pool.type || "DLMM";
 
   const poolAddress = pool.address || "Unknown";
@@ -72,24 +62,22 @@ function formatPoolDetails(pool: Pool): string {
       ? `[Dexscreener](https://dexscreener.com/solana/${poolAddress})`
       : "[Dexscreener](#)";
 
-  return `*${tokenPair} | ${poolType}*
-${shortPoolAddress} (${poolSolscanLink})
-A mint: ${shortTokenAMint} (${tokenASolscanLink})
-B mint: ${shortTokenBMint} (${tokenBSolscanLink})
-
-${explorerLink} | ${dexscreenerLink}
-
-*TVL:* ${tvl}
-*APY (24h):* ${apy}
-*Fee (24h):* ${fee24h}
-*Fee/TVL (24h):* ${feeTvlRatio}
-
-*Volume*
-24h: ${volume24h}`;
+  return (
+    `*${tokenPair}*` +
+    `\n${code(poolAddress)}` +
+    `\n${explorerLink} | ${dexscreenerLink}` +
+    `\n\n*TVL:* ${tvl}` +
+    `\n*APY (24h):* ${apy}` +
+    `\n*Fee (24h):* ${fee24h}` +
+    `\n*Fee/TVL (24h):* ${feeTvlRatio}` +
+    `\n*Volume*` +
+    `24h: ${volume24h}`
+  );
 }
 
 type SceneState = {
   poolAddress?: string;
+  dex?: PoolDex;
   pool?: Pool;
 };
 
@@ -101,6 +89,7 @@ poolDetailScene.enter(async (ctx) => {
   try {
     const state = ctx.scene.state as SceneState;
     const poolAddress = state.poolAddress;
+    const dex = state.dex || "meteora";
     if (!poolAddress) {
       await ctx.reply(MessageService.getErrorMessage("Pool address not found"));
       return ctx.scene.leave();
@@ -110,7 +99,7 @@ poolDetailScene.enter(async (ctx) => {
       parse_mode: "Markdown",
     });
 
-    const poolData = await poolService.getPoolV2(poolAddress);
+    const poolData = await poolService.getPoolV2(poolAddress, dex);
 
     ctx.scene.state = {
       pool: poolData,

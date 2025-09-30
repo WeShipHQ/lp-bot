@@ -1,4 +1,5 @@
 import type { MeteoraPoolData } from "./meteora.types";
+import { PoolDex } from "./pool.types";
 
 export interface Token {
   address: string;
@@ -33,17 +34,16 @@ export interface TokenDisplayData {
   error?: string;
 }
 
-export type TokenInputType =
-  | "address"
-  | "meteora_damm_v1"
-  | "meteora_damm_v2"
-  | "meteora_dlmm"
-  | "start_param";
+export type TokenInputType = "address" | "pool" | "start_param";
+
+export type PoolType = "damm_v1" | "damm_v2" | "dlmm";
 
 export interface TokenInputDetection {
   type: TokenInputType;
   value: string; // token address or pool id
   originalInput: string;
+  dex?: PoolDex;
+  poolType?: PoolType;
 }
 
 // pricing service

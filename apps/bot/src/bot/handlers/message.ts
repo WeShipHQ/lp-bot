@@ -20,13 +20,15 @@ export async function messageHandler(
   }
 
   if (detection.type === "address") {
-    // handle token detail scene
     console.warn("implement token detail scene");
     return ctx.reply("Coming soon...");
-  } else if (detection.type.startsWith("meteora")) {
-    // handle pool detail scene
+  } else if (detection.type === "pool") {
+    const { dex, poolType, value } = detection;
+
     return ctx.scene.enter(SCENE_IDS.POOL_DETAIL_SCENE, {
-      poolAddress: detection.value,
+      poolAddress: value,
+      dex,
+      poolType,
     });
   }
 

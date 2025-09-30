@@ -1,14 +1,18 @@
 import type { MeteoraPoolData, MeteoraPoolType } from "@/types/meteora.types";
 import { meteoraPoolService } from "./meteora/pool.service";
 import { TokenAdapter } from "@/adapters/token.adapter";
-import { Pool } from "@/types/pool.types";
+import { Pool, PoolDex } from "@/types/pool.types";
 import { MeteoraApiService } from "./meteora/meteora-api.service";
 import { MeteoraAdapter } from "./meteora/meteora.adapter";
+import { SarosPoolService } from "./saros/pool.service";
+import { SarosAdapter } from "./saros/saros.adapter";
 
 export class PoolService {
   private meteoraApiService = new MeteoraApiService();
+  private sarosPoolService = new SarosPoolService();
   private tokenAdapter = new TokenAdapter();
   private meteoraAdapter = new MeteoraAdapter();
+  // private sarosAdapter = new SarosAdapter();
 
   async findPoolsForToken(tokenAddress: string): Promise<MeteoraPoolData[]> {
     try {
@@ -139,8 +143,15 @@ export class PoolService {
     }
   }
 
-  async getPoolV2(poolAddress: string): Promise<Pool> {
+  async getPoolV2(
+    poolAddress: string,
+    dex: PoolDex = "meteora"
+  ): Promise<Pool> {
     // for now we mainly support DLMM so we only fetch DLMM pool
+    if (dex === "saros") {
+      const dlmmPool = await this.sarosPoolService.getDlmmPool(poolAddress);
+      return SarosAdapter.dlmmPoolDetailToPool(dlmmPool.data);
+    }
     const dlmmPool = await this.meteoraApiService.getDlmmPool(poolAddress);
     return this.meteoraAdapter.transformDlmmPool(dlmmPool);
   }

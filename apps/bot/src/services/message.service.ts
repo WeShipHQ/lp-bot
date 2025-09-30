@@ -866,7 +866,7 @@ function calculatePositionPnl(
 ): PositionPnlResult {
   const initialValueUsd = new Decimal(position.initialValueUSD || "0");
   const cumulativeAbsolutePnlUsd = new Decimal(
-    position.cumulativeAbsolutePnlUSD || "0"
+    position.totalRealizedPnlUSD || "0"
   );
   const currentSegmentInitialUsd = new Decimal(
     position.currentSegmentInitialUSD || initialValueUsd.toString()
