@@ -10,12 +10,13 @@ import { logger } from "@/utils/logger";
 import { positionDetailScene } from "./scenes";
 import { poolDetailScene } from "./scenes/pool-detail.scene";
 import { createPositionScene } from "./scenes";
+import { registerGlobalCallbacks } from "./handlers/global-callbacks";
 
 Decimal.set({
-  precision: 28,           // High precision for financial calculations
-  rounding: Decimal.ROUND_DOWN,  // Conservative rounding for financial apps
-  toExpNeg: -18,          // Avoid scientific notation for small numbers
-  toExpPos: 18            // Avoid scientific notation for large numbers
+  precision: 28, // High precision for financial calculations
+  rounding: Decimal.ROUND_DOWN, // Conservative rounding for financial apps
+  toExpNeg: -18, // Avoid scientific notation for small numbers
+  toExpPos: 18, // Avoid scientific notation for large numbers
 });
 
 export async function setupBotCommands(
@@ -47,9 +48,9 @@ export async function setupBotCommands(
 
   bot.on(message("text"), messageHandler);
 
+  registerGlobalCallbacks(bot, server);
   registerCommands(bot, server);
 
-  // Global error handler
   bot.catch((err, ctx) => {
     logger.error(err, `Bot error for ${ctx.updateType}:`);
     ctx.reply("Sorry, something went wrong. Please try again later.");

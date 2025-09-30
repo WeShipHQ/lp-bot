@@ -5,14 +5,14 @@ export function getMainKeyboard(): InlineKeyboardMarkup {
     inline_keyboard: [
       [{ text: "🚀 Open Position", callback_data: "open_position" }],
       [
-        { text: "💼 Portfolio", callback_data: "portfolio" },
-        { text: "💰 Wallet", callback_data: "wallet" },
+        { text: "💼 Portfolio", callback_data: "/portfolio" },
+        { text: "💰 Wallet", callback_data: "/wallet" },
       ],
       [
-        { text: "🧧 Referral", callback_data: "referral" },
-        { text: "⚙️ Settings", callback_data: "settings" },
+        { text: "🧧 Referral", callback_data: "/referral" },
+        { text: "⚙️ Settings", callback_data: "/settings" },
       ],
-      [{ text: "❓ Help", callback_data: "help" }],
+      [{ text: "❓ Help", callback_data: "/help" }],
     ],
   };
 }

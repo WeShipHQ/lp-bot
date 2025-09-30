@@ -7,6 +7,7 @@ import { userSyncService } from "@/services/user-sync.service";
 import { solanaService } from "@/services/solana.service";
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
+import { MessageManager } from "../utils/messages";
 
 export function startCommand(
   bot: Telegraf<BotContext>,
@@ -45,7 +46,7 @@ export function startCommand(
       });
 
       if (!localUser) {
-        await ctx.reply("❌ Error creating user account");
+        await ctx.reply(MessageManager.getStartErrorMessage("user_creation"));
         return;
       }
 

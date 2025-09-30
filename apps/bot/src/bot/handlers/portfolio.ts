@@ -234,7 +234,6 @@ export async function portfolioHandler(ctx: BotContext) {
   );
 }
 
-// --- Callback registrations ---
 export function registerPortfolioCallbacks(bot: Telegraf<BotContext>) {
   const router = new Composer<BotContext>();
   // User types /1, /2 -> open position detail
