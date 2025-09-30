@@ -5,11 +5,15 @@ import {
   formatTokenAmountSmart,
 } from "@/bot/utils/formatters";
 import { bold, italic, link } from "@/bot/utils/text-formatters";
+import { Position } from "@/db";
 import { MeteoraDlmmPosition } from "@/types/meteora.types";
 import { Pool } from "@/types/pool.types";
 import { PortfolioData, PortfolioPosition } from "@/types/portfolio.types";
+import { PositionPnlResult } from "@/types/position.types";
+import { TokenPrice } from "@/types/token.types";
 import { getPositionStartCommand } from "@/utils/link";
-import { LbPosition } from "@meteora-ag/dlmm";
+import { LbPair, LbPosition } from "@meteora-ag/dlmm";
+import Decimal from "decimal.js";
 
 const formatPairSymbol = (p: PortfolioPosition) =>
   `${p.token_x_info.symbol}-${p.token_y_info.symbol}`;
@@ -450,9 +454,12 @@ export class MessageService {
   }
 
   static getPositionDetailMessageV1(
-    position: MeteoraDlmmPosition,
+    position: Position,
     lbPosition: LbPosition,
-    poolInfo: Pool
+    lbPair: LbPair,
+    poolInfo: Pool,
+    tokenAPrice: TokenPrice,
+    tokenBPrice: TokenPrice
   ): string {
     const meteoraUrl = link(
       "Meteora",
@@ -461,8 +468,25 @@ export class MessageService {
 
     let message = `*${poolInfo.name}* | ${meteoraUrl} \n\n`;
 
-    const totalXAmount = `${Number(lbPosition.positionData.totalXAmount) / 10 ** Number(poolInfo.tokenA.decimals)} ${poolInfo.tokenA.symbol}`;
-    const totalYAmount = `${Number(lbPosition.positionData.totalYAmount) / 10 ** Number(poolInfo.tokenB.decimals)} ${poolInfo.tokenB.symbol}`;
+    const positionData = lbPosition.positionData;
+
+    const { pnlUsd, pnlPercentage } = calculatePositionPnl(
+      position,
+      lbPosition,
+      tokenAPrice,
+      tokenBPrice
+    );
+
+    const totalXAmount = new Decimal(lbPosition.positionData.totalXAmount).div(
+      new Decimal(10).pow(new Decimal(poolInfo.tokenA.decimals))
+    );
+    const totalYAmount = new Decimal(lbPosition.positionData.totalYAmount).div(
+      new Decimal(10).pow(new Decimal(poolInfo.tokenB.decimals))
+    );
+
+    const tokenXUSD = totalXAmount.mul(tokenAPrice.price);
+    const tokenYUSD = totalYAmount.mul(tokenBPrice.price);
+    const totalUSD = tokenXUSD.add(tokenYUSD);
 
     const positionBinData = lbPosition.positionData.positionBinData;
     const startBin = positionBinData[0];
@@ -470,47 +494,50 @@ export class MessageService {
 
     const startPrice = startBin.pricePerToken;
     const endPrice = lastBin.pricePerToken;
+    const poolPrice = poolInfo.currentPrice;
 
-    // console.log("feeX", lbPosition.positionData.feeX.toString());
-    // console.log("feeY", lbPosition.positionData.feeY.toString());
-    // console.log("rewardOne", lbPosition.positionData.rewardOne.toString());
-    // console.log("rewardTwo", lbPosition.positionData.rewardTwo.toString());
-    // console.log(
-    //   "totalClaimedFeeXAmount",
-    //   lbPosition.positionData.totalClaimedFeeXAmount.toString()
-    // );
-    // console.log(
-    //   "totalClaimedFeeYAmount",
-    //   lbPosition.positionData.totalClaimedFeeYAmount.toString()
-    // );
-    // console.log(
-    //   "feeXExcludeTransferFee",
-    //   lbPosition.positionData.feeXExcludeTransferFee.toString()
-    // );
-    // console.log(
-    //   "feeYExcludeTransferFee",
-    //   lbPosition.positionData.feeYExcludeTransferFee.toString()
-    // );
-    // console.log(
-    //   "rewardOneExcludeTransferFee",
-    //   lbPosition.positionData.rewardOneExcludeTransferFee.toString()
-    // );
-    // console.log(
-    //   "rewardTwoExcludeTransferFee",
-    //   lbPosition.positionData.rewardTwoExcludeTransferFee.toString()
-    // );
-    // console.log(
-    //   "totalXAmountExcludeTransferFee",
-    //   lbPosition.positionData.totalXAmountExcludeTransferFee.toString()
-    // );
-    // console.log(
-    //   "totalYAmountExcludeTransferFee",
-    //   lbPosition.positionData.totalYAmountExcludeTransferFee.toString()
-    // );
+    const claimedFeesX = new Decimal(
+      positionData.totalClaimedFeeXAmount.toString()
+    ).div(new Decimal(10).pow(new Decimal(poolInfo.tokenA.decimals)));
+    const claimedFeesY = new Decimal(
+      positionData.totalClaimedFeeYAmount.toString()
+    ).div(new Decimal(10).pow(new Decimal(poolInfo.tokenB.decimals)));
+    const claimedFeesUSD = claimedFeesX
+      .mul(tokenAPrice.price)
+      .add(claimedFeesY.mul(tokenBPrice.price));
 
-    message += `Net Profit: NA \n`;
-    message += `Position Balance: *${totalXAmount} / ${totalYAmount}*\n`;
-    message += `Position Range: *${formatNumber(startPrice, { maxDecimals: 6 })} - ${formatNumber(endPrice, { maxDecimals: 6 })} ${poolInfo.tokenA.symbol}/${poolInfo.tokenB.symbol}*\n`;
+    const unclaimedFeesX = new Decimal(positionData.feeX.toString()).div(
+      new Decimal(10).pow(new Decimal(poolInfo.tokenA.decimals))
+    );
+    const unclaimedFeesY = new Decimal(positionData.feeY.toString()).div(
+      new Decimal(10).pow(new Decimal(poolInfo.tokenB.decimals))
+    );
+    const unclaimedFeesXUSD = unclaimedFeesX.mul(tokenAPrice.price);
+    const unclaimedFeesYUSD = unclaimedFeesY.mul(tokenBPrice.price);
+    const totalUnclaimedFeesUSD = unclaimedFeesXUSD.add(unclaimedFeesYUSD);
+
+    const activeId = Number(lbPair.activeId);
+    const inRange =
+      activeId >= positionData.lowerBinId &&
+      activeId <= positionData.upperBinId;
+
+    const netProfitFormatted = `Net Profit: *${formatPrice(Number(pnlUsd), { maxDecimals: 2 })} (${formatPercentage(Number(pnlPercentage))})*`;
+    const positionBalanceFormatted = `Position Balance: *${formatNumber(totalXAmount.toString(), { maxDecimals: 6 })} ${poolInfo.tokenA.symbol} / ${formatNumber(totalYAmount.toString(), { maxDecimals: 6 })} ${poolInfo.tokenB.symbol} (${formatPrice(Number(totalUSD), { maxDecimals: 2 })})*`;
+    const positionRangeFormatted = `Position Range: *${formatNumber(startPrice, { maxDecimals: 6 })} - ${formatNumber(endPrice, { maxDecimals: 6 })} ${poolInfo.tokenA.symbol}/${poolInfo.tokenB.symbol}*`;
+    const poolPriceFormatted = `Pool Price: *${formatNumber(poolPrice, { maxDecimals: 6 })} ${poolInfo.tokenA.symbol}/${poolInfo.tokenB.symbol}*`;
+
+    const claimedFeeFormatted = `Claimed Fees: *${formatNumber(claimedFeesX.toString(), { maxDecimals: 6 })} ${poolInfo.tokenA.symbol} / ${formatNumber(claimedFeesY.toString(), { maxDecimals: 6 })} ${poolInfo.tokenB.symbol} (${formatPrice(Number(claimedFeesUSD), { maxDecimals: 2 })})*`;
+    const unclaimedFeeFormatted = `Unclaimed Fees: *${formatNumber(unclaimedFeesX.toString(), { maxDecimals: 6 })} ${poolInfo.tokenA.symbol} / ${formatNumber(unclaimedFeesY.toString(), { maxDecimals: 6 })} ${poolInfo.tokenB.symbol} (${formatPrice(Number(totalUnclaimedFeesUSD), { maxDecimals: 2 })})*`;
+
+    const inRangeFormatted = `In Range: ${inRange ? "🟢" : "🔴"}`;
+
+    message += `${netProfitFormatted}\n`;
+    message += `${positionBalanceFormatted}\n`;
+    message += `${positionRangeFormatted}\n`;
+    message += `${poolPriceFormatted}\n\n`;
+    message += `${claimedFeeFormatted}\n`;
+    message += `${unclaimedFeeFormatted}\n`;
+    message += `${inRangeFormatted}\n`;
 
     return message;
   }
@@ -829,4 +856,97 @@ export class MessageService {
   static getExportCancelledMessage(): string {
     return "✅ Private key export cancelled.";
   }
+}
+
+function calculatePositionPnl(
+  position: Position,
+  lbPosition?: LbPosition,
+  priceX?: TokenPrice,
+  priceY?: TokenPrice
+): PositionPnlResult {
+  const initialValueUsd = new Decimal(position.initialValueUSD || "0");
+  const cumulativeAbsolutePnlUsd = new Decimal(
+    position.cumulativeAbsolutePnlUSD || "0"
+  );
+  const currentSegmentInitialUsd = new Decimal(
+    position.currentSegmentInitialUSD || initialValueUsd.toString()
+  );
+
+  // For closed positions, use final values
+  if (position.status === "CLOSED") {
+    const finalValueUsd = new Decimal(position.finalValueUSD || "0");
+    const realizedPnlUsd = cumulativeAbsolutePnlUsd.toNumber();
+    const realizedPnlPercentage = finalValueUsd
+      .div(initialValueUsd)
+      .minus(1)
+      .times(100)
+      .toNumber();
+
+    return {
+      pnlUsd: realizedPnlUsd,
+      pnlPercentage: realizedPnlPercentage,
+      unrealizedPnlUsd: 0,
+      unrealizedPnlPercentage: 0,
+    };
+  }
+
+  // For active positions, calculate unrealized PNL
+  if (!lbPosition || !priceX || !priceY) {
+    throw new Error("Current position data required for active positions");
+  }
+
+  const totalXAmount = new Decimal(lbPosition.positionData.totalXAmount).div(
+    new Decimal(10).pow(new Decimal(priceX.decimals))
+  );
+  const totalYAmount = new Decimal(lbPosition.positionData.totalYAmount).div(
+    new Decimal(10).pow(new Decimal(priceY.decimals))
+  );
+
+  const tokenXUSD = totalXAmount.mul(priceX.price);
+  const tokenYUSD = totalYAmount.mul(priceY.price);
+  const totalUSD = tokenXUSD.add(tokenYUSD);
+
+  const unclaimedFeesX = new Decimal(
+    lbPosition.positionData.feeX.toString()
+  ).div(new Decimal(10).pow(new Decimal(priceX.decimals)));
+  const unclaimedFeesY = new Decimal(
+    lbPosition.positionData.feeY.toString()
+  ).div(new Decimal(10).pow(new Decimal(priceY.decimals)));
+  const unclaimedFeesXUSD = unclaimedFeesX.mul(priceX.price);
+  const unclaimedFeesYUSD = unclaimedFeesY.mul(priceY.price);
+  const totalUnclaimedFeesUSD = unclaimedFeesXUSD.add(unclaimedFeesYUSD);
+
+  const currentValueUsd = totalUSD.add(totalUnclaimedFeesUSD);
+
+  // Calculate unrealized PNL based on rebalancing status
+  let unrealizedPnlUsd: Decimal;
+  let unrealizedPnlPercentage: Decimal;
+
+  if (position.isRebalancingEnabled) {
+    // With rebalancing: Calculate segment unrealized + cumulative
+    const segmentUnrealizedUsd = currentValueUsd.minus(
+      currentSegmentInitialUsd
+    );
+    unrealizedPnlUsd = cumulativeAbsolutePnlUsd.plus(segmentUnrealizedUsd);
+    unrealizedPnlPercentage = unrealizedPnlUsd
+      .div(initialValueUsd)
+      .minus(1)
+      .times(100);
+  } else {
+    // Without rebalancing: Simple calculation
+    const positionUnrealizedUsd = currentValueUsd.minus(initialValueUsd);
+    unrealizedPnlUsd = positionUnrealizedUsd.plus(cumulativeAbsolutePnlUsd);
+    unrealizedPnlPercentage = currentValueUsd
+      .plus(cumulativeAbsolutePnlUsd)
+      .div(initialValueUsd)
+      .minus(1)
+      .times(100);
+  }
+
+  return {
+    pnlUsd: unrealizedPnlUsd.toNumber(),
+    pnlPercentage: unrealizedPnlPercentage.toNumber(),
+    unrealizedPnlUsd: unrealizedPnlUsd.toNumber(),
+    unrealizedPnlPercentage: unrealizedPnlPercentage.toNumber(),
+  };
 }

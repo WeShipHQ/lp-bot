@@ -64,6 +64,34 @@
       "when": 1757329827674,
       "tag": "0008_empty_lady_deathstrike",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1757402898533,
+      "tag": "0009_slimy_elektra",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1757673069110,
+      "tag": "0010_chilly_famine",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1757674249008,
+      "tag": "0011_dazzling_stick",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1757674260162,
+      "tag": "0012_salty_pete_wisdom",
+      "breakpoints": true
     }
   ]
 }

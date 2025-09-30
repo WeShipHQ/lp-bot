@@ -1,20 +1,30 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sum, desc } from "drizzle-orm";
 import { db } from ".";
-import { 
-  NewPosition, 
-  NewUser, 
+import {
+  NewPosition,
+  NewUser,
   NewWallet,
   NewTransaction,
   NewRebalanceEvent,
-  positions, 
-  User, 
+  NewPositionSegment,
+  NewClaimHistory,
+  NewPositionSnapshot,
+  positions,
+  positionSegments,
+  claimHistory,
+  rebalanceEvents,
+  positionSnapshots,
+  User,
   users,
   wallets,
   Wallet,
   transactions,
   Transaction,
-  rebalanceEvents,
-  RebalanceEvent
+  RebalanceEvent,
+  Position,
+  PositionSegment,
+  ClaimHistory,
+  PositionSnapshot,
 } from "./schema";
 
 // users -----
@@ -46,7 +56,8 @@ export async function findUserById(id: string): Promise<User | undefined> {
 }
 
 export async function updateUser(id: string, updates: Partial<NewUser>) {
-  const [user] = await db.update(users)
+  const [user] = await db
+    .update(users)
     .set({ ...updates, updatedAt: new Date() })
     .where(eq(users.id, id))
     .returning();
@@ -84,7 +95,9 @@ export async function findWalletById(id: string): Promise<Wallet | undefined> {
   }
 }
 
-export async function findWalletByAddress(address: string): Promise<Wallet | undefined> {
+export async function findWalletByAddress(
+  address: string
+): Promise<Wallet | undefined> {
   try {
     return await db.query.wallets.findFirst({
       where: eq(wallets.address, address),
@@ -94,7 +107,9 @@ export async function findWalletByAddress(address: string): Promise<Wallet | und
   }
 }
 
-export async function findActiveWalletByUserId(userId: string): Promise<Wallet | undefined> {
+export async function findActiveWalletByUserId(
+  userId: string
+): Promise<Wallet | undefined> {
   try {
     return await db.query.wallets.findFirst({
       where: eq(wallets.userId, userId) && eq(wallets.isActive, true),
@@ -105,7 +120,8 @@ export async function findActiveWalletByUserId(userId: string): Promise<Wallet |
 }
 
 export async function updateWallet(id: string, updates: Partial<NewWallet>) {
-  const [wallet] = await db.update(wallets)
+  const [wallet] = await db
+    .update(wallets)
     .set({ ...updates, updatedAt: new Date() })
     .where(eq(wallets.id, id))
     .returning();
@@ -126,7 +142,7 @@ export async function getPositionsByUserId(userId: string) {
   try {
     return await db.query.positions.findMany({
       where: eq(positions.userId, userId),
-      orderBy: asc(positions.createdAt),
+      orderBy: desc(positions.createdAt),
     });
   } catch (error) {
     throw error;
@@ -143,8 +159,22 @@ export async function getPositionsById(id: string) {
   }
 }
 
-export async function updatePosition(id: string, updates: Partial<NewPosition>) {
-  const [position] = await db.update(positions)
+export async function getPositionsByAddress(address: string) {
+  try {
+    return await db.query.positions.findFirst({
+      where: eq(positions.positionAddress, address),
+    });
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function updatePosition(
+  id: string,
+  updates: Partial<NewPosition>
+) {
+  const [position] = await db
+    .update(positions)
     .set({ ...updates, updatedAt: new Date() })
     .where(eq(positions.id, id))
     .returning();
@@ -155,73 +185,100 @@ export async function deletePosition(id: string) {
   await db.delete(positions).where(eq(positions.id, id));
 }
 
-// transactions -----
-export async function createTransaction(newTransaction: NewTransaction) {
-  const [transaction] = await db.insert(transactions).values(newTransaction).returning();
-  return transaction;
+// position segments -----
+export async function createPositionSegment(newSegment: NewPositionSegment) {
+  const [segment] = await db.insert(positionSegments).values(newSegment).returning();
+  return segment;
 }
 
-export async function findTransactionsByPositionId(positionId: string): Promise<Transaction[]> {
+export async function getPositionSegments(positionId: string): Promise<PositionSegment[]> {
   try {
-    return await db.query.transactions.findMany({
-      where: eq(transactions.positionId, positionId),
-      orderBy: asc(transactions.createdAt),
+    return await db.query.positionSegments.findMany({
+      where: eq(positionSegments.positionId, positionId),
+      orderBy: asc(positionSegments.segmentNumber),
     });
   } catch (error) {
     throw error;
   }
 }
 
-export async function findTransactionById(id: string): Promise<Transaction | undefined> {
+export async function getCurrentSegment(positionId: string): Promise<PositionSegment | undefined> {
   try {
-    return await db.query.transactions.findFirst({
-      where: eq(transactions.id, id),
+    return await db.query.positionSegments.findFirst({
+      where: eq(positionSegments.positionId, positionId),
+      orderBy: desc(positionSegments.segmentNumber),
     });
   } catch (error) {
     throw error;
   }
 }
 
-export async function findTransactionByTxHash(txHash: string): Promise<Transaction | undefined> {
-  try {
-    return await db.query.transactions.findFirst({
-      where: eq(transactions.txHash, txHash),
-    });
-  } catch (error) {
-    throw error;
-  }
-}
-
-export async function updateTransaction(id: string, updates: Partial<NewTransaction>) {
-  const [transaction] = await db.update(transactions)
-    .set({ ...updates, updatedAt: new Date() })
-    .where(eq(transactions.id, id))
+export async function updatePositionSegment(
+  id: string,
+  updates: Partial<NewPositionSegment>
+) {
+  const [segment] = await db
+    .update(positionSegments)
+    .set(updates)
+    .where(eq(positionSegments.id, id))
     .returning();
-  return transaction;
+  return segment;
 }
 
-export async function deleteTransaction(id: string) {
-  await db.delete(transactions).where(eq(transactions.id, id));
+// claimHistory -----
+export async function createClaimHistory(newClaimHistory: NewClaimHistory) {
+  const [createdClaimHistory] = await db
+    .insert(claimHistory)
+    .values(newClaimHistory)
+    .returning();
+  return createdClaimHistory;
 }
 
-// rebalanceEvents -----
+export async function getClaimHistory(positionId: string): Promise<ClaimHistory[]> {
+  try {
+    return await db.query.claimHistory.findMany({
+      where: eq(claimHistory.positionId, positionId),
+      orderBy: desc(claimHistory.timestamp),
+    });
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function getTotalClaimedFees(positionId: string) {
+  const totalClaimedFees = await db
+    .select({ total: sum(claimHistory.claimedUSDValue) })
+    .from(claimHistory)
+    .where(eq(claimHistory.positionId, positionId));
+
+  return totalClaimedFees[0].total || "0";
+}
+
+// rebalance events -----
 export async function createRebalanceEvent(newRebalanceEvent: NewRebalanceEvent) {
-  const [rebalanceEvent] = await db.insert(rebalanceEvents).values(newRebalanceEvent).returning();
+  const [rebalanceEvent] = await db
+    .insert(rebalanceEvents)
+    .values(newRebalanceEvent)
+    .returning();
   return rebalanceEvent;
 }
 
-export async function findRebalanceEventsByPositionId(positionId: string): Promise<RebalanceEvent[]> {
+export async function findRebalanceEventsByPositionId(
+  positionId: string
+): Promise<RebalanceEvent[]> {
   try {
     return await db.query.rebalanceEvents.findMany({
       where: eq(rebalanceEvents.positionId, positionId),
-      orderBy: asc(rebalanceEvents.createdAt),
+      orderBy: desc(rebalanceEvents.timestamp),
     });
   } catch (error) {
     throw error;
   }
 }
 
-export async function findRebalanceEventById(id: string): Promise<RebalanceEvent | undefined> {
+export async function findRebalanceEventById(
+  id: string
+): Promise<RebalanceEvent | undefined> {
   try {
     return await db.query.rebalanceEvents.findFirst({
       where: eq(rebalanceEvents.id, id),
@@ -233,4 +290,88 @@ export async function findRebalanceEventById(id: string): Promise<RebalanceEvent
 
 export async function deleteRebalanceEvent(id: string) {
   await db.delete(rebalanceEvents).where(eq(rebalanceEvents.id, id));
+}
+
+// snapshot -----
+export async function createPositionSnapshot(
+  newPositionSnapshot: NewPositionSnapshot
+) {
+  const [createdPositionSnapshot] = await db
+    .insert(positionSnapshots)
+    .values(newPositionSnapshot)
+    .returning();
+  return createdPositionSnapshot;
+}
+
+export async function getPositionSnapshots(positionId: string): Promise<PositionSnapshot[]> {
+  try {
+    return await db.query.positionSnapshots.findMany({
+      where: eq(positionSnapshots.positionId, positionId),
+      orderBy: desc(positionSnapshots.snapshotTimestamp),
+    });
+  } catch (error) {
+    throw error;
+  }
+}
+
+// transactions -----
+export async function createTransaction(newTransaction: NewTransaction) {
+  const [transaction] = await db
+    .insert(transactions)
+    .values(newTransaction)
+    .returning();
+  return transaction;
+}
+
+export async function findTransactionsByPositionId(
+  positionId: string
+): Promise<Transaction[]> {
+  try {
+    return await db.query.transactions.findMany({
+      where: eq(transactions.positionId, positionId),
+      orderBy: asc(transactions.createdAt),
+    });
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function findTransactionById(
+  id: string
+): Promise<Transaction | undefined> {
+  try {
+    return await db.query.transactions.findFirst({
+      where: eq(transactions.id, id),
+    });
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function findTransactionByTxHash(
+  txHash: string
+): Promise<Transaction | undefined> {
+  try {
+    return await db.query.transactions.findFirst({
+      where: eq(transactions.txHash, txHash),
+    });
+  } catch (error) {
+    throw error;
+  }
+}
+
+export async function updateTransaction(
+  id: string,
+  updates: Partial<NewTransaction>
+) {
+  const [transaction] = await db
+    .update(transactions)
+    .set({ ...updates, updatedAt: new Date() })
+    .where(eq(transactions.id, id))
+    .returning();
+  return transaction;
+}
+
+export async function deleteTransaction(id: string) {
+  await db.delete(transactions).where(eq(transactions.id, id));
 }

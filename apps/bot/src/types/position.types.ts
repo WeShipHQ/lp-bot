@@ -35,8 +35,12 @@ export interface DisplayPosition {
   daily_fee_yield: number;
 }
 
-
-
+export interface PositionPnlResult {
+  pnlUsd: number;
+  pnlPercentage: number;
+  unrealizedPnlUsd: number;
+  unrealizedPnlPercentage: number;
+}
 
 // ublicKey: PublicKey [PublicKey(338RGSh4boMSv41d1ibq46cexUXTmMD9TKyUhxrcqJJm)] {
 //     _bn: <BN: 1e42ec6824c2d17c50f2ebcffe5df8f80c8faba9bdc81c804a0561bda0cfd67a>
@@ -96,9 +100,6 @@ export interface DisplayPosition {
 //   daily_fee_yield: 0
 // }
 // [2025-09-01 22:55:27.482 +0700] INFO: Bot command completed in 3297ms
-
-
-
 
 // lp {
 //   parameters: {

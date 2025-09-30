@@ -8,15 +8,14 @@ export function getPositionDetailKeyboard(
       [
         {
           text: "Close position",
-          // callback_data: `pos_close_${positionAddress}`,
           callback_data: "pos_close_confirmation",
         },
-        { text: "Claim fees", callback_data: `pos_claim_${positionAddress}` },
+        { text: "Claim fees", callback_data: "pos_claim_confirmation" },
       ],
       [
         {
           text: "Rebalance now",
-          callback_data: `pos_rebalance_${positionAddress}`,
+          callback_data: "pos_rebalance_confirmation",
         },
         {
           text: "Rebalancing settings",
@@ -38,9 +37,6 @@ export function getPositionDetailKeyboard(
   };
 }
 
-/**
- * Get keyboard for position close confirmation
- */
 export function getPositionCloseConfirmKeyboard(
   positionAddress: string
 ): InlineKeyboardMarkup {
@@ -52,6 +48,47 @@ export function getPositionCloseConfirmKeyboard(
           text: "❌ No, Cancel",
           // callback_data: `1pos_close_cancel_${positionAddress}`,
           callback_data: `pos_close_no`,
+        },
+      ],
+    ],
+  };
+}
+
+export function getClaimFeesConfirmKeyboard(
+  positionAddress: string
+): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: "✅ Yes, Claim Fees",
+          callback_data: `pos_claim_yes_${positionAddress}`,
+        },
+        {
+          text: "❌ No, Cancel",
+          callback_data: `pos_claim_no`,
+        },
+      ],
+    ],
+  };
+}
+
+/**
+ * Get keyboard for rebalance confirmation
+ */
+export function getRebalanceConfirmKeyboard(
+  positionAddress: string
+): InlineKeyboardMarkup {
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: "✅ Yes, Rebalance Now",
+          callback_data: `pos_rebalance_yes_${positionAddress}`,
+        },
+        {
+          text: "❌ No, Cancel",
+          callback_data: `pos_rebalance_no`,
         },
       ],
     ],

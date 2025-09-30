@@ -8,6 +8,7 @@ import DLMM, {
 import { Connection, PublicKey, TransactionInstruction } from "@solana/web3.js";
 import BN from "bn.js";
 import { CONFIG } from "@/config";
+import Decimal from "decimal.js";
 
 export interface DepositAmountCalculation {
   tokenXAmount: BN;
@@ -59,8 +60,8 @@ export class MeteoraDlmmService {
     positionAddress: PublicKey,
     poolAddress: PublicKey,
     userPublicKey: PublicKey,
-    totalXAmount: BN,
-    totalYAmount: BN,
+    totalXAmount: Decimal,
+    totalYAmount: Decimal,
     strategy: StrategyType,
     rangeInterval: number
   ): Promise<{
@@ -85,8 +86,8 @@ export class MeteoraDlmmService {
       await dlmmPool.initializePositionAndAddLiquidityByStrategy({
         positionPubKey: positionAddress,
         user: userPublicKey,
-        totalXAmount,
-        totalYAmount,
+        totalXAmount: new BN(totalXAmount.toString()),
+        totalYAmount: new BN(totalYAmount.toString()),
         strategy: {
           maxBinId,
           minBinId,
@@ -128,6 +129,30 @@ export class MeteoraDlmmService {
 
     return {
       instructions: removeLiquidityTx.flatMap((tx) => tx.instructions),
+    };
+  }
+
+  async claimFeesIx(
+    ownerAddress: PublicKey,
+    poolAddress: PublicKey,
+    positionAddress: PublicKey
+  ): Promise<{
+    instructions: TransactionInstruction[];
+  }> {
+    const dlmmPool = await this.createInstance(poolAddress);
+    const position = await dlmmPool.getPosition(positionAddress);
+
+    if (!position) {
+      throw new Error("Position not found");
+    }
+
+    const claimFeeTxs = await dlmmPool.claimSwapFee({
+      owner: ownerAddress,
+      position,
+    });
+
+    return {
+      instructions: claimFeeTxs.flatMap((tx) => tx.instructions),
     };
   }
 
@@ -242,7 +267,7 @@ export class MeteoraDlmmService {
     positionAddress: string | PublicKey,
     poolAddress: string | PublicKey
   ): Promise<{
-    lpPair: LbPair;
+    lbPair: LbPair;
     lbPosition: LbPosition;
   }> {
     const dlmmPool = await this.createInstance(poolAddress);
@@ -254,7 +279,7 @@ export class MeteoraDlmmService {
     );
 
     return {
-      lpPair: dlmmPool.lbPair,
+      lbPair: dlmmPool.lbPair,
       lbPosition,
     };
   }

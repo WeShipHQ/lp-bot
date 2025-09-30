@@ -8,12 +8,20 @@ import { jupiterService } from "@/services/jupiter.service";
 import { meteoraDlmmService } from "@/services/meteora/dlmm.service";
 import { SOL_MINT } from "@/config/constants";
 import { formatNumber, formatPercentage } from "../utils/formatters";
-import { divider } from "../utils/text-formatters";
+import { divider, link } from "../utils/text-formatters";
 import { message } from "telegraf/filters";
-import { BUFFER_AMOUNT, OPEN_POSITION_FEE } from "../config/constants";
+import {
+  BUFFER_AMOUNT,
+  OPEN_POSITION_FEE,
+  SLIPPAGE_SMALL,
+} from "../config/constants";
 import { solanaService } from "@/services/solana.service";
 import { positionService } from "@/services/position.service";
 import { Pool } from "@/types/pool.types";
+import { DISABLE_LINK_PREVIEW } from "../handlers";
+import { Token } from "@/types/token.types";
+import { getSolscanLink } from "@/utils/link";
+import { delay } from "@/utils/misc";
 
 type WizardState = {
   step?:
@@ -31,7 +39,7 @@ type WizardState = {
   poolData?: Pool;
   strategy?: MeteoraCreatePositionStrategy;
   depositMethod?: "sol_auto_convert" | "single_sided";
-  selectedToken?: string;
+  selectedToken?: Token;
   depositSource?: "sol_convert" | "token_balance";
   amount?: number;
   percentage?: number;
@@ -43,23 +51,12 @@ type WizardState = {
   messageId?: number;
 };
 
-// Mock function for getting token balance
-async function getTokenBalance(
-  walletAddress: string,
-  tokenMint: string
-): Promise<number> {
-  // Mock implementation - replace with actual token balance service
-  return Math.random() * 1000; // Random balance for demo
-}
-
 function generateProgressMessage(
   poolData: Pool,
   state: WizardState,
   currentStep: string,
   guide?: string
 ): string {
-  const { poolData: _p, ...rest } = state;
-  (console.log("state: ", rest), _p?.liquidity);
   const verifiedEmoji = poolData.isVerified ? "✅" : "⚠️";
 
   let message =
@@ -97,7 +94,7 @@ function generateProgressMessage(
     // Selected Token (for single-sided)
     if (state.depositMethod === "single_sided" && state.selectedToken) {
       const tokenName =
-        state.selectedToken === poolData.tokenA.address
+        state.selectedToken.address === poolData.tokenA.address
           ? poolData.tokenA.symbol
           : poolData.tokenB.symbol;
       message += `Token: *${tokenName}*\n`;
@@ -170,7 +167,7 @@ function generatePositionSummary(
 
   if (depositMethod === "single_sided") {
     const tokenName =
-      selectedToken === poolData!.tokenA.address
+      selectedToken?.address === poolData!.tokenA.address
         ? poolData!.tokenA.symbol
         : poolData!.tokenB.symbol;
     message += `Deposit Method: *Single-sided (${tokenName})*\n`;
@@ -257,23 +254,24 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       const message = generateProgressMessage(
         poolData,
         ctx.scene.state as WizardState,
-        "Choose Strategy",
-        `*Spot*: Even liquidity spread, flexible for all markets, beginner-friendly, less rebalancing needed.\n` +
-          `*Curve*: Liquidity centered in middle, efficient for stable pairs with minimal price changes.\n` +
-          `*Bid-ask*: Liquidity at range ends—for big volatility, complex but high-fee potential, good for single-sided DCA.`
+        "Choose Your Liquidity Strategy (1/8)",
+        `📊 *Spot*: Evenly spreads liquidity across the range. Beginner-friendly, flexible for any market, minimal rebalancing. Ideal for volatile pairs.\n\n` +
+          `📈 *Curve*: Concentrates liquidity in the middle. Efficient for stable pairs (e.g., USDC/USDT) with low price swings, maximizes fees with less capital.\n\n` +
+          `⚖️ *Bid-Ask*: Places liquidity at range edges. Advanced for high-volatility markets, high fee potential but higher impermanent loss risk. Great for single-sided DCA strategies.\n\n` +
+          `⚠️ Note: All strategies involve impermanent loss risk. Learn more: ${link("Meteora Strategies", "https://docs.meteora.ag/overview/products/dlmm/strategies-and-use-cases")}.`
       );
 
-      const msg = await ctx.replyWithMarkdown(
-        message,
-        Markup.inlineKeyboard([
+      const msg = await ctx.replyWithMarkdown(message, {
+        ...Markup.inlineKeyboard([
           [
             Markup.button.callback("Spot", "strategy:spot"),
             Markup.button.callback("Curve", "strategy:curve"),
           ],
           [Markup.button.callback("Bid-ask", "strategy:bid-ask")],
           [Markup.button.callback("❌ Cancel", "cancel")],
-        ])
-      );
+        ]),
+        ...DISABLE_LINK_PREVIEW,
+      });
       (ctx.scene.state as WizardState).messageId = msg.message_id;
     } catch (error) {
       console.error("Error in create position scene:", error);
@@ -292,9 +290,9 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     const message = generateProgressMessage(
       poolData!,
       state,
-      "Choose how to add liquidity",
-      "*Balanced*: Deposit SOL only, it gets automatically swapped and split evenly between the two tokens for a balanced position\n" +
-        "*Single-sided*: Deposit just one token to add liquidity on that side"
+      "How to Add Liquidity? (2/8)",
+      `⚖️ *Balanced*: Deposit SOL only—auto-swapped and split 50/50 between tokens for even liquidity. Simple and hands-off.\n\n` +
+        "🔸 *Single-Sided*: Deposit just one token. More control but may require price range setup to avoid imbalances.\n\n"
     );
 
     (ctx.scene.state as WizardState).step = "deposit_method";
@@ -304,7 +302,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       ...Markup.inlineKeyboard([
         [
           Markup.button.callback("Balanced", "deposit:sol_auto_convert"),
-          Markup.button.callback("Single-sided", "deposit:single_sided"),
+          Markup.button.callback("Single-Sided", "deposit:single_sided"),
         ],
         [
           Markup.button.callback("🔙 Back", "back"),
@@ -320,12 +318,10 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     const { depositMethod, poolData } = state;
 
     if (!poolData || !depositMethod) {
-      console.log("poolData", poolData);
-      console.log("depositMethod", depositMethod);
       await ctx.reply(MessageService.getErrorMessage("Unknown error"));
       return ctx.scene.leave();
     }
-
+    console.log("xxxxxx nn", depositMethod);
     if (depositMethod !== "single_sided") {
       ctx.wizard.next(); // Skip to amount if SOL auto-convert
       if (typeof ctx.wizard.step === "function") {
@@ -341,11 +337,11 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     const message = generateProgressMessage(
       poolData!,
       state,
-      "Choose Token",
-      "Select which token you want to deposit for single-sided liquidity provision.\n\n" +
-        "Current token balances:\t" +
-        `*${poolData.tokenA.symbol}*: ${formatNumber(tokenABalance, { maxDecimals: 6 })} ${poolData.tokenA.symbol}\t|\t` +
-        `*${poolData.tokenB.symbol}*: ${formatNumber(tokenBBalance, { maxDecimals: 6 })} ${poolData.tokenB.symbol}`
+      "Select Token to Deposit",
+      "Choose the token for your single-sided deposit. We'll add liquidity to that side of the pool.\n\n" +
+        "Current balances:\t" +
+        `*${formatNumber(tokenABalance, { maxDecimals: 6 })} ${poolData.tokenA.symbol}*\t|\t` +
+        `*${formatNumber(tokenBBalance, { maxDecimals: 6 })} ${poolData.tokenB.symbol}*`
     );
 
     (ctx.scene.state as WizardState).step = "token_selection";
@@ -374,10 +370,9 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
   // Step 3: Deposit Source Selection (conditional for single-sided)
   async (ctx, next) => {
     const state = ctx.scene.state as WizardState;
-    const { depositMethod, poolData } = state;
+    const { depositMethod, selectedToken, poolData } = state;
 
     if (!poolData) {
-      console.log("poolData", poolData);
       await ctx.reply(MessageService.getErrorMessage("Unknown error"));
       return ctx.scene.leave();
     }
@@ -389,6 +384,8 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       }
     }
 
+    // FIXME chekc selected token
+
     const { tokenABalance, tokenBBalance } = await getPoolTokenBalances(
       ctx.user.walletAddress!,
       poolData
@@ -397,12 +394,14 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     const message = generateProgressMessage(
       poolData!,
       state,
-      "Choose Deposit Source",
-      "*Convert from SOL*: Enter SOL amount to convert to selected token\n" +
-        "*From Token Balance*: Use existing token balance with percentage selection\n\n" +
-        "Current token balances:\t" +
-        `*${formatNumber(tokenABalance, { maxDecimals: 6 })} ${poolData.tokenA.symbol}*\t|\t` +
-        `*${formatNumber(tokenBBalance, { maxDecimals: 6 })} ${poolData.tokenB.symbol}*`
+      "Deposit Source (4/8)",
+      "💱 *Convert from SOL*: Swap *SOL* to your selected token and deposit.\n\n" +
+        `💰 *From Balance*: Use your existing *${selectedToken}* balance (select % below).\n\n` +
+        `Balances: {sol_balance} | {selected_token_symbol}: {token_balance}\n\n` +
+        `⚠️ Slippage Warning: Swaps may slip by up to *${SLIPPAGE_SMALL}%* in volatile markets.`
+      // "Current token balances:\t" +
+      // `*${formatNumber(tokenABalance, { maxDecimals: 6 })} ${poolData.tokenA.symbol}*\t|\t` +
+      // `*${formatNumber(tokenBBalance, { maxDecimals: 6 })} ${poolData.tokenB.symbol}*`
     );
 
     (ctx.scene.state as WizardState).step = "deposit_source";
@@ -410,13 +409,8 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     return ctx.editMessageText(message, {
       parse_mode: "Markdown",
       ...Markup.inlineKeyboard([
-        [Markup.button.callback("💱 Convert from SOL", "source:sol_convert")],
-        [
-          Markup.button.callback(
-            "💰 From Token Balance",
-            "source:token_balance"
-          ),
-        ],
+        [Markup.button.callback("Convert from SOL", "source:sol_convert")],
+        [Markup.button.callback("From Balance", "source:token_balance")],
         [
           Markup.button.callback("🔙 Back", "back"),
           Markup.button.callback("❌ Cancel", "cancel"),
@@ -426,88 +420,101 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
   },
 
   // Step 4: Amount/Percentage Selection
-  async (ctx) => {
-    const user = ctx.user;
-    const state = ctx.scene.state as WizardState;
-    const { depositMethod, depositSource, selectedToken, poolData } = state;
+  async (ctx, next) => {
+    try {
+      const user = ctx.user;
+      const state = ctx.scene.state as WizardState;
+      const { depositMethod, depositSource, selectedToken, poolData } = state;
 
-    if (!poolData) {
-      console.log("selectedToken", selectedToken);
-      console.log("poolData", poolData);
-      await ctx.reply(MessageService.getErrorMessage("Unknown error"));
-      return ctx.scene.leave();
-    }
-
-    (ctx.scene.state as WizardState).step = "amount";
-
-    if (depositMethod === "single_sided" && depositSource === "token_balance") {
-      if (!selectedToken) {
+      if (!poolData) {
+        // console.log("selectedToken", selectedToken);
+        // console.log("poolData", poolData);
         await ctx.reply(MessageService.getErrorMessage("Unknown error"));
         return ctx.scene.leave();
       }
 
-      const tokenBalance = await getTokenBalance(
-        user.walletAddress!,
-        selectedToken
-      );
-      const tokenSymbol =
-        selectedToken === poolData.tokenA.address
-          ? poolData.tokenA.symbol
-          : poolData.tokenB.symbol;
+      (ctx.scene.state as WizardState).step = "amount";
 
-      const message = generateProgressMessage(
-        poolData!,
-        state,
-        "Choose Percentage",
-        `Select what percentage of your ${tokenSymbol} balance to deposit.\n` +
-          `Current ${tokenSymbol} balance: *${formatNumber(tokenBalance, { maxDecimals: 6 })} ${tokenSymbol}*`
-      );
+      if (
+        depositMethod === "single_sided" &&
+        depositSource === "token_balance"
+      ) {
+        if (!selectedToken) {
+          await ctx.reply(MessageService.getErrorMessage("Unknown error"));
+          return ctx.scene.leave();
+        }
 
-      return ctx.editMessageText(message, {
-        parse_mode: "Markdown",
-        ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback("25%", "percentage:25"),
-            Markup.button.callback("50%", "percentage:50"),
-            Markup.button.callback("100%", "percentage:100"),
-          ],
-          [
-            Markup.button.callback("🔙 Back", "back"),
-            Markup.button.callback("❌ Cancel", "cancel"),
-          ],
-        ]),
-      });
-    } else {
-      // Show SOL amount options
-      const balance = await solanaService.getBalance(user.walletAddress!);
-      const guide =
-        depositMethod === "sol_auto_convert"
-          ? "How much SOL would you like to add to the pool? We'll split it evenly between the two tokens for balanced liquidity."
-          : "How much SOL would you like to convert to the selected token?";
+        // const tokenBalance = await getTokenBalance(
+        //   user.walletAddress!,
+        //   selectedToken
+        // );
 
-      const message = generateProgressMessage(
-        poolData!,
-        state,
-        "Choose Amount",
-        `${guide}\n\n` +
-          `Current SOL balance: *${formatNumber(balance, { maxDecimals: 6 })} SOL*`
-      );
+        const tokenBalance = 100;
 
-      return ctx.editMessageText(message, {
-        parse_mode: "Markdown",
-        ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback("0.1 SOL", "amount:0.1"),
-            Markup.button.callback("1 SOL", "amount:1"),
-            Markup.button.callback("5 SOL", "amount:5"),
-          ],
-          [Markup.button.callback("✏️ Custom", "amount:custom")],
-          [
-            Markup.button.callback("🔙 Back", "back"),
-            Markup.button.callback("❌ Cancel", "cancel"),
-          ],
-        ]),
-      });
+        const tokenSymbol =
+          selectedToken.address === poolData.tokenA.address
+            ? poolData.tokenA.symbol
+            : poolData.tokenB.symbol;
+
+        const message = generateProgressMessage(
+          poolData!,
+          state,
+          "Choose Percentage",
+          `Select what percentage of your ${tokenSymbol} balance to deposit.\n` +
+            `Current ${tokenSymbol} balance: *${formatNumber(tokenBalance, { maxDecimals: 6 })} ${tokenSymbol}*`
+        );
+
+        return ctx.editMessageText(message, {
+          parse_mode: "Markdown",
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback("25%", "percentage:25"),
+              Markup.button.callback("50%", "percentage:50"),
+              Markup.button.callback("100%", "percentage:100"),
+            ],
+            [
+              Markup.button.callback("🔙 Back", "back"),
+              Markup.button.callback("❌ Cancel", "cancel"),
+            ],
+          ]),
+        });
+      } else {
+        // Show SOL amount options
+        const balance = await solanaService.getBalance(user.walletAddress!);
+        const guide =
+          depositMethod === "sol_auto_convert"
+            ? "We'll auto-split this SOL evenly between tokens."
+            : `We'll convert this SOL to ${selectedToken?.symbol}.`;
+
+        const message = generateProgressMessage(
+          poolData!,
+          state,
+          "Enter SOL Amount (3/8)",
+          `${guide}\n\n` +
+            // Min amount: {min_sol} SOL | Current balance: {sol_balance} SOL
+            `Current balance: *${formatNumber(balance, { maxDecimals: 6 })} SOL*`
+        );
+
+        return ctx.editMessageText(message, {
+          parse_mode: "Markdown",
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback("0.1 SOL", "amount:0.1"),
+              Markup.button.callback("1 SOL", "amount:1"),
+              Markup.button.callback("5 SOL", "amount:5"),
+              // Max SOL
+            ],
+            [Markup.button.callback("✏️ Custom", "amount:custom")],
+            [
+              Markup.button.callback("🔙 Back", "back"),
+              Markup.button.callback("❌ Cancel", "cancel"),
+            ],
+          ]),
+        });
+      }
+    } catch (error) {
+      console.error(error);
+      next();
     }
   },
 
@@ -586,8 +593,8 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     const message = generateProgressMessage(
       poolData!,
       state,
-      "Auto-rebalancing",
-      "Would you like to enable auto-rebalancing and monitoring every 1 hr?"
+      "Customize Settings (7/8)",
+      "✅ Auto-Rebalance: Monitor and adjust every 1hr if out of range (fees apply)."
     );
 
     if (state.enteredCustomAmount) {
@@ -595,8 +602,8 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         parse_mode: "Markdown",
         ...Markup.inlineKeyboard([
           [
-            Markup.button.callback("✅ Yes", "rebalance:yes"),
-            Markup.button.callback("❌ No", "rebalance:no"),
+            Markup.button.callback("✅ Enable Rebalance", "rebalance:yes"),
+            Markup.button.callback("❌ No Rebalance", "rebalance:no"),
           ],
           [
             Markup.button.callback("🔙 Back", "back"),
@@ -610,8 +617,8 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       parse_mode: "Markdown",
       ...Markup.inlineKeyboard([
         [
-          Markup.button.callback("✅ Yes", "rebalance:yes"),
-          Markup.button.callback("❌ No", "rebalance:no"),
+          Markup.button.callback("✅ Enable Rebalance", "rebalance:yes"),
+          Markup.button.callback("❌ No Rebalance", "rebalance:no"),
         ],
         [
           Markup.button.callback("🔙 Back", "back"),
@@ -656,8 +663,8 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         parse_mode: "Markdown",
         ...Markup.inlineKeyboard([
           [
-            Markup.button.callback("Yes, Create Position", "confirm:yes"),
-            Markup.button.callback("🔙 No (Back)", "back"),
+            Markup.button.callback("✅ Create Position", "confirm:yes"),
+            Markup.button.callback("🔙 Back", "back"),
           ],
           [Markup.button.callback("❌ Cancel", "cancel")],
         ]),
@@ -674,36 +681,53 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
   // Step 8: Execution
   async (ctx) => {
     await ctx.editMessageText(
-      "⏳ *Creating position...*\n\nThis may take a few moments.",
+      "⏳ Building transaction... (Est. time: 10-30s)",
       { parse_mode: "Markdown" }
     );
 
-    const { strategy, amount, poolData } = ctx.scene.state as WizardState;
+    const { strategy, amount, poolData, autoRebalancing } = ctx.scene.state as WizardState;
     if (!poolData || !strategy || !amount || amount <= 0) {
       await ctx.reply(MessageService.getErrorMessage("Unknown error"));
       return ctx.scene.leave();
     }
 
     // FIXME handle single sided position
-    const result = await positionService.createBalancedPosition(
+    const result = await positionService.createBalancedPositionV1(
       ctx.user,
       poolData.address,
       strategy,
-      amount
+      amount,
+      autoRebalancing === 'yes'
     );
 
+    // console.log("state --->", ctx.scene.state);
+
+    // await delay(4000);
+    // const result = {
+    //   success: false,
+    //   transactionId:
+    //     "2McRLxiP9AERr1qDog4wGuB6x7AXqp5pECjEEyZkRE7bw5QLFGHMde3mK1CN52nyLPMeR47w2TvvyhMDUoKqW3c8",
+    //   error: "Unknown error",
+    //   positionId: "456",
+    // };
+
     if (result.success) {
+      const solScanLink = link(
+        "View on Solscan",
+        getSolscanLink("tx", result.transactionId!)
+      );
       await ctx.editMessageText(
-        `🎉 *Position Created Successfully!*\n\n` +
-          `📊 *Transaction*: \`${result.transactionId}\`\n\n` +
-          `You can view your position in the portfolio section.`,
-        { parse_mode: "Markdown" }
+        `Success: 🎉 Position Created! ${solScanLink}`,
+        // `🎉 *Position Created Successfully!*\n\n` +
+        //   `📊 *Transaction*: \`${result.transactionId}\`\n\n` +
+        //   `You can view your position in the portfolio section.`
+        { parse_mode: "Markdown", ...DISABLE_LINK_PREVIEW }
       );
     } else {
       await ctx.editMessageText(
-        `❌ *Position Creation Failed*\n\n` +
-          `Error: ${result.error}\n\n` +
-          `Please try again or contact support.`,
+        `Failure: ❌ Failed: ${result.error} | Retry or contact support.`,
+        // `Error: ${result.error}\n\n` +
+        // `Please try again or contact support.`,
         { parse_mode: "Markdown" }
       );
     }
@@ -748,13 +772,13 @@ createPositionScene.action(
       ctx.match[1] === "sol_auto_convert"
         ? "SOL Auto-convert"
         : "Single-sided Token";
+
     const message = generateProgressMessage(
       state.poolData!,
       state,
       "Deposit Method Selected",
       `You selected ${methodName}. ${getDepositMethodGuide(ctx.match[1])}`
     );
-
     await ctx.editMessageText(message, { parse_mode: "Markdown" });
 
     ctx.wizard.next();
@@ -768,17 +792,20 @@ createPositionScene.action(/token:(.+)/, async (ctx, next) => {
   await ctx.answerCbQuery();
   const state = ctx.scene.state as WizardState;
   const selectedTokenMint = ctx.match[1];
-  state.selectedToken = selectedTokenMint;
+  state.selectedToken =
+    state.poolData?.tokenA.address === selectedTokenMint
+      ? state.poolData!.tokenA
+      : state.poolData!.tokenB;
 
-  const tokenName =
-    ctx.match[1] === "A"
-      ? state.poolData!.tokenA.symbol
-      : state.poolData!.tokenB.symbol;
+  if (!state.selectedToken) {
+    return ctx.reply(MessageService.getErrorMessage("Unknown error"));
+  }
+
   const message = generateProgressMessage(
     state.poolData!,
     state,
     "Token Selected",
-    `You selected ${tokenName}. You'll provide liquidity using only this token.`
+    `You selected ${state.selectedToken.symbol}. You'll provide liquidity using only this token.`
   );
 
   await ctx.editMessageText(message, { parse_mode: "Markdown" });
@@ -808,7 +835,7 @@ createPositionScene.action(
     if (state.depositSource === "token_balance") {
       const validation = await validateTokenBalance(
         ctx.user.walletAddress!,
-        state.selectedToken!,
+        state.selectedToken!.address,
         0
       );
       if (!validation.isValid) {

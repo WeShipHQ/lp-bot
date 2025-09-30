@@ -88,7 +88,7 @@ export class RebalanceService {
         throw new Error("User not found")
       }
 
-      const { success, transactionId } = await this.positionService.closePositionV2(
+      const { success, transactionId } = await this.positionService.closePosition(
         user,
         position.poolAddress,
         position.positionAddress

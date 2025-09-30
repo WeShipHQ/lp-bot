@@ -63,7 +63,7 @@ export function referralCommand(
       }
 
       const referralHistory = await referralService.getReferralHistory(
-        ctx.user.telegramUserId
+        ctx.user.telegramId
       );
 
       if (referralHistory.length === 0) {
@@ -104,7 +104,7 @@ export function referralCommand(
 
 async function showReferralInfo(ctx: BotContext) {
   const referralInfo = await referralService.getReferralInfo(
-    ctx.user!.telegramUserId
+    ctx.user!.telegramId
   );
 
   if (!referralInfo) {

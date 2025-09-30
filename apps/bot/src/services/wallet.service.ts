@@ -15,7 +15,12 @@ import {
 } from "@solana/web3.js";
 import { User } from "@/db";
 import { CreateSmartTransactionOptions } from "@/types/transaction.types";
-import { broadcastTransaction, createSmartTransaction } from "@/utils/build-tx";
+import {
+  broadcastTransaction,
+  createSmartTransaction,
+  createSmartTransactionWithTip,
+  sendSmartTransactionWithTip,
+} from "@/utils/build-tx";
 
 export interface WalletExportResult {
   privateKey: string;
@@ -26,28 +31,6 @@ export interface TransferSolParams {
   recipientAddress: string;
   amount: number;
 }
-
-// https://jito-foundation.gitbook.io/mev/mev-payment-and-distribution/on-chain-addresses
-export const JITO_TIP_ACCOUNTS: string[] = [
-  "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
-  "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
-  "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
-  "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49",
-  "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh",
-  "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt",
-  "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL",
-  "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT",
-];
-
-export type JitoRegion = "Default" | "NY" | "Amsterdam" | "Frankfurt" | "Tokyo";
-// https://jito-labs.gitbook.io/mev/searcher-resources/json-rpc-api-reference/url
-export const JITO_API_URLS: Record<JitoRegion, string> = {
-  Default: "https://mainnet.block-engine.jito.wtf",
-  NY: "https://ny.mainnet.block-engine.jito.wtf",
-  Amsterdam: "https://amsterdam.mainnet.block-engine.jito.wtf",
-  Frankfurt: "https://frankfurt.mainnet.block-engine.jito.wtf",
-  Tokyo: "https://tokyo.mainnet.block-engine.jito.wtf",
-};
 
 export class WalletService {
   static async exportAndDecryptWallet(
@@ -174,16 +157,6 @@ export class WalletService {
       lookupTables,
       options
     );
-    // const tipAmount = 100_000; // 100k microLamports = 0.0001 SOL
-    // const { transaction, blockhash } = await createSmartTransactionWithTip(
-    //   connection,
-    //   instructions,
-    //   payer,
-    //   signers,
-    //   lookupTables,
-    //   tipAmount,
-    //   options
-    // );
 
     const { signedTransaction } = await privy.walletApi.solana.signTransaction({
       walletId: user.walletId,
@@ -191,12 +164,56 @@ export class WalletService {
     });
 
     const result = await broadcastTransaction(connection, signedTransaction);
-    // const result = await sendSmartTransactionWithTip(
+
+    console.log("Sign message result:", result);
+
+    return result;
+  }
+
+  static async signAndSendTransactionWithJito(
+    user: User,
+    instructions: TransactionInstruction[],
+    signers: Signer[] = [],
+    lookupTables: AddressLookupTableAccount[] = [],
+    options: CreateSmartTransactionOptions = {}
+  ): Promise<string> {
+    console.log(`[Wallet] Starting signAndSendTransaction for user ${user.id}`);
+
+    const connection = new Connection(CONFIG.SOLANA.RPC_URL);
+    const payer = new PublicKey(user.walletAddress!);
+
+    // const { transaction } = await createSmartTransaction(
     //   connection,
-    //   signedTransaction,
-    //   blockhash,
-    //   'NY'
+    //   instructions,
+    //   payer,
+    //   signers,
+    //   lookupTables,
+    //   options
     // );
+
+    const tipAmount = 1_000_000; // 100k microLamports = 0.0001 SOL
+    const { transaction, blockhash } = await createSmartTransactionWithTip(
+      connection,
+      instructions,
+      payer,
+      signers,
+      lookupTables,
+      tipAmount,
+      options
+    );
+
+    const { signedTransaction } = await privy.walletApi.solana.signTransaction({
+      walletId: user.walletId,
+      transaction: transaction,
+    });
+
+    // const result = await broadcastTransaction(connection, signedTransaction);
+    const result = await sendSmartTransactionWithTip(
+      connection,
+      signedTransaction,
+      blockhash,
+      "NY"
+    );
 
     console.log("Sign message result:", result);
 
