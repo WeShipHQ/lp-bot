@@ -24,6 +24,11 @@ export function trendingCommand(
     }
   );
 
+  bot.action(
+    /^(trend|refresh|noop):\d+:(apy|tvl|volume24h|fee_tvl_ratio)$/,
+    (context) => handleTrendingCallback(context, server)
+  );
+
   // Handle trending detail refresh
   bot.action(/^tr_refresh_detail_(\d+)_(\d+)_dlmm$/, async (context) => {
     try {

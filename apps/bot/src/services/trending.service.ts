@@ -1,4 +1,9 @@
-import { PoolTrendingItem, TrendingPageState } from "@/types/trending.types";
+import {
+  TrendingPoolsSortCriteria,
+  PoolTrendingItem,
+  TrendingPageState,
+  PaginatedTrendingPools,
+} from "@/types/trending.types";
 import { HotPoolsService, hotPoolsService } from "./hot-pools.service";
 import { PoolSortCriteria, PoolSource } from "./hot-pools/types";
 import {
@@ -6,9 +11,14 @@ import {
   formatPercentage,
   formatAPR,
 } from "@/bot/utils/formatters";
+import { Pool } from "@/types/pool.types";
+import { SarosPoolService } from "./saros/pool.service";
+import { SarosAdapter } from "./saros/saros.adapter";
+import { TRENDING_CONSTANTS } from "@/bot/constants/trending.constants";
 
 export class TrendingService {
   private readonly pageStates = new Map<number, TrendingPageState>();
+  private readonly sarosPoolService = new SarosPoolService();
 
   async loadHotPoolsPage(
     chatId: number,
@@ -64,6 +74,31 @@ export class TrendingService {
     this.pageStates.set(chatId, pageState);
 
     return poolItems;
+  }
+
+  async getTrendingPool(
+    currentPage: number,
+    sortBy: TrendingPoolsSortCriteria
+  ): Promise<PaginatedTrendingPools> {
+    const sarosPools = await this.sarosPoolService.getAllDlmmPools({
+      page: currentPage,
+      size: TRENDING_CONSTANTS.PAGE_SIZE,
+      orderBy:
+        sortBy === "apy" || sortBy === "fee_tvl_ratio"
+          ? "volume24h"
+          : sortBy === "tvl"
+            ? "totalLiquidity"
+            : "volume24h",
+      order: "desc",
+    });
+    const pools = SarosAdapter.dlmmPoolsToPoolArray(sarosPools.data.data || []);
+
+    return {
+      pools,
+      currentPage: sarosPools.data.currentPage,
+      totalPages: sarosPools.data.total || 0,
+      sortBy,
+    };
   }
 
   setMessageId(chatId: number, messageId: number) {

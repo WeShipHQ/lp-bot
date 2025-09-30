@@ -1,10 +1,19 @@
-import { Context } from "telegraf";
 import { FastifyInstance } from "fastify";
 import { TRENDING_MESSAGES } from "../constants/trending.constants";
 import { trendingService } from "@/services/trending.service";
-import { getTrendingKeyboard } from "../keyboards/trending-menu";
+import {
+  getSarosTrendingKeyboard,
+  getTrendingKeyboard,
+} from "../keyboards/trending-menu";
 import { buildPoolDetailMarkdown } from "@/services/pool-detail.service";
 import { BotContext } from "@/types/bot.types";
+import { SELECTED_DEX } from "../config/constants";
+import { PoolsFormatter } from "../utils/messages/pool.formatter";
+import { MessageManager } from "../utils/messages";
+import {
+  PaginatedTrendingPools,
+  TrendingPoolsSortCriteria,
+} from "@/types/trending.types";
 
 export async function trendingHandler(
   ctx: BotContext,
@@ -12,34 +21,57 @@ export async function trendingHandler(
 ) {
   try {
     const loading = await ctx.reply(TRENDING_MESSAGES.FETCHING);
-    const chatId = ctx.chat!.id;
 
-    await trendingService.loadHotPoolsPage(chatId, 0, "tvl");
+    if (SELECTED_DEX === "saros") {
+      const sortBy = "apy";
+      const poolsResponse = await trendingService.getTrendingPool(1, sortBy);
 
-    const state = trendingService.getState(chatId)!;
+      const message = PoolsFormatter.formatTrendingPoolsMessage(
+        poolsResponse.pools,
+        poolsResponse.sortBy,
+        poolsResponse.currentPage,
+        poolsResponse.totalPages
+      );
 
-    const text = trendingService.formatPoolPage(
-      state.poolItems || [],
-      state.page,
-      state.poolSource!,
-      state.sortBy!
-    );
+      return await ctx.reply(message, {
+        parse_mode: "Markdown",
+        link_preview_options: { is_disabled: true },
+        reply_markup: getSarosTrendingKeyboard(
+          poolsResponse.currentPage,
+          sortBy,
+          poolsResponse.totalPages
+        ),
+      });
+    } else {
+      const chatId = ctx.chat!.id;
 
-    const keyboard = getTrendingKeyboard(
-      chatId,
-      state.sortBy!,
-      state.poolSource!
-    );
+      await trendingService.loadHotPoolsPage(chatId, 0, "tvl");
 
-    const replyResponse = await ctx.reply(text, {
-      parse_mode: "Markdown",
-      link_preview_options: { is_disabled: true },
-      reply_markup: keyboard.reply_markup,
-    });
+      const state = trendingService.getState(chatId)!;
 
-    trendingService.setMessageId(chatId, replyResponse.message_id);
+      const text = trendingService.formatPoolPage(
+        state.poolItems || [],
+        state.page,
+        state.poolSource!,
+        state.sortBy!
+      );
 
-    await ctx.telegram.deleteMessage(chatId, loading.message_id);
+      const keyboard = getTrendingKeyboard(
+        chatId,
+        state.sortBy!,
+        state.poolSource!
+      );
+
+      const replyResponse = await ctx.reply(text, {
+        parse_mode: "Markdown",
+        link_preview_options: { is_disabled: true },
+        reply_markup: keyboard.reply_markup,
+      });
+
+      trendingService.setMessageId(chatId, replyResponse.message_id);
+
+      await ctx.telegram.deleteMessage(chatId, loading.message_id);
+    }
   } catch (error) {
     console.error("[Trending] Error in handler:", error);
     await ctx.reply(TRENDING_MESSAGES.ERROR_GENERIC);
@@ -50,6 +82,10 @@ export async function handleTrendingCallback(
   ctx: any,
   _server: FastifyInstance
 ) {
+  console.log("handleTrendingCallback");
+  if (SELECTED_DEX === "saros") {
+    return handleSarosTrendingCallback(ctx, _server);
+  }
   try {
     const raw = String(ctx.callbackQuery?.data ?? ctx.match?.input ?? "");
 
@@ -216,5 +252,131 @@ export async function handleTrendingCallback(
   } catch (e) {
     console.error("[Trending] Error:", e);
     await ctx.answerCbQuery("❌ Error occurred.");
+  }
+}
+
+export async function handleSarosTrendingCallback(
+  ctx: any,
+  _server: FastifyInstance
+) {
+  console.log(
+    "handleTrendingCallback saros",
+    ctx.callbackQuery?.data ?? ctx.match?.input ?? ""
+  );
+  try {
+    const raw = String(ctx.callbackQuery?.data ?? ctx.match?.input ?? "");
+
+    const sarosMatch = /^(trend|refresh|noop):(\d+):(\w+)$/.exec(raw);
+
+    if (sarosMatch) {
+      const [, action, pageStr, sortBy] = sarosMatch;
+      const page = Number(pageStr);
+
+      if (action === "noop") {
+        await ctx.answerCbQuery();
+        return;
+      }
+
+      const validSortCriteria: TrendingPoolsSortCriteria[] = [
+        "apy",
+        "tvl",
+        "volume24h",
+        "fee_tvl_ratio",
+      ];
+      if (!validSortCriteria.includes(sortBy as TrendingPoolsSortCriteria)) {
+        await ctx.answerCbQuery("❌ Invalid sort criteria.");
+        return;
+      }
+
+      try {
+        let poolsResponse: PaginatedTrendingPools;
+
+        if (action === "trend") {
+          poolsResponse = await trendingService.getTrendingPool(
+            page,
+            sortBy as TrendingPoolsSortCriteria
+          );
+        } else if (action === "refresh") {
+          poolsResponse = await trendingService.getTrendingPool(
+            page,
+            sortBy as TrendingPoolsSortCriteria
+          );
+        } else {
+          await ctx.answerCbQuery("❌ Invalid action.");
+          return;
+        }
+
+        const message = PoolsFormatter.formatTrendingPoolsMessage(
+          poolsResponse.pools,
+          poolsResponse.sortBy,
+          poolsResponse.currentPage,
+          poolsResponse.totalPages
+        );
+
+        const keyboard = getSarosTrendingKeyboard(
+          poolsResponse.currentPage,
+          poolsResponse.sortBy,
+          poolsResponse.totalPages
+        );
+
+        const messageId = ctx.callbackQuery?.message?.message_id;
+        let edited = false;
+
+        if (messageId) {
+          try {
+            await ctx.telegram.editMessageText(
+              ctx.chat!.id,
+              messageId,
+              undefined,
+              message,
+              {
+                parse_mode: "Markdown",
+                link_preview_options: { is_disabled: true },
+                reply_markup: keyboard,
+              }
+            );
+            edited = true;
+          } catch (err: any) {
+            const msg = err?.description || err?.message || String(err);
+            if (/message is not modified/i.test(msg)) {
+              edited = true;
+            }
+          }
+        }
+
+        if (!edited) {
+          await ctx.reply(message, {
+            parse_mode: "Markdown",
+            link_preview_options: { is_disabled: true },
+            reply_markup: keyboard,
+          });
+        }
+
+        if (action === "refresh") {
+          await ctx.answerCbQuery("🔄 Refreshed");
+        } else if (action === "trend") {
+          const sortDisplayName =
+            sortBy === "fee_tvl_ratio"
+              ? "Fee/TVL"
+              : sortBy === "volume24h"
+                ? "24h Vol"
+                : sortBy.toUpperCase();
+          await ctx.answerCbQuery(`Sorted by: ${sortDisplayName}`);
+        } else {
+          await ctx.answerCbQuery();
+        }
+      } catch (error) {
+        console.error("[Trending] Error handling Saros callback:", error);
+        await ctx.answerCbQuery("❌ Error occurred while fetching data.");
+      }
+
+      return;
+    }
+
+    await ctx.answerCbQuery("❌ Invalid callback data.");
+    return;
+  } catch (error) {
+    console.error("[Trending] Error:", error);
+    await ctx.answerCbQuery(MessageManager.getErrorMessage());
   }
 }

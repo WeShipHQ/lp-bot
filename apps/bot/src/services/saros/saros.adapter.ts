@@ -57,27 +57,6 @@ export class SarosAdapter {
         ),
         min30: 0,
       },
-      meteora: {
-        hide: false,
-        isBlacklisted: false,
-        baseFeePercentage: mainPair?.baseFactor?.toString() || "0",
-        binStep: mainPair?.binStep || 0,
-        cumulativeFeeVolume: sarosPool.fees24h,
-        cumulativeTradeVolume: sarosPool.volume24h,
-        farmApr: mainPair?.rewardsApr || 0,
-        farmApy: this.calculateApy(mainPair?.rewardsApr || 0),
-        launchpad: "",
-        maxFeePercentage: "0",
-        protocolFeePercentage: "0",
-        reserveX: mainPair?.reserveX || "0",
-        reserveXAmount: parseFloat(mainPair?.reserveX || "0"),
-        reserveY: mainPair?.reserveY || "0",
-        reserveYAmount: parseFloat(mainPair?.reserveY || "0"),
-        rewardMintX: "",
-        rewardMintY: "",
-        tags: [],
-        todayFees: parseFloat(sarosPool.fees24h) || 0,
-      },
     };
   }
 

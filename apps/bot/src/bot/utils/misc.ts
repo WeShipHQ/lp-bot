@@ -14,3 +14,7 @@ export function calculateRecommendedAmount(positionAmount: number): number {
     slippageBuffer
   );
 }
+
+export function getPoolLink(botName: string, poolAddress: string): string {
+  return `https://t.me/${botName}?start=pool_${poolAddress}`;
+}

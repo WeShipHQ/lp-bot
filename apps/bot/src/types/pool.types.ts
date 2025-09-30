@@ -42,7 +42,7 @@ export interface Pool {
     hour4: number;
     min30: number;
   };
-  meteora: {
+  meteora?: {
     hide: boolean;
     isBlacklisted: boolean;
     baseFeePercentage: string;

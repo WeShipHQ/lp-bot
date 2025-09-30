@@ -1,5 +1,20 @@
 import { MeteoraDammV1PoolResponse } from "./meteora.types";
+import { Pool } from "./pool.types";
 
+export type TrendingPoolsSortCriteria =
+  | "apy"
+  | "tvl"
+  | "volume24h"
+  | "fee_tvl_ratio";
+
+export interface PaginatedTrendingPools {
+  pools: Pool[];
+  currentPage: number;
+  totalPages: number;
+  sortBy: TrendingPoolsSortCriteria;
+}
+
+// ------- refactor following types
 export interface PairItem {
   address: string;
   name: string;
@@ -101,7 +116,7 @@ export interface TrendingPageState {
   messageId?: number;
   displayMode?: "tokens" | "pools";
   poolSource?: "dlmm" | "dammv1" | "dammv2";
-  sortBy?: "apy" | "tvl" | "volume24h" | "fee_tvl_ratio";
+  sortBy?: TrendingPoolsSortCriteria;
 }
 export interface DammV1SearchResponse {
   status?: number;

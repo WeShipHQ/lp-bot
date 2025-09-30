@@ -1,5 +1,8 @@
 import { trendingService } from "@/services/trending.service";
+import { TrendingPoolsSortCriteria } from "@/types/trending.types";
+import { InlineKeyboardButton } from "@telegraf/types";
 import { Markup } from "telegraf";
+import { InlineKeyboardMarkup } from "telegraf/types";
 
 export function getTrendingKeyboard(
   chatId: number,
@@ -43,4 +46,74 @@ export function getTrendingKeyboard(
 
   const rows: any[] = [navRow, sortRow];
   return Markup.inlineKeyboard(rows);
+}
+
+function encodeCallback(
+  action: string,
+  page: number,
+  sort: TrendingPoolsSortCriteria
+): string {
+  return `${action}:${page}:${sort}`;
+}
+
+export function getSarosTrendingKeyboard(
+  currentPage: number,
+  currentSort: TrendingPoolsSortCriteria,
+  totalPages: number
+): InlineKeyboardMarkup {
+  const keyboard: InlineKeyboardButton[][] = [];
+
+  const navRow: InlineKeyboardButton[] = [];
+
+  if (currentPage > 1) {
+    navRow.push({
+      text: "◀️ Prev",
+      callback_data: encodeCallback("trend", currentPage - 1, currentSort),
+    });
+  }
+
+  navRow.push({
+    text: `📄 ${currentPage}/${totalPages}`,
+    callback_data: "noop",
+  });
+
+  if (currentPage < totalPages) {
+    navRow.push({
+      text: "Next ▶️",
+      callback_data: encodeCallback("trend", currentPage + 1, currentSort),
+    });
+  }
+
+  keyboard.push(navRow);
+
+  // Sort row
+  const sortRow: InlineKeyboardButton[] = [
+    {
+      text: currentSort === "apy" ? "✓ APY" : "APY",
+      callback_data: encodeCallback("trend", 1, "apy"),
+    },
+    {
+      text: currentSort === "tvl" ? "✓ TVL" : "TVL",
+      callback_data: encodeCallback("trend", 1, "tvl"),
+    },
+    {
+      text: currentSort === "volume24h" ? "✓ 24h Vol" : "24h Vol",
+      callback_data: encodeCallback("trend", 1, "volume24h"),
+    },
+    {
+      text: currentSort === "fee_tvl_ratio" ? "✓ Fee/TVL" : "Fee/TVL",
+      callback_data: encodeCallback("trend", 1, "fee_tvl_ratio"),
+    },
+  ];
+
+  keyboard.push(sortRow);
+
+  keyboard.push([
+    {
+      text: "🔄 Refresh",
+      callback_data: encodeCallback("refresh", currentPage, currentSort),
+    },
+  ]);
+
+  return { inline_keyboard: keyboard };
 }
