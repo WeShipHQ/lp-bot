@@ -1,4 +1,4 @@
-import { DexType } from "../types/core.types";
+import { DexType } from "@/types/core.types";
 
 export interface DexConfig {
   enabled: boolean;

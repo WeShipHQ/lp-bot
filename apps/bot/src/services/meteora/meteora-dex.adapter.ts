@@ -1,4 +1,4 @@
-import { BaseDexAdapter } from "./base-dex.adapter";
+import { BaseDexAdapter } from "@/adapters/base-dex.adapter";
 import {
   DexType,
   UnifiedPool,
@@ -7,13 +7,10 @@ import {
   CreatePositionParams,
   RebalanceParams,
   TrendingParams,
+  PaginatedTrendingPools,
   UrlParseResult,
-} from "../types/core.types";
+} from "@/types/core.types";
 
-/**
- * Meteora DEX Adapter
- * Implements the unified interface for Meteora-specific operations
- */
 export class MeteoraAdapter extends BaseDexAdapter {
   readonly dexType: DexType = "meteora";
   readonly name: string = "Meteora";
@@ -21,8 +18,10 @@ export class MeteoraAdapter extends BaseDexAdapter {
   // URL patterns for Meteora
   private readonly urlPatterns = {
     dlmm: /^https:\/\/(?:www\.)?meteora\.ag\/dlmm\/([1-9A-HJ-NP-Za-km-z]{32,44})(?:\?.*)?$/,
-    dammV1: /^https:\/\/(?:www\.)?meteora\.ag\/pools\/([1-9A-HJ-NP-Za-km-z]{32,44})(?:\?.*)?$/,
-    dammV2: /^https:\/\/(?:www\.)?meteora\.ag\/dammv2\/([1-9A-HJ-NP-Za-km-z]{32,44})(?:\?.*)?$/,
+    dammV1:
+      /^https:\/\/(?:www\.)?meteora\.ag\/pools\/([1-9A-HJ-NP-Za-km-z]{32,44})(?:\?.*)?$/,
+    dammV2:
+      /^https:\/\/(?:www\.)?meteora\.ag\/dammv2\/([1-9A-HJ-NP-Za-km-z]{32,44})(?:\?.*)?$/,
   };
 
   async getPool(poolId: string): Promise<UnifiedPool> {
@@ -31,7 +30,7 @@ export class MeteoraAdapter extends BaseDexAdapter {
     throw new Error("Method not implemented.");
   }
 
-  async getTrendingPools(params?: TrendingParams): Promise<UnifiedPool[]> {
+  async getTrendingPools(params?: TrendingParams): Promise<PaginatedTrendingPools> {
     // TODO: Implement using existing hot pools service
     // This will use hotPoolsService.getHotPoolsPage() and transform results
     throw new Error("Method not implemented.");
@@ -53,7 +52,9 @@ export class MeteoraAdapter extends BaseDexAdapter {
     throw new Error("Method not implemented.");
   }
 
-  async createPosition(params: CreatePositionParams): Promise<TransactionResult> {
+  async createPosition(
+    params: CreatePositionParams
+  ): Promise<TransactionResult> {
     // TODO: Implement using existing meteoraDlmmService.createPositionIx()
     // Transform params to Meteora-specific format and execute
     throw new Error("Method not implemented.");
@@ -120,7 +121,9 @@ export class MeteoraAdapter extends BaseDexAdapter {
     throw new Error("Method not implemented.");
   }
 
-  private transformMeteoraPositionToUnified(meteoraPosition: any): UnifiedPosition {
+  private transformMeteoraPositionToUnified(
+    meteoraPosition: any
+  ): UnifiedPosition {
     // TODO: Transform Meteora position data to unified format
     throw new Error("Method not implemented.");
   }

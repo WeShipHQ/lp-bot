@@ -11,7 +11,8 @@ import { positionDetailScene } from "./scenes";
 import { poolDetailScene } from "./scenes/pool-detail.scene";
 import { createPositionScene } from "./scenes";
 import { registerGlobalCallbacks } from "./handlers/global-callbacks";
-import { initializeV2Architecture } from "@/v2";
+import { dexRegistry } from "@/services/dex-registry.service";
+import { SarosAdapter } from "@/services/saros/saros.adapter";
 
 Decimal.set({
   precision: 28, // High precision for financial calculations
@@ -19,6 +20,18 @@ Decimal.set({
   toExpNeg: -18, // Avoid scientific notation for small numbers
   toExpPos: 18, // Avoid scientific notation for large numbers
 });
+
+export function initializeV2Architecture(): void {
+  console.log("Initializing v2 multi-DEX architecture...");
+
+  // dexRegistry.register(new MeteoraAdapter());
+  dexRegistry.register(new SarosAdapter());
+
+  console.log(
+    `Registered ${dexRegistry.getSupportedDexes().length} DEX adapters:`,
+    dexRegistry.getSupportedDexes()
+  );
+}
 
 initializeV2Architecture();
 

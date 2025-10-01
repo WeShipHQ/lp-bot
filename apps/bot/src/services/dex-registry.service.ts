@@ -1,5 +1,5 @@
-import { IDexAdapter } from "../interfaces/dex-adapter.interface";
-import { DexType, DexAdapterError } from "../types/core.types";
+import { IDexAdapter } from "@/types/dex-adapter.interface";
+import { DexType, DexAdapterError } from "@/types/core.types";
 
 export class DexRegistryService {
   private adapters = new Map<DexType, IDexAdapter>();

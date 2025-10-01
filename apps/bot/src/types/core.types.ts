@@ -1,21 +1,8 @@
 import { Token } from "@/types/token.types";
-import { PublicKey } from "@solana/web3.js";
 
-// Core DEX types
 export type DexType = "meteora" | "saros" | "orca" | "raydium";
 export type PoolType = "DLMM" | "DAMM" | "CLMM" | "AMM";
 
-// Unified Token interface
-// export interface UnifiedToken {
-//   address: string;
-//   symbol: string;
-//   name: string;
-//   decimals: number;
-//   logoUri?: string;
-//   verified?: boolean;
-// }
-
-// Unified Pool interface
 export interface UnifiedPool {
   id: string;
   address: string;
@@ -57,7 +44,6 @@ export interface UnifiedPool {
   metadata?: Record<string, any>;
 }
 
-// Unified Position interface
 export interface UnifiedPosition {
   id: string;
   address: string;
@@ -99,7 +85,6 @@ export interface UnifiedPosition {
   metadata?: Record<string, any>;
 }
 
-// Transaction result interface
 export interface TransactionResult {
   success: boolean;
   signature?: string;
@@ -107,7 +92,6 @@ export interface TransactionResult {
   metadata?: Record<string, any>;
 }
 
-// Create position parameters
 export interface CreatePositionParams {
   poolAddress: string;
   userAddress: string;
@@ -118,14 +102,12 @@ export interface CreatePositionParams {
   metadata?: Record<string, any>;
 }
 
-// Rebalance parameters
 export interface RebalanceParams {
   newStrategy?: string;
   slippage?: number;
   metadata?: Record<string, any>;
 }
 
-// Trending parameters
 export type TrendingPoolsSortCriteria =
   | "apy"
   | "tvl"
@@ -148,7 +130,6 @@ export interface PaginatedTrendingPools {
   sortBy: TrendingPoolsSortCriteria;
 }
 
-// Portfolio data
 export interface UnifiedPortfolio {
   userAddress: string;
   positions: UnifiedPosition[];
@@ -166,14 +147,12 @@ export interface UnifiedPortfolio {
   >;
 }
 
-// URL parsing result
 export interface UrlParseResult {
   dex: DexType;
   poolId: string;
   poolType?: PoolType;
 }
 
-// Error types
 export class DexAdapterError extends Error {
   constructor(
     message: string,

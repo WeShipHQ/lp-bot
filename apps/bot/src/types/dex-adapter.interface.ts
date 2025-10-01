@@ -9,7 +9,7 @@ import {
   TrendingParams,
   PaginatedTrendingPools,
   UrlParseResult,
-} from "../types/core.types";
+} from "./core.types";
 
 export interface IDexAdapter {
   readonly dexType: DexType;

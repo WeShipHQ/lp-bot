@@ -1,4 +1,4 @@
-import { IDexAdapter } from "../interfaces/dex-adapter.interface";
+import { IDexAdapter } from "@/types/dex-adapter.interface";
 import {
   DexType,
   UnifiedPool,
