@@ -23,6 +23,14 @@ export function getPoolDeeplink(
   return `https://t.me/${botName}?start=pool_${dexCode}_${poolAddress}`;
 }
 
+export function getPositionDeeplink(
+  botName: string,
+  dexCode = "meteora",
+  positionAddress: string
+): string {
+  return `https://t.me/${botName}?start=pos_${dexCode}_${positionAddress}`;
+}
+
 export function parseDeepLinkParam(startParam: string) {
   console.log(`Parsing deep link parameter: "${startParam}"`);
 
@@ -46,7 +54,6 @@ export function parseDeepLinkParam(startParam: string) {
 
   // Parse format: ref_CODE or ref_CODE-action_params or direct action_params
   const parts = startParam.split("-");
-  console.log("xx yyy", parts);
 
   if (parts.length === 1) {
     const singlePart = parts[0];

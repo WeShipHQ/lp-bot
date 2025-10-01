@@ -132,44 +132,43 @@ export class JupiterService {
     }
   }
 
-  // async getTokenPrices(
-  //   tokenAddresses: string[]
-  // ): Promise<Record<string, number>> {
-  //   console.log(
-  //     `[Jupiter] Fetching prices for ${tokenAddresses.length} tokens`
-  //   );
+  async getTokenPrices(
+    tokenAddresses: string[]
+  ): Promise<Record<string, number>> {
+    console.log(
+      `[Jupiter] Fetching prices for ${tokenAddresses.length} tokens`
+    );
 
-  //   const prices: Record<string, number> = {};
+    const prices: Record<string, number> = {};
 
-  //   // Process tokens in batches to avoid overwhelming the API
-  //   const batchSize = 5;
-  //   for (let i = 0; i < tokenAddresses.length; i += batchSize) {
-  //     const batch = tokenAddresses.slice(i, i + batchSize);
+    // Process tokens in batches to avoid overwhelming the API
+    const batchSize = 5;
+    for (let i = 0; i < tokenAddresses.length; i += batchSize) {
+      const batch = tokenAddresses.slice(i, i + batchSize);
 
-  //     const batchPromises = batch.map(async (address) => {
-  //       try {
-  //         const price = await this.getTokenPrice(address);
-  //         if (price !== null) {
-  //           prices[address] = price;
-  //         }
-  //       } catch (error) {
-  //         console.error(
-  //           `[Jupiter] Error fetching price for ${address}:`,
-  //           error
-  //         );
-  //       }
-  //     });
+      const batchPromises = batch.map(async (address) => {
+        try {
+          const price = await this.getTokenPrice(address);
+          if (price !== null) {
+            prices[address] = price;
+          }
+        } catch (error) {
+          console.error(
+            `[Jupiter] Error fetching price for ${address}:`,
+            error
+          );
+        }
+      });
 
-  //     await Promise.all(batchPromises);
+      await Promise.all(batchPromises);
 
-  //     // Add delay between batches
-  //     if (i + batchSize < tokenAddresses.length) {
-  //       await this.delay(500);
-  //     }
-  //   }
+      if (i + batchSize < tokenAddresses.length) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    }
 
-  //   return prices;
-  // }
+    return prices;
+  }
 
   // async validateToken(tokenAddress: string): Promise<boolean> {
   //   try {

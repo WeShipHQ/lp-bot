@@ -1,3 +1,6 @@
+import { PositionInfo } from "@saros-finance/dlmm-sdk";
+import Decimal from "decimal.js";
+
 export type SarosBaseResponse<T> = {
   status: number;
   success: boolean;
@@ -110,4 +113,37 @@ export type SarosDlmmPoolDetail = {
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
+};
+
+export type SarosUserDlmmPool = {
+  reserveX: string;
+  reserveY: string;
+  liquidity: string;
+  tokenX: {
+    address: string;
+    mintAddress: string;
+    name: string;
+    symbol: string;
+    decimals: number;
+    image: string;
+  };
+  tokenY: {
+    address: string;
+    mintAddress: string;
+    name: string;
+    symbol: string;
+    decimals: number;
+    image: string;
+  };
+  pair: string;
+  binStep: number;
+  baseFactor: number;
+  outOfPosition: boolean;
+};
+
+export type SarosPoolPosition = {
+  pair: string;
+  postions: PositionInfo[];
+  reserveX: Decimal;
+  reserveY: Decimal;
 };

@@ -11,21 +11,13 @@ import {
   getMaxBinArray,
   getBinRange,
   findPosition,
-  convertBalanceToWei,
   type PairInfo,
+  type PositionInfo,
+  BIN_ARRAY_SIZE,
 } from "@saros-finance/dlmm-sdk";
-// import {
-//   LiquidityShape,
-//   PositionInfo,
-//   RemoveLiquidityType,
-// } from "@saros-finance/dlmm-sdk/types/services";
-// import {
-//   createUniformDistribution,
-//   findPosition,
-//   getBinRange,
-//   getMaxBinArray,
-//   getMaxPosition,
-// } from "@saros-finance/dlmm-sdk/utils";
+import { utils } from "@coral-xyz/anchor";
+import * as spl from "@solana/spl-token";
+
 import {
   Connection,
   Keypair,
@@ -38,6 +30,7 @@ import { CONFIG } from "@/config";
 import Decimal from "decimal.js";
 import { JupiterService } from "../jupiter.service";
 import { Token } from "@/types/token.types";
+import { SarosPoolPosition } from "./types";
 
 const getBase = (binStep: number) => {
   const quotient = binStep << SCALE_OFFSET;
@@ -106,6 +99,7 @@ export class SarosDlmmService {
     string,
     { instance: LiquidityBookServices; timestamp: number }
   >();
+  private binArrayCache = new Map<string, { data: any; timestamp: number }>();
   private readonly CACHE_TTL = 30000; // 30 seconds
 
   private readonly jupiterService = new JupiterService();
@@ -368,8 +362,8 @@ export class SarosDlmmService {
         const transaction: any = new Transaction();
 
         await liquidityBookServices.addLiquidityIntoPosition({
-          amountX: Number(convertBalanceToWei(10, tokenX.decimals)),
-          amountY: Number(convertBalanceToWei(10, tokenY.decimals)),
+          amountX: Number(convertBalanceToWei(10, 6)),
+          amountY: Number(convertBalanceToWei(10, 6)),
           binArrayLower: new PublicKey(binArrayLower),
           binArrayUpper: new PublicKey(binArrayUpper),
           liquidityDistribution,
@@ -391,4 +385,224 @@ export class SarosDlmmService {
       instructions: [], //createPositionTx.instructions,
     };
   }
+
+  async getPositions(userWallet: string): Promise<SarosPoolPosition[]> {
+    const liquidityBookServices = new LiquidityBookServices({
+      mode: MODE.MAINNET,
+      options: {
+        rpcUrl: CONFIG.SOLANA.RPC_URL,
+      },
+    });
+
+    const tokenAccounts =
+      await liquidityBookServices.connection.getParsedTokenAccountsByOwner(
+        new PublicKey(userWallet),
+        {
+          programId: spl.TOKEN_2022_PROGRAM_ID,
+        }
+      );
+
+    const positionMints = tokenAccounts.value
+      .filter((acc) => {
+        const amount = acc.account.data.parsed.info.tokenAmount.uiAmount;
+        // Only interested in NFTs or position tokens with amount > 0
+        return amount && amount > 0;
+      })
+      .map((acc) => new PublicKey(acc.account.data.parsed.info.mint));
+
+    const positions: PositionInfo[] = await Promise.all(
+      positionMints.map(async (mint) => {
+        // Derive PDA for Position account
+        const [positionPda] = await PublicKey.findProgramAddressSync(
+          [Buffer.from(utils.bytes.utf8.encode("position")), mint.toBuffer()],
+          liquidityBookServices.lbProgram.programId
+        );
+        // Fetch and decode the Position account
+        try {
+          const accountInfo =
+            await liquidityBookServices.connection.getAccountInfo(positionPda);
+          if (!accountInfo) return null;
+          const position =
+            //@ts-ignore
+            await liquidityBookServices.lbProgram.account.position.fetch(
+              positionPda
+            );
+
+          return { ...position, position: positionPda.toString() };
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    const validPositions = positions.filter(
+      (pos): pos is PositionInfo => pos !== null
+    );
+
+    const positionsByPair = validPositions.reduce(
+      (acc, position) => {
+        const pairKey = position.pair;
+        if (!acc[pairKey]) {
+          acc[pairKey] = [];
+        }
+        acc[pairKey].push(position);
+        return acc;
+      },
+      {} as Record<string, PositionInfo[]>
+    );
+
+    const cacheTtl = this.CACHE_TTL;
+
+    const poolPositions = await Promise.all(
+      Object.entries(positionsByPair).map(
+        async ([pairAddress, pairPositions]) => {
+          let totalX = new Decimal(0);
+          let totalY = new Decimal(0);
+
+          for (const pos of pairPositions) {
+            const { pair, lowerBinId: firstBinId, upperBinId } = pos;
+
+            const binArrayIndex = Math.floor(firstBinId / BIN_ARRAY_SIZE);
+
+            // Check cache first
+            const cacheKey = `${pair}-${binArrayIndex}`;
+            const now = Date.now();
+            const cached = this.binArrayCache.get(cacheKey);
+
+            let binArrayInfo;
+            if (cached && now - cached.timestamp < cacheTtl) {
+              binArrayInfo = cached.data;
+            } else {
+              try {
+                binArrayInfo = await liquidityBookServices.getBinArrayInfo({
+                  binArrayIndex,
+                  pair: new PublicKey(pair),
+                  payer: new PublicKey(userWallet),
+                });
+
+                this.binArrayCache.set(cacheKey, {
+                  data: binArrayInfo,
+                  timestamp: now,
+                });
+
+                await new Promise((resolve) => setTimeout(resolve, 100));
+              } catch (error) {
+                console.error(
+                  `Error fetching bin array info for ${cacheKey}:`,
+                  error
+                );
+                continue;
+              }
+            }
+
+            const { bins, resultIndex } = binArrayInfo;
+            const firstBinIndex = resultIndex * BIN_ARRAY_SIZE;
+
+            const binIds = Array.from(
+              { length: upperBinId - firstBinId + 1 },
+              (_, i) => firstBinId - firstBinIndex + i
+            );
+
+            const reserveXY = binIds.map((binId: number, index: number) => {
+              const liquidityShare = pos.liquidityShares[index].toString();
+              const activeBin = bins[binId];
+
+              if (activeBin) {
+                const totalReserveX = +BigInt(activeBin.reserveX).toString();
+                const totalReserveY = +BigInt(activeBin.reserveY).toString();
+                const totalSupply = +BigInt(activeBin.totalSupply).toString();
+
+                const reserveX =
+                  totalReserveX > 0
+                    ? mulDiv(
+                        Number(liquidityShare),
+                        Number(totalReserveX),
+                        Number(totalSupply),
+                        "down"
+                      )
+                    : 0;
+
+                const reserveY =
+                  totalReserveY > 0
+                    ? mulDiv(
+                        Number(liquidityShare),
+                        Number(totalReserveY),
+                        Number(totalSupply),
+                        "down"
+                      )
+                    : 0;
+
+                return {
+                  reserveX: reserveX || 0,
+                  reserveY: reserveY || 0,
+                  totalSupply: +BigInt(activeBin.totalSupply).toString(),
+                  binId: firstBinId + index,
+                  binPosition: binId,
+                  liquidityShare: pos.liquidityShares[index],
+                };
+              }
+
+              return {
+                reserveX: 0,
+                reserveY: 0,
+                totalSupply: "0",
+                binId: firstBinId + index,
+                binPosition: binId,
+                liquidityShare: liquidityShare,
+              };
+            });
+
+            totalX = reserveXY.reduce(
+              (acc, cur) => acc.add(new Decimal(cur.reserveX)),
+              totalX
+            );
+
+            totalY = reserveXY.reduce(
+              (acc, cur) => acc.add(new Decimal(cur.reserveY)),
+              totalY
+            );
+          }
+
+          return {
+            pair: pairAddress,
+            postions: pairPositions,
+            reserveX: totalX,
+            reserveY: totalY,
+          } as SarosPoolPosition;
+        }
+      )
+    );
+
+    return poolPositions;
+  }
 }
+
+const divRem = (numerator: number, denominator: number) => {
+  if (denominator === 0) {
+    throw new Error("Division by zero"); // Xử lý lỗi chia cho 0
+  }
+
+  // Tính thương và phần dư
+  const quotient = numerator / denominator; // Thương
+  const remainder = numerator % denominator; // Phần dư
+
+  return [quotient, remainder]; // Trả về mảng chứa thương và phần dư
+};
+
+const mulDiv = (
+  x: number,
+  y: number,
+  denominator: number,
+  rounding: "up" | "down"
+) => {
+  const prod = x * y;
+
+  if (rounding === "up") {
+    return Math.floor((prod + denominator - 1) / denominator);
+  }
+
+  if (rounding === "down") {
+    const [quotient] = divRem(prod, denominator);
+    return quotient;
+  }
+};

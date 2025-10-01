@@ -4,14 +4,15 @@ import {
   formatPercentage,
   formatTokenAmountSmart,
 } from "@/bot/utils/formatters";
+import { getPositionDeeplink } from "@/bot/utils/misc";
 import { bold, italic, link } from "@/bot/utils/text-formatters";
 import { Position } from "@/db";
-import { MeteoraDlmmPosition } from "@/types/meteora.types";
 import { Pool } from "@/types/pool.types";
 import { PortfolioData, PortfolioPosition } from "@/types/portfolio.types";
 import { PositionPnlResult } from "@/types/position.types";
 import { TokenPrice } from "@/types/token.types";
 import { getPositionStartCommand } from "@/utils/link";
+import { UnifiedPortfolio, UnifiedPosition } from "@/v2";
 import { LbPair, LbPosition } from "@meteora-ag/dlmm";
 import Decimal from "decimal.js";
 
@@ -197,20 +198,26 @@ export class MessageService {
   /**
    * Generate welcome message for new users
    */
-  static getWelcomeMessage(walletAddress?: string, solBalance?: number, usdValue?: number, referralLink?: string): string {
+  static getWelcomeMessage(
+    walletAddress?: string,
+    solBalance?: number,
+    usdValue?: number,
+    referralLink?: string
+  ): string {
     let walletInfo: string;
 
     if (walletAddress) {
       if (solBalance !== undefined && usdValue !== undefined) {
         walletInfo = `🏦 *Your Wallet Balance:* ${solBalance.toFixed(2)} SOL ($${usdValue.toFixed(3)})\n\n`;
       } else {
-        walletInfo = `🏦 **Wallet Status:** Creating wallet...\n\n` +
+        walletInfo =
+          `🏦 **Wallet Status:** Creating wallet...\n\n` +
           "⏳ Please wait while we set up your Solana wallet.\n" +
           "This may take a few moments.\n\n";
       }
-      
+
       walletInfo += `*Wallet Address:* \`${walletAddress}\` (tap to copy)\n\n`;
-      
+
       if (referralLink) {
         walletInfo += `*Your Reflink:* ${referralLink} (tap to copy)\n\n`;
       }
@@ -286,6 +293,69 @@ export class MessageService {
 
     msg += positions
       .map((pos, i) => MessageService.buildPositionBlock(pos, i, botName))
+      .join("\n\n");
+
+    msg += `\n\n💡 Tap the inline button or type */1*, */2* ... to open details.`;
+
+    return msg;
+  }
+
+  static getUnifiedPortfolioOverviewMessage(
+    data: UnifiedPortfolio,
+    botName: string
+  ): string {
+    const positions = data.positions ?? [];
+
+    if (positions.length === 0) {
+      return (
+        `\n❌ No active positions found.\n\n` +
+        `Get started by:\n\n` +
+        `➡️ Use /trending to see hot pools\n` +
+        `➡️ Or paste a token address to create new positions`
+      );
+    }
+
+    let msg = `${bold(`Portfolio Overview`)}\n\n`;
+
+    const totalPositions = positions.length;
+    const totalPosUsd = positions.reduce(
+      (acc, pos) =>
+        acc +
+        Number(pos.tokenAAmount) / 10 ** pos.tokenA.decimals +
+        Number(pos.tokenBAmount) / 10 ** pos.tokenB.decimals,
+      0
+    );
+
+    msg += `*Total Positions:* ${bold(totalPositions)} | *Total Balance:* ${bold(formatPrice(totalPosUsd, { maxDecimals: 3 }))}\n\n`;
+
+    function buildPositionBlock(
+      pos: UnifiedPosition,
+      index: number,
+      botName: string
+    ): string {
+      const sections: Array<string | undefined> = [];
+      const title = `${link(
+        `/${index + 1} ${pos.tokenA.symbol}-${pos.tokenB.symbol}`,
+        getPositionDeeplink(botName, pos.dex, pos.address)
+      )}`;
+
+      sections.push(title);
+
+      const amountX = Number(pos.tokenAAmount) / 10 ** pos.tokenA.decimals;
+      const amountY = Number(pos.tokenBAmount) / 10 ** pos.tokenB.decimals;
+
+      const balance = `Position Balance: *${formatNumber(amountX, {
+        maxDecimals: 3,
+      })} ${pos.tokenA.symbol}* / *${formatNumber(amountY, {
+        maxDecimals: 3,
+      })} ${pos.tokenB.symbol}* (*${formatPrice(Number(amountX + amountY), { maxDecimals: 3 })}*)`;
+      sections.push(balance);
+
+      return sections.filter(Boolean).join("\n");
+    }
+
+    msg += positions
+      .map((pos, i) => buildPositionBlock(pos, i, botName))
       .join("\n\n");
 
     msg += `\n\n💡 Tap the inline button or type */1*, */2* ... to open details.`;

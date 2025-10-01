@@ -1,6 +1,10 @@
 import type { PoolDex, PoolType } from "@/types/pool.types";
 import type { Token } from "@/types/token.types";
-import type { SarosDlmmPool, SarosDlmmPoolDetail } from "./types";
+import type {
+  SarosDlmmPool,
+  SarosDlmmPoolDetail,
+  SarosPoolPosition,
+} from "./types";
 import {
   BaseDexAdapter,
   CreatePositionParams,
@@ -15,6 +19,7 @@ import {
 } from "@/v2";
 import { SarosPoolService } from "./pool.service";
 import { TRENDING_CONSTANTS } from "@/bot/config/constants";
+import { SarosDlmmService } from "./dlmm.service";
 
 export class SarosAdapter extends BaseDexAdapter {
   readonly dexType: DexType = "saros";
@@ -26,6 +31,7 @@ export class SarosAdapter extends BaseDexAdapter {
   };
 
   private readonly sarosPoolService = new SarosPoolService();
+  private readonly sarosDlmmService = new SarosDlmmService();
 
   constructor() {
     super();
@@ -67,8 +73,24 @@ export class SarosAdapter extends BaseDexAdapter {
   }
 
   async getUserPositions(userAddress: string): Promise<UnifiedPosition[]> {
-    // TODO: Implement using existing Saros position service
-    throw new Error("Method not implemented.");
+    const positions = await this.sarosDlmmService.getPositions(userAddress);
+
+    const unifiedPositions: UnifiedPosition[] = [];
+
+    for (const position of positions) {
+      try {
+        const unifiedPosition =
+          await this.transformSarosPositionToUnified(position);
+        unifiedPositions.push(unifiedPosition);
+      } catch (error) {
+        console.error(
+          `Error transforming position for pool ${position.pair}:`,
+          error
+        );
+      }
+    }
+
+    return unifiedPositions;
   }
 
   async getPosition(positionAddress: string): Promise<UnifiedPosition> {
@@ -201,143 +223,72 @@ export class SarosAdapter extends BaseDexAdapter {
     };
   }
 
-  private transformSarosPositionToUnified(sarosPosition: any): UnifiedPosition {
-    // TODO: Transform Saros position data to unified format
-    throw new Error("Method not implemented.");
+  private async transformSarosPositionToUnified(
+    sarosPosition: SarosPoolPosition
+  ): Promise<UnifiedPosition> {
+    const dlmmPool = await this.sarosPoolService.getDlmmPool(
+      sarosPosition.pair
+    );
+    const poolDetail = dlmmPool.data;
+
+    const tokenA = this.mapSarosTokenToToken(poolDetail.tokenX);
+    const tokenB = this.mapSarosTokenToToken(poolDetail.tokenY);
+
+    const tokenAAmount = sarosPosition.reserveX.toString();
+    const tokenBAmount = sarosPosition.reserveY.toString();
+
+    const currentValueUsd = 0;
+    const initialValueUsd = 0;
+
+    const positionId = `${sarosPosition.pair}-${sarosPosition.postions.map((p) => p.position).join("-")}`;
+    const positionAddress =
+      sarosPosition.postions[0]?.position || sarosPosition.pair;
+
+    return {
+      id: positionId,
+      address: positionAddress,
+      poolAddress: sarosPosition.pair,
+      dex: "saros" as DexType,
+      type: "DLMM" as PoolType,
+
+      // Token information
+      tokenA,
+      tokenB,
+
+      // Position amounts
+      tokenAAmount,
+      tokenBAmount,
+
+      // USD values (using defaults for now)
+      currentValueUsd,
+      initialValueUsd,
+
+      // Fees and rewards (using defaults)
+      unclaimedFeesUsd: 0,
+      claimedFeesUsd: 0,
+      unclaimedRewardsUsd: 0,
+      claimedRewardsUsd: 0,
+
+      // PnL (using defaults)
+      pnlUsd: 0,
+      pnlPercentage: 0,
+
+      // Position status (using defaults)
+      inRange: true, // TODO: Calculate based on current price and position range
+      isActive: true,
+
+      // Timestamps (using current time as default)
+      createdAt: new Date(),
+      updatedAt: new Date(),
+
+      // Store Saros-specific data in metadata
+      metadata: {
+        sarosPositions: sarosPosition.postions,
+        reserveX: sarosPosition.reserveX.toString(),
+        reserveY: sarosPosition.reserveY.toString(),
+      },
+    };
   }
-
-  // legacy functions
-  // static dlmmPoolToPool(sarosPool: SarosDlmmPool): Pool {
-  //   // Use the first pair for main pool data, or create aggregated data
-  //   const mainPair = sarosPool.pairs[0];
-
-  //   return {
-  //     id:
-  //       mainPair?.pair ||
-  //       `${sarosPool.tokenX.mintAddress}-${sarosPool.tokenY.mintAddress}`,
-  //     address: mainPair?.pair || "",
-  //     name: `${sarosPool.tokenX.symbol}-${sarosPool.tokenY.symbol}`,
-  //     dex: "saros" as PoolDex,
-  //     type: "DLMM" as PoolType,
-  //     tokenA: this.mapSarosTokenToToken(sarosPool.tokenX),
-  //     tokenB: this.mapSarosTokenToToken(sarosPool.tokenY),
-  //     liquidity: sarosPool.totalLiquidity,
-  //     apr: sarosPool.apr24h,
-  //     apy: this.calculateApy(sarosPool.apr24h),
-  //     tvl: sarosPool.totalLiquidity,
-  //     isVerified: true,
-  //     currentPrice: mainPair
-  //       ? this.calculatePrice(
-  //           mainPair.reserveX,
-  //           mainPair.reserveY,
-  //           sarosPool.tokenX.decimals,
-  //           sarosPool.tokenY.decimals
-  //         )
-  //       : 0,
-  //     volume: {
-  //       hour1: 0, // Not available in Saros data
-  //       hour2: 0,
-  //       hour4: 0,
-  //       hour12: 0,
-  //       hour24: parseFloat(sarosPool.volume24h) || 0,
-  //       min30: 0,
-  //     },
-  //     fees: {
-  //       hour1: 0, // Not available in Saros data
-  //       hour2: 0,
-  //       hour4: 0,
-  //       hour12: 0,
-  //       hour24: parseFloat(sarosPool.fees24h) || 0,
-  //       min30: 0,
-  //     },
-  //     feeTvlRatio: {
-  //       hour: 0, // Not available in Saros data
-  //       hour2: 0,
-  //       hour4: 0,
-  //       hour12: 0,
-  //       hour24: this.calculateFeeTvlRatio(
-  //         sarosPool.fees24h,
-  //         sarosPool.totalLiquidity
-  //       ),
-  //       min30: 0,
-  //     },
-  //   };
-  // }
-
-  // static dlmmPoolDetailToPool(sarosPoolDetail: SarosDlmmPoolDetail): Pool {
-  //   return {
-  //     id: sarosPoolDetail.pair,
-  //     address: sarosPoolDetail.pair,
-  //     name: `${sarosPoolDetail.tokenX.symbol.toUpperCase()}-${sarosPoolDetail.tokenY.symbol.toUpperCase()}`,
-  //     dex: "saros" as PoolDex,
-  //     type: "DLMM" as PoolType,
-  //     tokenA: this.mapSarosTokenToToken(sarosPoolDetail.tokenX),
-  //     tokenB: this.mapSarosTokenToToken(sarosPoolDetail.tokenY),
-  //     liquidity: sarosPoolDetail.totalLiquidity,
-  //     apr: sarosPoolDetail.apr24h,
-  //     apy: this.calculateApy(sarosPoolDetail.apr24h),
-  //     tvl: sarosPoolDetail.totalLiquidity,
-  //     isVerified: true,
-  //     currentPrice: this.calculatePrice(
-  //       sarosPoolDetail.reserveX,
-  //       sarosPoolDetail.reserveY,
-  //       sarosPoolDetail.tokenX.decimals,
-  //       sarosPoolDetail.tokenY.decimals
-  //     ),
-  //     volume: {
-  //       hour1: 0,
-  //       hour2: 0,
-  //       hour4: 0,
-  //       hour12: 0,
-  //       hour24: parseFloat(sarosPoolDetail.volume24h) || 0,
-  //       min30: 0,
-  //     },
-  //     fees: {
-  //       hour1: 0,
-  //       hour2: 0,
-  //       hour4: 0,
-  //       hour12: 0,
-  //       hour24: parseFloat(sarosPoolDetail.fees24h) || 0,
-  //       min30: 0,
-  //     },
-  //     feeTvlRatio: {
-  //       hour: 0,
-  //       hour2: 0,
-  //       hour4: 0,
-  //       hour12: 0,
-  //       hour24: this.calculateFeeTvlRatio(
-  //         sarosPoolDetail.fees24h,
-  //         sarosPoolDetail.totalLiquidity
-  //       ),
-  //       min30: 0,
-  //     },
-  //     meteora: {
-  //       hide: false,
-  //       isBlacklisted: false,
-  //       baseFeePercentage: sarosPoolDetail.baseFactor.toString(),
-  //       binStep: sarosPoolDetail.binStep,
-  //       cumulativeFeeVolume: sarosPoolDetail.fees24h,
-  //       cumulativeTradeVolume: sarosPoolDetail.volume24h,
-  //       farmApr: 0, // Not available in pool detail
-  //       farmApy: 0,
-  //       launchpad: "",
-  //       maxFeePercentage: "0",
-  //       protocolFeePercentage: "0",
-  //       reserveX: sarosPoolDetail.reserveX,
-  //       reserveXAmount: parseFloat(sarosPoolDetail.reserveX),
-  //       reserveY: sarosPoolDetail.reserveY,
-  //       reserveYAmount: parseFloat(sarosPoolDetail.reserveY),
-  //       rewardMintX: "",
-  //       rewardMintY: "",
-  //       tags: [],
-  //       todayFees: parseFloat(sarosPoolDetail.fees24h) || 0,
-  //     },
-  //   };
-  // }
-
-  // static dlmmPoolsToPoolArray(sarosPools: SarosDlmmPool[]): Pool[] {
-  //   return sarosPools.map((pool) => this.dlmmPoolToPool(pool));
-  // }
 
   private mapSarosTokenToToken(sarosToken: {
     mintAddress: string;

@@ -23,17 +23,19 @@ export function devCommand(
   bot.command("dev", async (ctx) => {
     const saros = new SarosDlmmService();
 
-    saros.createPositionIx(
-      new PublicKey("5Zj1WS7rzUWtR1EgC9Xaf2Hr8yvSHPXHhntviW6R85Mt"),
-      // new PublicKey("8vZHTVMdYvcPFUoHBEbcFyfSKnjWtvbNgYpXg1aiC2uS"),
-      new PublicKey("DHXKB9fSff4LjubMFieKxaBrvNY6AzXVwaRLk5N2vs87"),
-      new PublicKey("5yjRNGm5WWdAdTuuxSrnP63DyqnE2rSMzy1gDiVT4JQb"),
-      new Decimal("0.1"),
-      new Decimal("0.1"),
-      // @ts-expect-error
-      "Spot",
-      10
-    );
+    saros.getPositions('5yjRNGm5WWdAdTuuxSrnP63DyqnE2rSMzy1gDiVT4JQb')
+
+    // saros.createPositionIx(
+    //   new PublicKey("5Zj1WS7rzUWtR1EgC9Xaf2Hr8yvSHPXHhntviW6R85Mt"),
+    //   // new PublicKey("8vZHTVMdYvcPFUoHBEbcFyfSKnjWtvbNgYpXg1aiC2uS"),
+    //   new PublicKey("DHXKB9fSff4LjubMFieKxaBrvNY6AzXVwaRLk5N2vs87"),
+    //   new PublicKey("5yjRNGm5WWdAdTuuxSrnP63DyqnE2rSMzy1gDiVT4JQb"),
+    //   new Decimal("0.1"),
+    //   new Decimal("0.1"),
+    //   // @ts-expect-error
+    //   "Spot",
+    //   10
+    // );
 
     // await ctx.scene.enter(SCENE_IDS.CREATE_POSITION_SCENE, {
     //   poolAddress: "BGm1tav58oGcsQJehL9WXBFXF7D27vZsKefj4xJKD5Y",

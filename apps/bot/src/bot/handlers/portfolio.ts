@@ -8,6 +8,7 @@ import {
 } from "../keyboards/portfolio-menu";
 import { MessageService } from "@/services/message.service";
 import { portfolioService } from "@/services/portfolio.service";
+import { unifiedPositionService } from "@/v2";
 
 interface TelegramError {
   response?: {
@@ -205,23 +206,27 @@ export async function portfolioHandler(ctx: BotContext) {
   const loadingMessageId = (loadingMessage as { message_id: number })
     .message_id;
 
-  const portfolioResponse = await portfolioService.getUserPortfolio(
+  // const portfolioResponse = await portfolioService.getUserPortfolio(
+  //   ctx.user.walletAddress!
+  // );
+
+  const portfolio = await unifiedPositionService.getUserPortfolio(
     ctx.user.walletAddress!
   );
 
-  if (!portfolioResponse.success || !portfolioResponse.data) {
-    await deleteMessageByIdSafely(ctx, loadingMessageId);
-    await ctx.reply(`❌ ${portfolioResponse.message}`);
-    return;
-  }
+  // if (!portfolioResponse.success || !portfolioResponse.data) {
+  //   await deleteMessageByIdSafely(ctx, loadingMessageId);
+  //   await ctx.reply(`❌ ${portfolioResponse.message}`);
+  //   return;
+  // }
 
-  const portfolioData = portfolioResponse.data;
-  setPortfolio(ctx, portfolioData);
+  // const portfolioData = portfolioResponse.data;
+  // setPortfolio(ctx, portfolioData);
 
   await deleteMessageByIdSafely(ctx, loadingMessageId);
   await ctx.reply(
-    MessageService.getPortfolioOverviewMessage(
-      portfolioData,
+    MessageService.getUnifiedPortfolioOverviewMessage(
+      portfolio,
       ctx.botInfo?.username
     ),
     {
