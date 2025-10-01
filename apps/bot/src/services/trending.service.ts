@@ -91,7 +91,7 @@ export class TrendingService {
             : "volume24h",
       order: "desc",
     });
-    const pools = SarosAdapter.dlmmPoolsToPoolArray(sarosPools.data.data || []);
+    const pools = [] as any; //SarosAdapter.dlmmPoolsToPoolArray(sarosPools.data.data || []);
 
     return {
       pools,

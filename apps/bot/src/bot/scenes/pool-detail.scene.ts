@@ -2,18 +2,17 @@ import { Scenes } from "telegraf";
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
 import { MessageService } from "@/services/message.service";
-import { poolService } from "@/services/pool.service";
 import { getPoolInfoKeyboard } from "../keyboards";
 import { code, loading } from "../utils/text-formatters";
 import { DISABLE_LINK_PREVIEW } from "../handlers";
 import { Pool, PoolDex } from "@/types/pool.types";
 import { formatNumber, formatPercentage, formatAPR } from "../utils/formatters";
+import { UnifiedPool, unifiedPoolService } from "@/v2";
 
-function formatPoolDetails(pool: Pool): string {
+function formatPoolDetails(pool: UnifiedPool): string {
   const tokenASymbol = pool.tokenA?.symbol || "Unknown";
   const tokenBSymbol = pool.tokenB?.symbol || "Unknown";
   const tokenPair = `${tokenASymbol.toUpperCase()}/${tokenBSymbol.toUpperCase()}`;
-  const poolType = pool.type || "DLMM";
 
   const poolAddress = pool.address || "Unknown";
   let shortPoolAddress = "Unknown";
@@ -49,8 +48,8 @@ function formatPoolDetails(pool: Pool): string {
   const fee24h =
     "$" + formatNumber(pool.fees?.hour24 || 0, { useSuffixes: true });
 
-  const feeTvlRatio = pool.feeTvlRatio?.hour24
-    ? formatPercentage(pool.feeTvlRatio.hour24 * 100, { decimals: 2 })
+  const feeTvlRatio = pool.feeTvlRatio24h
+    ? formatPercentage(pool.feeTvlRatio24h * 100, { decimals: 2 })
     : "N/A";
 
   const volume24h =
@@ -99,7 +98,7 @@ poolDetailScene.enter(async (ctx) => {
       parse_mode: "Markdown",
     });
 
-    const poolData = await poolService.getPoolV2(poolAddress, dex);
+    const poolData = await unifiedPoolService.getPool(poolAddress, dex);
 
     ctx.scene.state = {
       pool: poolData,
@@ -142,6 +141,7 @@ poolDetailScene.enter(async (ctx) => {
 poolDetailScene.action("open_position", async (ctx) => {
   await ctx.answerCbQuery();
   const poolAddress = (ctx.scene.state as SceneState).poolAddress;
+  const dex = (ctx.scene.state as SceneState).dex || "meteora";
 
   if (!poolAddress) {
     await ctx.reply(MessageService.getErrorMessage("Pool address not found"));
@@ -150,6 +150,7 @@ poolDetailScene.action("open_position", async (ctx) => {
 
   return ctx.scene.enter(SCENE_IDS.CREATE_POSITION_SCENE, {
     poolAddress,
+    dex,
   });
 });
 
@@ -158,13 +159,16 @@ poolDetailScene.action("refresh_pool_detail", async (ctx) => {
 
   const state = ctx.scene.state as SceneState;
   const poolAddress = state.poolAddress;
+  const dex = state.dex || "meteora";
 
-  if (!poolAddress) {
-    await ctx.reply(MessageService.getErrorMessage("Pool address not found"));
+  if (!poolAddress || !dex) {
+    await ctx.reply(
+      MessageService.getErrorMessage("Pool address or DEX not found")
+    );
     return ctx.scene.leave();
   }
 
-  const poolData = await poolService.getPoolV2(poolAddress);
+  const poolData = await unifiedPoolService.getPool(poolAddress, dex);
   ctx.scene.state = {
     pool: poolData,
     ...ctx.scene.state,

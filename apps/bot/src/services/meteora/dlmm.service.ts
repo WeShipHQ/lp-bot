@@ -331,33 +331,3 @@ export class MeteoraDlmmService {
 }
 
 export const meteoraDlmmService = new MeteoraDlmmService();
-
-function formatComplexObject(obj: any): any {
-  if (obj === null || obj === undefined) return obj;
-
-  if (obj instanceof PublicKey) {
-    return obj.toString();
-  }
-
-  if (obj instanceof BN) {
-    return obj.toString();
-  }
-
-  if (typeof obj === "bigint") {
-    return obj.toString();
-  }
-
-  if (Array.isArray(obj)) {
-    return obj.map((item) => formatComplexObject(item));
-  }
-
-  if (typeof obj === "object") {
-    const formatted: any = {};
-    for (const [key, value] of Object.entries(obj)) {
-      formatted[key] = formatComplexObject(value);
-    }
-    return formatted;
-  }
-
-  return obj;
-}

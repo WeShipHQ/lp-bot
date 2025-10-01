@@ -9,10 +9,11 @@ import {
 import { TrendingPoolsSortCriteria } from "@/types/trending.types";
 import { link } from "../text-formatters";
 import { getPoolDeeplink } from "../misc";
+import { UnifiedPool } from "@/v2";
 
 export class PoolsFormatter extends BaseFormatter {
   static formatTrendingPoolsMessage(
-    pools: Pool[],
+    pools: UnifiedPool[],
     sortBy: TrendingPoolsSortCriteria,
     currentPage: number,
     totalPages: number
@@ -24,13 +25,13 @@ export class PoolsFormatter extends BaseFormatter {
     const poolLines = pools.map((pool, index) => {
       const apy = formatAPR(pool.apy, { cap: 10000 });
 
-      const fee24h = formatPrice(pool.fees.hour24 || 0, { maxDecimals: 3 });
+      const fee24h = formatPrice(pool.fees24h || 0, { maxDecimals: 3 });
       const tvl = formatPrice(Number(pool.tvl || 0), { maxDecimals: 3 });
-      const volume24h = formatPrice(pool.volume.hour24 || 0, {
+      const volume24h = formatPrice(pool.volume24h || 0, {
         maxDecimals: 3,
       });
-      const feeTvlRatio = pool.feeTvlRatio
-        ? formatPercentage(pool.feeTvlRatio.hour24 * 100, { decimals: 4 })
+      const feeTvlRatio = pool.feeTvlRatio24h
+        ? formatPercentage(pool.feeTvlRatio24h * 100, { decimals: 4 })
         : "N/A";
 
       const displayIndex = (page - 1) * 5 + index + 1;

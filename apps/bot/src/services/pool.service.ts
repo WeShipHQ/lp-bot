@@ -147,13 +147,15 @@ export class PoolService {
     poolAddress: string,
     dex: PoolDex = "meteora"
   ): Promise<Pool> {
-    // for now we mainly support DLMM so we only fetch DLMM pool
-    if (dex === "saros") {
-      const dlmmPool = await this.sarosPoolService.getDlmmPool(poolAddress);
-      return SarosAdapter.dlmmPoolDetailToPool(dlmmPool.data);
-    }
-    const dlmmPool = await this.meteoraApiService.getDlmmPool(poolAddress);
-    return this.meteoraAdapter.transformDlmmPool(dlmmPool);
+    // // for now we mainly support DLMM so we only fetch DLMM pool
+    // if (dex === "saros") {
+    //   const dlmmPool = await this.sarosPoolService.getDlmmPool(poolAddress);
+    //   return SarosAdapter.dlmmPoolDetailToPool(dlmmPool.data);
+    // }
+    // const dlmmPool = await this.meteoraApiService.getDlmmPool(poolAddress);
+    // return this.meteoraAdapter.transformDlmmPool(dlmmPool);
+
+    throw new Error(`Unsupported DEX: ${dex}`);
   }
 }
 

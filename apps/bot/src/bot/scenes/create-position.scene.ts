@@ -17,11 +17,11 @@ import {
 } from "../config/constants";
 import { solanaService } from "@/services/solana.service";
 import { positionService } from "@/services/position.service";
-import { Pool } from "@/types/pool.types";
+import { Pool, PoolDex } from "@/types/pool.types";
 import { DISABLE_LINK_PREVIEW } from "../handlers";
 import { Token } from "@/types/token.types";
 import { getSolscanLink } from "@/utils/link";
-import { delay } from "@/utils/misc";
+import { SarosDlmmService } from "@/services/saros/dlmm.service";
 
 type WizardState = {
   step?:
@@ -36,6 +36,7 @@ type WizardState = {
     | "price_change_selection"
     | "confirm";
   poolAddress?: string;
+  dex?: PoolDex;
   poolData?: Pool;
   strategy?: MeteoraCreatePositionStrategy;
   depositMethod?: "sol_auto_convert" | "single_sided";
@@ -193,7 +194,6 @@ function generatePositionSummary(
   return message;
 }
 
-// Add this function before the createPositionScene definition
 async function getPoolTokenBalances(
   walletAddress: string,
   poolData: Pool
@@ -232,16 +232,16 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
   // Step 0: Entry/Welcome & Strategy Selection
   async (ctx) => {
     try {
-      const { poolAddress } = ctx.wizard.state as WizardState;
+      const { poolAddress, dex } = ctx.wizard.state as WizardState;
 
-      if (!poolAddress) {
+      if (!poolAddress || !dex) {
         await ctx.reply(
           MessageService.getErrorMessage("Pool address not found")
         );
         return ctx.scene.leave();
       }
 
-      const poolData = await poolService.getPoolV2(poolAddress);
+      const poolData = await poolService.getPoolV2(poolAddress, dex);
       if (!poolData) {
         await ctx.reply(MessageService.getErrorMessage("Pool not found"));
         return ctx.scene.leave();
@@ -321,7 +321,6 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       await ctx.reply(MessageService.getErrorMessage("Unknown error"));
       return ctx.scene.leave();
     }
-    console.log("xxxxxx nn", depositMethod);
     if (depositMethod !== "single_sided") {
       ctx.wizard.next(); // Skip to amount if SOL auto-convert
       if (typeof ctx.wizard.step === "function") {
@@ -386,10 +385,10 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
 
     // FIXME chekc selected token
 
-    const { tokenABalance, tokenBBalance } = await getPoolTokenBalances(
-      ctx.user.walletAddress!,
-      poolData
-    );
+    // const { tokenABalance, tokenBBalance } = await getPoolTokenBalances(
+    //   ctx.user.walletAddress!,
+    //   poolData
+    // );
 
     const message = generateProgressMessage(
       poolData!,
@@ -427,8 +426,6 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       const { depositMethod, depositSource, selectedToken, poolData } = state;
 
       if (!poolData) {
-        // console.log("selectedToken", selectedToken);
-        // console.log("poolData", poolData);
         await ctx.reply(MessageService.getErrorMessage("Unknown error"));
         return ctx.scene.leave();
       }
@@ -631,11 +628,11 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
   // Step 7: Summary & Final Confirmation
   async (ctx) => {
     const user = ctx.user;
-    const { strategy, amount, percentage, poolData } = ctx.scene
+    const { strategy, amount, percentage, poolData, dex } = ctx.scene
       .state as WizardState;
 
     try {
-      if (!strategy || (!amount && !percentage) || !poolData) {
+      if (!strategy || (!amount && !percentage) || !poolData || !dex) {
         await ctx.reply(MessageService.getErrorMessage("Unknown error"));
         return ctx.scene.leave();
       }
@@ -647,14 +644,26 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
           amount || 0
         );
 
-      const { fromPrice, toPrice } = await meteoraDlmmService.getPriceRange(
-        poolData.address,
-        user.balancedPositionBinRange
-      );
+      let prices = {
+        fromPrice: "0",
+        toPrice: "0",
+      };
+      if (dex === "saros") {
+        const sarosDlmm = new SarosDlmmService();
+        prices = await sarosDlmm.getPriceRange(
+          poolData.address,
+          user.balancedPositionBinRange
+        );
+      } else {
+        prices = await meteoraDlmmService.getPriceRange(
+          poolData.address,
+          user.balancedPositionBinRange
+        );
+      }
 
       const summary = generatePositionSummary(ctx.scene.state, {
-        rangeMin: fromPrice,
-        rangeMax: toPrice,
+        rangeMin: prices.fromPrice,
+        rangeMax: prices.toPrice,
         tokenAAmount,
         tokenBAmount,
       });
@@ -685,7 +694,8 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       { parse_mode: "Markdown" }
     );
 
-    const { strategy, amount, poolData, autoRebalancing } = ctx.scene.state as WizardState;
+    const { strategy, amount, poolData, autoRebalancing } = ctx.scene
+      .state as WizardState;
     if (!poolData || !strategy || !amount || amount <= 0) {
       await ctx.reply(MessageService.getErrorMessage("Unknown error"));
       return ctx.scene.leave();
@@ -697,10 +707,8 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       poolData.address,
       strategy,
       amount,
-      autoRebalancing === 'yes'
+      autoRebalancing === "yes"
     );
-
-    // console.log("state --->", ctx.scene.state);
 
     // await delay(4000);
     // const result = {

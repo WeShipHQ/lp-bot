@@ -11,6 +11,7 @@ import { positionDetailScene } from "./scenes";
 import { poolDetailScene } from "./scenes/pool-detail.scene";
 import { createPositionScene } from "./scenes";
 import { registerGlobalCallbacks } from "./handlers/global-callbacks";
+import { initializeV2Architecture } from "@/v2";
 
 Decimal.set({
   precision: 28, // High precision for financial calculations
@@ -18,6 +19,8 @@ Decimal.set({
   toExpNeg: -18, // Avoid scientific notation for small numbers
   toExpPos: 18, // Avoid scientific notation for large numbers
 });
+
+initializeV2Architecture();
 
 export async function setupBotCommands(
   bot: Telegraf<BotContext>,

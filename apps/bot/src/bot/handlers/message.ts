@@ -1,6 +1,6 @@
-import { inputDetectionService } from "../../services/input-detection.service";
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
+import { unifiedInputDetectionService } from "@/v2";
 
 export async function messageHandler(
   ctx: BotContext,
@@ -13,20 +13,20 @@ export async function messageHandler(
     return await next();
   }
 
-  const detection = inputDetectionService.detectInput(messageText);
+  const detection = unifiedInputDetectionService.detectInput(messageText);
 
   if (!detection) {
     return await next();
   }
 
-  if (detection.type === "address") {
+  if (detection.type === "token") {
     console.warn("implement token detail scene");
     return ctx.reply("Coming soon...");
   } else if (detection.type === "pool") {
-    const { dex, poolType, value } = detection;
+    const { dex, poolType, poolId } = detection;
 
     return ctx.scene.enter(SCENE_IDS.POOL_DETAIL_SCENE, {
-      poolAddress: value,
+      poolAddress: poolId,
       dex,
       poolType,
     });

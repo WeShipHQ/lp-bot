@@ -1,5 +1,8 @@
 import { FastifyInstance } from "fastify";
-import { TRENDING_MESSAGES } from "../constants/trending.constants";
+import {
+  TRENDING_CONSTANTS,
+  TRENDING_MESSAGES,
+} from "../constants/trending.constants";
 import { trendingService } from "@/services/trending.service";
 import {
   getSarosTrendingKeyboard,
@@ -10,10 +13,7 @@ import { BotContext } from "@/types/bot.types";
 import { SELECTED_DEX } from "../config/constants";
 import { PoolsFormatter } from "../utils/messages/pool.formatter";
 import { MessageManager } from "../utils/messages";
-import {
-  PaginatedTrendingPools,
-  TrendingPoolsSortCriteria,
-} from "@/types/trending.types";
+import { TrendingPoolsSortCriteria, unifiedPoolService } from "@/v2";
 
 export async function trendingHandler(
   ctx: BotContext,
@@ -22,56 +22,35 @@ export async function trendingHandler(
   try {
     const loading = await ctx.reply(TRENDING_MESSAGES.FETCHING);
 
-    if (SELECTED_DEX === "saros") {
-      const sortBy = "apy";
-      const poolsResponse = await trendingService.getTrendingPool(1, sortBy);
+    const sortBy: TrendingPoolsSortCriteria = "apy";
+    const poolsResponse = await unifiedPoolService.getTrendingPools(
+      SELECTED_DEX,
+      {
+        page: 1,
+        limit: TRENDING_CONSTANTS.PAGE_SIZE,
+        sortBy,
+        sortOrder: "desc",
+        minTvl: 0,
+        verified: true,
+      }
+    );
 
-      const message = PoolsFormatter.formatTrendingPoolsMessage(
-        poolsResponse.pools,
-        poolsResponse.sortBy,
+    const message = PoolsFormatter.formatTrendingPoolsMessage(
+      poolsResponse.pools,
+      poolsResponse.sortBy,
+      poolsResponse.currentPage,
+      poolsResponse.totalPages
+    );
+
+    return await ctx.reply(message, {
+      parse_mode: "Markdown",
+      link_preview_options: { is_disabled: true },
+      reply_markup: getSarosTrendingKeyboard(
         poolsResponse.currentPage,
+        sortBy,
         poolsResponse.totalPages
-      );
-
-      return await ctx.reply(message, {
-        parse_mode: "Markdown",
-        link_preview_options: { is_disabled: true },
-        reply_markup: getSarosTrendingKeyboard(
-          poolsResponse.currentPage,
-          sortBy,
-          poolsResponse.totalPages
-        ),
-      });
-    } else {
-      const chatId = ctx.chat!.id;
-
-      await trendingService.loadHotPoolsPage(chatId, 0, "tvl");
-
-      const state = trendingService.getState(chatId)!;
-
-      const text = trendingService.formatPoolPage(
-        state.poolItems || [],
-        state.page,
-        state.poolSource!,
-        state.sortBy!
-      );
-
-      const keyboard = getTrendingKeyboard(
-        chatId,
-        state.sortBy!,
-        state.poolSource!
-      );
-
-      const replyResponse = await ctx.reply(text, {
-        parse_mode: "Markdown",
-        link_preview_options: { is_disabled: true },
-        reply_markup: keyboard.reply_markup,
-      });
-
-      trendingService.setMessageId(chatId, replyResponse.message_id);
-
-      await ctx.telegram.deleteMessage(chatId, loading.message_id);
-    }
+      ),
+    });
   } catch (error) {
     console.error("[Trending] Error in handler:", error);
     await ctx.reply(TRENDING_MESSAGES.ERROR_GENERIC);
@@ -289,22 +268,22 @@ export async function handleSarosTrendingCallback(
       }
 
       try {
-        let poolsResponse: PaginatedTrendingPools;
-
-        if (action === "trend") {
-          poolsResponse = await trendingService.getTrendingPool(
-            page,
-            sortBy as TrendingPoolsSortCriteria
-          );
-        } else if (action === "refresh") {
-          poolsResponse = await trendingService.getTrendingPool(
-            page,
-            sortBy as TrendingPoolsSortCriteria
-          );
-        } else {
+        if (action !== "trend" && action !== "refresh") {
           await ctx.answerCbQuery("❌ Invalid action.");
           return;
         }
+
+        const poolsResponse = await unifiedPoolService.getTrendingPools(
+          SELECTED_DEX,
+          {
+            page: page,
+            limit: TRENDING_CONSTANTS.PAGE_SIZE,
+            sortBy: sortBy as TrendingPoolsSortCriteria,
+            sortOrder: "desc",
+            minTvl: 0,
+            verified: true,
+          }
+        );
 
         const message = PoolsFormatter.formatTrendingPoolsMessage(
           poolsResponse.pools,

@@ -197,8 +197,6 @@ async function renderPortfolioPosition(
     : context.reply(text, extra);
 }
 
-// -------- Entry command: /portfolio --------
-
 export async function portfolioHandler(ctx: BotContext) {
   const loadingMessage = await ctx.reply("Loading Portfolio...", {
     parse_mode: "Markdown",

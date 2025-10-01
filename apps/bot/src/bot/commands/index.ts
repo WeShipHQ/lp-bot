@@ -18,7 +18,7 @@ export function registerCommands(
 ) {
   startCommand(bot, server);
   helpCommand(bot, server);
-  portfolioCommand(bot, server);
+  portfolioCommand(bot);
   walletCommand(bot, server);
   trendingCommand(bot, server);
   twoFactorAuthCommand(bot, server);

@@ -91,12 +91,10 @@ export interface RebalanceResult {
 
 export class PositionService {
   private jupiterService: JupiterService;
-  // private jobQueueService: JobQueueService;
   private tokenPriceService: TokenPriceService;
   private tokenAdapter: TokenAdapter;
 
   constructor() {
-    // this.jobQueueService = new JobQueueService();
     this.jupiterService = new JupiterService();
     this.tokenPriceService = new TokenPriceService();
     this.tokenAdapter = new TokenAdapter();
@@ -125,6 +123,86 @@ export class PositionService {
 
       // Get pool information
       const poolInfo = await poolService.getPoolV2(poolAddress);
+      if (!poolInfo) {
+        throw new Error("Pool not found");
+      }
+
+      const { strategy } = this.getMeteoraStrategy(selectedStrategy);
+      const halfAmount = amount / 2;
+      const halfAmountLamports = (halfAmount * 1e9).toString();
+
+      logger.debug(`[Position] Starting SOL to Token A & B conversions...`);
+
+      // Swap SOL to tokens in parallel
+      const [tokenAAmount, tokenBAmount] = await Promise.all([
+        this.swapSolToToken(user, poolInfo.tokenA.address, halfAmountLamports),
+        this.swapSolToToken(user, poolInfo.tokenB.address, halfAmountLamports),
+      ]);
+
+      if (tokenAAmount.isZero() || tokenBAmount.isZero()) {
+        throw new Error("Failed to convert SOL to tokens");
+      }
+
+      // Create position on blockchain
+      const positionKp = Keypair.generate();
+      const { instructions } = await meteoraDlmmService.createPositionIx(
+        positionKp.publicKey,
+        new PublicKey(poolAddress),
+        new PublicKey(user.walletAddress!),
+        tokenAAmount,
+        tokenBAmount,
+        strategy,
+        user.balancedPositionBinRange
+      );
+
+      const signature = await WalletService.signAndSendTransaction(
+        user,
+        instructions,
+        [positionKp]
+      );
+
+      // Queue background processing for database operations
+      await this.handlePositionCreatedV1(
+        user,
+        amount,
+        autoRebalancing,
+        signature,
+        positionKp.publicKey.toString()
+      );
+
+      return {
+        success: true,
+        transactionId: signature,
+        positionId: positionKp.publicKey.toString(),
+      };
+    } catch (error) {
+      logger.error(`[Position] Error creating position:`, error);
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to create position",
+      };
+    }
+  }
+
+  async createBalancedPositionOnSaros(
+    user: User,
+    poolAddress: string,
+    selectedStrategy: MeteoraCreatePositionStrategy,
+    enteredAmount: number,
+    autoRebalancing: boolean
+  ): Promise<PositionCreationResult> {
+    try {
+      logger.info(
+        `[Position] Creating ${selectedStrategy} position for user ${user.id}`
+      );
+
+      // Calculate fee and net amount
+      const feeAmount = enteredAmount * (OPEN_POSITION_FEE / 100);
+      const amount = enteredAmount - feeAmount;
+
+      // Get pool information
+      const poolInfo = await poolService.getPoolV2(poolAddress, 'saros');
       if (!poolInfo) {
         throw new Error("Pool not found");
       }
