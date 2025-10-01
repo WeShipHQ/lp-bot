@@ -239,47 +239,56 @@ export async function createSmartTransaction(
         })
   );
 
-  // Get priority fee estimate
-  let priorityFeeResponse;
-  if (
-    connection.rpcEndpoint.includes("devnet") ||
-    connection.rpcEndpoint.includes("testnet")
-  ) {
-    // For devnet, we use a fixed priority fee
-    priorityFeeResponse = {
-      priorityFeeEstimate: 1000, // 0.001 SOL
-      priorityFeeCap: 1000, // 0.001 SOL
-    } as GetPriorityFeeEstimateResponse;
-  } else {
-    priorityFeeResponse = await getPriorityFeeEstimate(connection, {
-      transaction: serializedTransaction,
-      options: { priorityLevel: PriorityLevel.VERY_HIGH },
-    });
-  }
-
-  console.log("priorityFeeResponse", priorityFeeResponse);
-
-  const { priorityFeeEstimate } = priorityFeeResponse;
-
-  if (!priorityFeeEstimate) {
-    throw new Error("Priority fee estimate not available");
-  }
-
-  // Adjust priority fee based on the cap
-  let adjustedPriorityFee = priorityFeeEstimate;
-
-  if (priorityFeeCap !== undefined) {
-    adjustedPriorityFee = Math.min(priorityFeeEstimate, priorityFeeCap);
-  }
-
-  const computeBudgetPriceIx = ComputeBudgetProgram.setComputeUnitPrice({
-    microLamports: adjustedPriorityFee,
-  });
-  instructions.unshift(computeBudgetPriceIx);
-
-  const existingComputeBudgetInstructions = instructions.filter((instruction) =>
-    instruction.programId.equals(ComputeBudgetProgram.programId)
+  const existingComputeBudgetInstructions = instructions.filter(
+    (instruction) =>
+      instruction.programId.toBase58() ===
+      ComputeBudgetProgram.programId.toBase58()
   );
+
+  console.log(
+    "existingComputeBudgetInstructions",
+    existingComputeBudgetInstructions.length
+  );
+
+  if (existingComputeBudgetInstructions.length === 0) {
+    // Get priority fee estimate
+    let priorityFeeResponse;
+    if (
+      connection.rpcEndpoint.includes("devnet") ||
+      connection.rpcEndpoint.includes("testnet")
+    ) {
+      // For devnet, we use a fixed priority fee
+      priorityFeeResponse = {
+        priorityFeeEstimate: 1000, // 0.001 SOL
+        priorityFeeCap: 1000, // 0.001 SOL
+      } as GetPriorityFeeEstimateResponse;
+    } else {
+      priorityFeeResponse = await getPriorityFeeEstimate(connection, {
+        transaction: serializedTransaction,
+        options: { priorityLevel: PriorityLevel.MEDIUM },
+      });
+    }
+
+    console.log("priorityFeeResponse", priorityFeeResponse);
+
+    const { priorityFeeEstimate } = priorityFeeResponse;
+
+    if (!priorityFeeEstimate) {
+      throw new Error("Priority fee estimate not available");
+    }
+
+    // Adjust priority fee based on the cap
+    let adjustedPriorityFee = priorityFeeEstimate;
+
+    if (priorityFeeCap !== undefined) {
+      adjustedPriorityFee = Math.min(priorityFeeEstimate, priorityFeeCap);
+    }
+
+    const computeBudgetPriceIx = ComputeBudgetProgram.setComputeUnitPrice({
+      microLamports: adjustedPriorityFee,
+    });
+    instructions.unshift(computeBudgetPriceIx);
+  }
 
   // if (existingComputeBudgetInstructions.length > 0) {
   //   throw new Error(
@@ -306,6 +315,8 @@ export async function createSmartTransaction(
       // );
       // units = 800_000;
     }
+
+    // const units = 600_000;
 
     // For very small transactions, default to 1,000 CUs; otherwise, add a 10% margin
     const customersCU = units < 1000 ? 1000 : Math.ceil(units * 1.1);
@@ -338,6 +349,13 @@ export async function createSmartTransaction(
 
   // Use the wallet adapter's signTransaction function to sign the tx
   // const signedTransaction = await signTransaction(transaction);
+  console.log(
+    "checl ix again",
+    (transaction as Transaction).instructions.map((ix) => ({
+      programId: ix.programId.toBase58(),
+      data: ix.data.toString("base64"),
+    }))
+  );
 
   return {
     transaction,

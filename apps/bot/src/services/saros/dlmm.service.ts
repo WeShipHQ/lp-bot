@@ -1,16 +1,10 @@
 import {
-  BIN_STEP_CONFIGS,
   LiquidityBookServices,
   LiquidityShape,
   MODE,
   BASIS_POINT_MAX,
   ONE,
   SCALE_OFFSET,
-  getMaxPosition,
-  createUniformDistribution,
-  getMaxBinArray,
-  getBinRange,
-  findPosition,
   type PairInfo,
   type PositionInfo,
   BIN_ARRAY_SIZE,
@@ -18,18 +12,10 @@ import {
 import { utils } from "@coral-xyz/anchor";
 import * as spl from "@solana/spl-token";
 
-import {
-  Connection,
-  Keypair,
-  PublicKey,
-  Transaction,
-  TransactionInstruction,
-} from "@solana/web3.js";
-import BN from "bn.js";
+import { Keypair, PublicKey, Transaction } from "@solana/web3.js";
 import { CONFIG } from "@/config";
 import Decimal from "decimal.js";
 import { JupiterService } from "../jupiter.service";
-import { Token } from "@/types/token.types";
 import { SarosPoolPosition } from "./types";
 
 const getBase = (binStep: number) => {
@@ -61,39 +47,6 @@ const getPriceFromId = (
   return Math.pow(base, exponent) * decimalPow;
 };
 
-const getIdFromPrice = (
-  price: number,
-  binStep: number,
-  baseTokenDecimal: number,
-  quoteTokenDecimal: number
-): number => {
-  if (price <= 0) throw new Error("Giá phải lớn hơn 0");
-  if (binStep <= 0 || binStep > BASIS_POINT_MAX)
-    throw new Error("Bin step invalid");
-
-  const decimalPow = Math.pow(10, quoteTokenDecimal - baseTokenDecimal);
-
-  const base = 1 + binStep / BASIS_POINT_MAX;
-  const exponent = Math.log(price * decimalPow) / Math.log(base);
-  const binId = Math.round(exponent + 8_388_608);
-
-  return binId;
-};
-
-const convertBalanceToWei = (strValue: number, iDecimal: number = 9) => {
-  if (strValue === 0) return 0;
-
-  try {
-    const multiplyNum = new Decimal(Math.pow(10, iDecimal));
-    const convertValue = new Decimal(Number(strValue));
-    const result = multiplyNum.mul(convertValue);
-
-    return result;
-  } catch {
-    return new Decimal(0);
-  }
-};
-
 export class SarosDlmmService {
   private poolCache = new Map<
     string,
@@ -118,6 +71,9 @@ export class SarosDlmmService {
 
     const liquidityBookServices = new LiquidityBookServices({
       mode: MODE.MAINNET,
+      options: {
+        rpcUrl: CONFIG.SOLANA.RPC_URL,
+      },
     });
 
     // Cache the instance
@@ -174,215 +130,74 @@ export class SarosDlmmService {
   }
 
   async createPositionIx(
-    positionAddress: PublicKey,
     poolAddress: PublicKey,
     userPublicKey: PublicKey,
-    // tokenX: Token,
-    // tokenY: Token,
     totalXAmount: Decimal,
     totalYAmount: Decimal,
     strategy: LiquidityShape,
     rangeInterval: number
   ): Promise<{
-    instructions: TransactionInstruction[];
+    positionMint: Keypair;
+    createPositionTx: Transaction;
+    addLiquidityTx: Transaction;
   }> {
-    const liquidityBookServices = await this.createInstance(poolAddress);
-
-    const positions = await liquidityBookServices.getUserPositions({
-      payer: userPublicKey,
-      pair: poolAddress,
+    const liquidityBookServices = new LiquidityBookServices({
+      mode: MODE.MAINNET,
+      options: {
+        rpcUrl: CONFIG.SOLANA.RPC_URL,
+      },
     });
 
-    console.log("pos", positions.length);
+    const payer = new PublicKey(userPublicKey);
+    const pair = new PublicKey(poolAddress);
 
-    const pairInfo: PairInfo =
-      await liquidityBookServices.getPairAccount(poolAddress);
-    const activeBin = pairInfo.activeId as number;
-    const binRange = [activeBin - rangeInterval, activeBin + rangeInterval] as [
-      number,
-      number,
-    ];
+    const pairInfo: PairInfo = await liquidityBookServices.getPairAccount(pair);
+    const activeBin = pairInfo.activeId;
+    const relativeBinIdLeft = activeBin - rangeInterval;
+    const relativeBinIdRight = activeBin + rangeInterval;
 
-    const maxPositionList = getMaxPosition(
-      [binRange[0], binRange[1]],
-      activeBin
-    );
+    const positionMint = Keypair.generate();
 
-    const maxLiqDistribution = createUniformDistribution({
-      shape: strategy,
-      binRange,
+    const createPosTran = new Transaction();
+
+    const { position } = await liquidityBookServices.createPosition({
+      payer,
+      relativeBinIdLeft,
+      relativeBinIdRight,
+      pair,
+      binArrayIndex: 0,
+      positionMint: positionMint.publicKey,
+      transaction: createPosTran as any,
     });
 
-    const binArrayList = getMaxBinArray(binRange, activeBin);
-
-    const allTxs: Transaction[] = [];
-    const txsCreatePosition: Transaction[] = [];
-
-    const initialTransaction: any = new Transaction();
-
-    await Promise.all(
-      binArrayList.map(async (item) => {
-        await liquidityBookServices.getBinArray({
-          binArrayIndex: item.binArrayLowerIndex,
-          pair: poolAddress,
-          payer: userPublicKey,
-          transaction: initialTransaction,
-        });
-
-        await liquidityBookServices.getBinArray({
-          binArrayIndex: item.binArrayUpperIndex,
-          pair: poolAddress,
-          payer: userPublicKey,
-          transaction: initialTransaction,
-        });
-      })
+    const [binArrayLowerPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("bin_array"), pair.toBuffer(), Buffer.from([0])],
+      liquidityBookServices.lbProgram.programId
     );
 
-    await Promise.all(
-      [pairInfo.tokenMintX, pairInfo.tokenMintY].map(async (token) => {
-        await liquidityBookServices.getPairVaultInfo({
-          payer: userPublicKey,
-          transaction: initialTransaction,
-          tokenAddress: token,
-          pair: poolAddress,
-        });
-        await liquidityBookServices.getUserVaultInfo({
-          payer: userPublicKey,
-          tokenAddress: token,
-          transaction: initialTransaction,
-        });
-      })
+    const [binArrayUpperPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("bin_array"), pair.toBuffer(), Buffer.from([1])],
+      liquidityBookServices.lbProgram.programId
     );
 
-    const connection = liquidityBookServices.connection;
+    const addLidTran = new Transaction();
 
-    const { blockhash, lastValidBlockHeight } =
-      await connection.getLatestBlockhash();
-
-    let currentBlockhash = blockhash;
-    let currentLastValidBlockHeight = lastValidBlockHeight;
-
-    if (initialTransaction.instructions.length > 0) {
-      initialTransaction.recentBlockhash = currentBlockhash;
-      initialTransaction.feePayer = userPublicKey;
-      allTxs.push(initialTransaction);
-    }
-
-    const maxLiquidityDistributions = await Promise.all(
-      maxPositionList.map(async (item) => {
-        const {
-          range: relativeBinRange,
-          binLower,
-          binUpper,
-        } = getBinRange(item, activeBin);
-        const currentPosition = positions.find(findPosition(item, activeBin));
-
-        const findStartIndex = maxLiqDistribution.findIndex(
-          (item) => item.relativeBinId === relativeBinRange[0]
-        );
-        const startIndex = findStartIndex === -1 ? 0 : findStartIndex;
-
-        const findEndIndex = maxLiqDistribution.findIndex(
-          (item) => item.relativeBinId === relativeBinRange[1]
-        );
-        const endIndex =
-          findEndIndex === -1 ? maxLiqDistribution.length : findEndIndex + 1;
-
-        const liquidityDistribution = maxLiqDistribution.slice(
-          startIndex,
-          endIndex
-        );
-
-        const binArray = binArrayList.find(
-          (item) =>
-            item.binArrayLowerIndex * 256 <= binLower &&
-            (item.binArrayUpperIndex + 1) * 256 > binUpper
-        )!;
-
-        const binArrayLower = await liquidityBookServices.getBinArray({
-          binArrayIndex: binArray.binArrayLowerIndex,
-          pair: poolAddress,
-          payer: userPublicKey,
-        });
-        const binArrayUpper = await liquidityBookServices.getBinArray({
-          binArrayIndex: binArray.binArrayUpperIndex,
-          pair: poolAddress,
-          payer: userPublicKey,
-        });
-
-        if (!currentPosition) {
-          const transaction: any = new Transaction();
-
-          const positionMint = Keypair.generate();
-
-          const { position } = await liquidityBookServices.createPosition({
-            pair: poolAddress,
-            payer: userPublicKey,
-            relativeBinIdLeft: relativeBinRange[0],
-            relativeBinIdRight: relativeBinRange[1],
-            binArrayIndex: binArray.binArrayLowerIndex,
-            positionMint: positionMint.publicKey,
-            transaction,
-          });
-          transaction.feePayer = userPublicKey;
-          transaction.recentBlockhash = currentBlockhash;
-
-          transaction.sign(positionMint);
-
-          txsCreatePosition.push(transaction);
-          allTxs.push(transaction);
-
-          return {
-            positionMint: positionMint.publicKey.toString(),
-            position,
-            liquidityDistribution,
-            binArrayLower: binArrayLower.toString(),
-            binArrayUpper: binArrayUpper.toString(),
-          };
-        }
-
-        return {
-          positionMint: currentPosition.positionMint,
-          liquidityDistribution,
-          binArrayLower: binArrayLower.toString(),
-          binArrayUpper: binArrayUpper.toString(),
-        };
-      })
-    );
-
-    const txsAddLiquidity = await Promise.all(
-      maxLiquidityDistributions.map(async (item) => {
-        const {
-          binArrayLower,
-          binArrayUpper,
-          liquidityDistribution,
-          positionMint,
-        } = item;
-
-        const transaction: any = new Transaction();
-
-        await liquidityBookServices.addLiquidityIntoPosition({
-          amountX: Number(convertBalanceToWei(10, 6)),
-          amountY: Number(convertBalanceToWei(10, 6)),
-          binArrayLower: new PublicKey(binArrayLower),
-          binArrayUpper: new PublicKey(binArrayUpper),
-          liquidityDistribution,
-          pair: poolAddress,
-          positionMint: new PublicKey(positionMint),
-          payer: userPublicKey,
-          transaction,
-        });
-
-        transaction.recentBlockhash = currentBlockhash;
-        transaction.feePayer = userPublicKey;
-
-        allTxs.push(transaction);
-        return transaction;
-      })
-    );
+    await liquidityBookServices.addLiquidityIntoPosition({
+      positionMint: positionMint.publicKey,
+      payer,
+      pair,
+      transaction: addLidTran as any,
+      liquidityDistribution: [],
+      amountX: totalXAmount.toNumber(),
+      amountY: totalYAmount.toNumber(),
+      binArrayLower: binArrayLowerPda,
+      binArrayUpper: binArrayUpperPda,
+    });
 
     return {
-      instructions: [], //createPositionTx.instructions,
+      positionMint: positionMint,
+      createPositionTx: createPosTran,
+      addLiquidityTx: addLidTran,
     };
   }
 
@@ -437,6 +252,11 @@ export class SarosDlmmService {
 
     const validPositions = positions.filter(
       (pos): pos is PositionInfo => pos !== null
+    );
+
+    console.log(
+      "validPositions",
+      validPositions.map((pos) => pos.position)
     );
 
     const positionsByPair = validPositions.reduce(
