@@ -1,6 +1,5 @@
 import {
   AddressLookupTableAccount,
-  Blockhash,
   BlockhashWithExpiryBlockHeight,
   ComputeBudgetProgram,
   Connection,
@@ -290,12 +289,6 @@ export async function createSmartTransaction(
     instructions.unshift(computeBudgetPriceIx);
   }
 
-  // if (existingComputeBudgetInstructions.length > 0) {
-  //   throw new Error(
-  //     "Cannot provide instructions that set the compute unit price and/or limit"
-  //   );
-  // }
-
   if (existingComputeBudgetInstructions.length === 0) {
     // Simulate the tx to get the CUs consumed
     let units = await getComputeUnits(
@@ -310,13 +303,7 @@ export async function createSmartTransaction(
       throw new Error(
         "Error fetching compute units for the instructions provided"
       );
-      // console.warn(
-      //   "Error fetching compute units for the instructions provided, defaulting to 1_400_000"
-      // );
-      // units = 800_000;
     }
-
-    // const units = 600_000;
 
     // For very small transactions, default to 1,000 CUs; otherwise, add a 10% margin
     const customersCU = units < 1000 ? 1000 : Math.ceil(units * 1.1);
@@ -346,16 +333,6 @@ export async function createSmartTransaction(
       transaction.partialSign(...signers);
     }
   }
-
-  // Use the wallet adapter's signTransaction function to sign the tx
-  // const signedTransaction = await signTransaction(transaction);
-  console.log(
-    "checl ix again",
-    (transaction as Transaction).instructions.map((ix) => ({
-      programId: ix.programId.toBase58(),
-      data: ix.data.toString("base64"),
-    }))
-  );
 
   return {
     transaction,

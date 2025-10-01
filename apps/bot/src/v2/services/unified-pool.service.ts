@@ -7,13 +7,7 @@ import {
   PaginatedTrendingPools,
 } from "../types/core.types";
 
-/**
- * Unified service for pool operations across all DEXes
- */
 export class UnifiedPoolService {
-  /**
-   * Get pool details from any supported DEX
-   */
   async getPool(poolId: string, dexType: DexType): Promise<UnifiedPool> {
     try {
       const adapter = dexRegistry.get(dexType);
@@ -28,9 +22,6 @@ export class UnifiedPoolService {
     }
   }
 
-  /**
-   * Get trending pools from a specific DEX
-   */
   async getTrendingPools(
     dexType: DexType,
     params?: TrendingParams
@@ -48,9 +39,6 @@ export class UnifiedPoolService {
     }
   }
 
-  /**
-   * Get trending pools from all enabled DEXes
-   */
   async getAllTrendingPools(params?: TrendingParams): Promise<{
     pools: UnifiedPool[];
     dexBreakdown: Record<DexType, UnifiedPool[]>;
@@ -90,9 +78,6 @@ export class UnifiedPoolService {
     };
   }
 
-  /**
-   * Search pools across all DEXes
-   */
   async searchPools(
     query: string,
     dexTypes?: DexType[]
@@ -128,9 +113,6 @@ export class UnifiedPoolService {
     };
   }
 
-  /**
-   * Parse pool URL and get pool details
-   */
   async getPoolFromUrl(url: string): Promise<UnifiedPool | null> {
     const parseResult = dexRegistry.parseUrl(url);
     if (!parseResult) {
@@ -145,9 +127,6 @@ export class UnifiedPoolService {
     }
   }
 
-  /**
-   * Get pools for a specific token across all DEXes
-   */
   async getPoolsForToken(tokenAddress: string): Promise<{
     pools: UnifiedPool[];
     dexBreakdown: Record<DexType, UnifiedPool[]>;

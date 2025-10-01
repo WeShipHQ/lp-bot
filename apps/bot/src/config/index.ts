@@ -6,9 +6,7 @@ export const CONFIG = {
   PORT: parseInt(process.env.PORT || "3000", 10),
   NODE_ENV: process.env.NODE_ENV || "development",
 
-  DATABASE_URL:
-    process.env.DATABASE_URL ||
-    "postgresql://postgres:postgres@localhost:5432/meteora_bot",
+  DATABASE_URL: process.env.DATABASE_URL!,
 
   TELEGRAM: {
     BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || "",
@@ -30,34 +28,9 @@ export const CONFIG = {
 
   REDIS: {
     URL: process.env.REDIS_URL || "redis://localhost:6379",
-    // HOST: process.env.REDIS_HOST || "localhost",
-    // PORT: parseInt(process.env.REDIS_PORT || "6379", 10),
-    // PASSWORD: process.env.REDIS_PASSWORD || "",
   },
 
-  // ENCRYPTION_KEY: process.env.ENCRYPTION_KEY || "",
-
-  // REBALANCING: {
-  //   ENABLED: true,
-  //   INTERVAL_MINUTES: parseInt(
-  //     process.env.REBALANCE_INTERVAL_MINUTES || "60",
-  //     10
-  //   ),
-  //   DEFAULT_THRESHOLD: parseFloat(
-  //     process.env.DEFAULT_REBALANCE_THRESHOLD || "5.0"
-  //   ),
-  //   MAX_GAS_PRICE_SOL: parseFloat(process.env.MAX_GAS_PRICE_SOL || "0.01"),
-  // },
-
   LOG_LEVEL: process.env.LOG_LEVEL || "debug",
-
-  // RATE_LIMIT: {
-  //   WINDOW_MS: parseInt(process.env.RATE_LIMIT_WINDOW_MS || "60000", 10),
-  //   MAX_REQUESTS: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || "100", 10),
-  // },
-
-  // JWT_SECRET: process.env.JWT_SECRET || "",
-  // CORS_ORIGIN: process.env.CORS_ORIGIN || "*",
 };
 
 export const {
@@ -67,10 +40,5 @@ export const {
   TELEGRAM,
   SOLANA,
   REDIS,
-  // REBALANCING,
   LOG_LEVEL,
-  // SENTRY_DSN,
-  // RATE_LIMIT,
-  // JWT_SECRET,
-  // CORS_ORIGIN,
 } = CONFIG;

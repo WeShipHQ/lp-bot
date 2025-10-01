@@ -1,15 +1,17 @@
-import { 
-  MessageTemplate, 
-  FormattedMessage, 
-  ValidationResult, 
+import {
+  FormattedMessage,
+  ValidationResult,
   MessageFormatter,
   MessageConfig,
-  MessageVariables 
-} from '../types/messages.types';
+  MessageVariables,
+} from "../types/messages.types";
 
 export class TemplateEngine implements MessageFormatter {
   private static instance: TemplateEngine;
-  private templateCache = new Map<string, (variables: Record<string, any>) => string>();
+  private templateCache = new Map<
+    string,
+    (variables: Record<string, any>) => string
+  >();
 
   static getInstance(): TemplateEngine {
     if (!TemplateEngine.instance) {
@@ -34,7 +36,7 @@ export class TemplateEngine implements MessageFormatter {
     try {
       return compiledTemplate(variables);
     } catch (error) {
-      console.error('Template formatting error:', error);
+      console.error("Template formatting error:", error);
       return template; // Return original template on error
     }
   }
@@ -42,14 +44,17 @@ export class TemplateEngine implements MessageFormatter {
   /**
    * Validate template and variables
    */
-  validate(template: string, variables: Record<string, any> = {}): ValidationResult {
+  validate(
+    template: string,
+    variables: Record<string, any> = {}
+  ): ValidationResult {
     const errors: string[] = [];
     const missingVariables: string[] = [];
 
     // Find all variable placeholders
     const variableMatches = template.match(/\{([^}]+)\}/g) || [];
-    const requiredVariables = variableMatches.map(match => 
-      match.slice(1, -1).split('|')[0].trim()
+    const requiredVariables = variableMatches.map((match) =>
+      match.slice(1, -1).split("|")[0].trim()
     );
 
     // Check for missing variables
@@ -61,42 +66,50 @@ export class TemplateEngine implements MessageFormatter {
 
     // Check for circular references
     if (this.hasCircularReferences(template, variables)) {
-      errors.push('Circular reference detected in template variables');
+      errors.push("Circular reference detected in template variables");
     }
 
     return {
       isValid: errors.length === 0 && missingVariables.length === 0,
       missingVariables,
-      errors
+      errors,
     };
   }
 
   /**
    * Render a complete message configuration
    */
-  renderMessage(config: MessageConfig, variables: MessageVariables = {}): FormattedMessage {
+  renderMessage(
+    config: MessageConfig,
+    variables: MessageVariables = {}
+  ): FormattedMessage {
     let text: string;
 
     if (config.template) {
-      text = this.format(config.template, { ...config.variables, ...variables });
+      text = this.format(config.template, {
+        ...config.variables,
+        ...variables,
+      });
     } else if (config.text) {
       text = config.text;
     } else {
-      throw new Error('Message config must have either text or template');
+      throw new Error("Message config must have either text or template");
     }
 
     return {
       text,
       parseMode: config.parseMode,
       disableWebPagePreview: config.disableWebPagePreview,
-      disableNotification: config.disableNotification
+      disableNotification: config.disableNotification,
     };
   }
 
   /**
    * Compile template into a function for better performance
    */
-  private compileTemplate(template: string): (variables: Record<string, any>) => string {
+  private compileTemplate(
+    template: string
+  ): (variables: Record<string, any>) => string {
     return (variables: Record<string, any>) => {
       return template.replace(/\{([^}]+)\}/g, (match, expression) => {
         try {
@@ -116,16 +129,19 @@ export class TemplateEngine implements MessageFormatter {
    * - Formatters: {amount|currency}
    * - Conditional: {hasWallet ? walletInfo : 'No wallet'}
    */
-  private evaluateExpression(expression: string, variables: Record<string, any>): string {
+  private evaluateExpression(
+    expression: string,
+    variables: Record<string, any>
+  ): string {
     // Handle formatters (e.g., {amount|currency})
-    if (expression.includes('|')) {
-      const [varPath, formatter] = expression.split('|').map(s => s.trim());
+    if (expression.includes("|")) {
+      const [varPath, formatter] = expression.split("|").map((s) => s.trim());
       const value = this.getNestedValue(variables, varPath);
       return this.applyFormatter(value, formatter);
     }
 
     // Handle conditional expressions (e.g., {hasWallet ? walletInfo : 'No wallet'})
-    if (expression.includes('?')) {
+    if (expression.includes("?")) {
       return this.evaluateConditional(expression, variables);
     }
 
@@ -138,7 +154,7 @@ export class TemplateEngine implements MessageFormatter {
    * Get nested value from object using dot notation
    */
   private getNestedValue(obj: Record<string, any>, path: string): any {
-    return path.split('.').reduce((current, key) => {
+    return path.split(".").reduce((current, key) => {
       return current && current[key] !== undefined ? current[key] : undefined;
     }, obj);
   }
@@ -148,27 +164,27 @@ export class TemplateEngine implements MessageFormatter {
    */
   private applyFormatter(value: any, formatter: string): string {
     if (value === undefined || value === null) {
-      return '';
+      return "";
     }
 
     switch (formatter.toLowerCase()) {
-      case 'currency':
+      case "currency":
         return this.formatCurrency(Number(value));
-      case 'percentage':
+      case "percentage":
         return this.formatPercentage(Number(value));
-      case 'number':
+      case "number":
         return this.formatNumber(Number(value));
-      case 'date':
+      case "date":
         return this.formatDate(value);
-      case 'relative':
+      case "relative":
         return this.formatRelativeTime(value);
-      case 'address':
+      case "address":
         return this.formatAddress(String(value));
-      case 'upper':
+      case "upper":
         return String(value).toUpperCase();
-      case 'lower':
+      case "lower":
         return String(value).toLowerCase();
-      case 'capitalize':
+      case "capitalize":
         return this.capitalize(String(value));
       default:
         return String(value);
@@ -178,21 +194,27 @@ export class TemplateEngine implements MessageFormatter {
   /**
    * Evaluate conditional expressions
    */
-  private evaluateConditional(expression: string, variables: Record<string, any>): string {
-    const [condition, rest] = expression.split('?').map(s => s.trim());
-    const [trueValue, falseValue] = rest.split(':').map(s => s.trim());
+  private evaluateConditional(
+    expression: string,
+    variables: Record<string, any>
+  ): string {
+    const [condition, rest] = expression.split("?").map((s) => s.trim());
+    const [trueValue, falseValue] = rest.split(":").map((s) => s.trim());
 
     const conditionResult = this.evaluateCondition(condition, variables);
     const selectedValue = conditionResult ? trueValue : falseValue;
 
     // Remove quotes if present
-    return selectedValue.replace(/^['"]|['"]$/g, '');
+    return selectedValue.replace(/^['"]|['"]$/g, "");
   }
 
   /**
    * Evaluate condition for conditional expressions
    */
-  private evaluateCondition(condition: string, variables: Record<string, any>): boolean {
+  private evaluateCondition(
+    condition: string,
+    variables: Record<string, any>
+  ): boolean {
     // Simple existence check
     const value = this.getNestedValue(variables, condition);
     return Boolean(value);
@@ -201,17 +223,22 @@ export class TemplateEngine implements MessageFormatter {
   /**
    * Check for circular references in template variables
    */
-  private hasCircularReferences(template: string, variables: Record<string, any>): boolean {
+  private hasCircularReferences(
+    template: string,
+    variables: Record<string, any>
+  ): boolean {
     // Simple circular reference detection
     // In a production system, this would be more sophisticated
     const variableNames = Object.keys(variables);
-    const templateVars = (template.match(/\{([^}]+)\}/g) || [])
-      .map(match => match.slice(1, -1).split('|')[0].trim());
+    const templateVars = (template.match(/\{([^}]+)\}/g) || []).map((match) =>
+      match.slice(1, -1).split("|")[0].trim()
+    );
 
-    return templateVars.some(templateVar => 
-      variableNames.includes(templateVar) && 
-      typeof variables[templateVar] === 'string' &&
-      variables[templateVar].includes(`{${templateVar}}`)
+    return templateVars.some(
+      (templateVar) =>
+        variableNames.includes(templateVar) &&
+        typeof variables[templateVar] === "string" &&
+        variables[templateVar].includes(`{${templateVar}}`)
     );
   }
 
@@ -247,7 +274,7 @@ export class TemplateEngine implements MessageFormatter {
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
 
-    if (diffMins < 1) return 'just now';
+    if (diffMins < 1) return "just now";
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     return `${diffDays}d ago`;
@@ -275,7 +302,7 @@ export class TemplateEngine implements MessageFormatter {
   getCacheStats(): { size: number; keys: string[] } {
     return {
       size: this.templateCache.size,
-      keys: Array.from(this.templateCache.keys())
+      keys: Array.from(this.templateCache.keys()),
     };
   }
 }

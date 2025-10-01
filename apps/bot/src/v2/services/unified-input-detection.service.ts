@@ -1,5 +1,5 @@
 import { dexRegistry } from "./dex-registry.service";
-import { DexType, UrlParseResult } from "../types/core.types";
+import { DexType } from "../types/core.types";
 
 export interface InputDetectionResult {
   type: "pool" | "token" | "unknown";

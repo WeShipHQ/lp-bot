@@ -11,10 +11,6 @@ import {
   UrlParseResult,
 } from "../types/core.types";
 
-/**
- * Base interface that all DEX adapters must implement
- * This provides a unified API across all supported DEXes
- */
 export interface IDexAdapter {
   readonly dexType: DexType;
   readonly name: string;
@@ -47,19 +43,16 @@ export interface IDexAdapter {
   isHealthy(): Promise<boolean>;
 }
 
-/**
- * Optional interface for DEXes that support advanced features
- */
 export interface IAdvancedDexAdapter extends IDexAdapter {
   // Advanced position management
   getPositionHistory(positionAddress: string): Promise<any[]>;
   getPositionAnalytics(positionAddress: string): Promise<any>;
-  
+
   // Yield farming
   getYieldFarms(): Promise<any[]>;
   stakeInFarm(farmId: string, amount: string): Promise<TransactionResult>;
   unstakeFromFarm(farmId: string, amount: string): Promise<TransactionResult>;
-  
+
   // Advanced pool features
   getPoolAnalytics(poolId: string): Promise<any>;
   getPoolHistory(poolId: string): Promise<any[]>;

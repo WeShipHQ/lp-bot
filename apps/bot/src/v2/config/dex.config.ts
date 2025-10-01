@@ -1,8 +1,5 @@
 import { DexType } from "../types/core.types";
 
-/**
- * Configuration for DEX adapters
- */
 export interface DexConfig {
   enabled: boolean;
   apiUrl?: string;
@@ -48,23 +45,14 @@ export const DEX_CONFIGS: Record<DexType, DexConfig> = {
   },
 };
 
-/**
- * Get configuration for a specific DEX
- */
 export function getDexConfig(dexType: DexType): DexConfig {
   return DEX_CONFIGS[dexType];
 }
 
-/**
- * Check if a DEX is enabled in configuration
- */
 export function isDexEnabled(dexType: DexType): boolean {
   return DEX_CONFIGS[dexType]?.enabled ?? false;
 }
 
-/**
- * Get all enabled DEX types from configuration
- */
 export function getEnabledDexTypes(): DexType[] {
   return Object.entries(DEX_CONFIGS)
     .filter(([_, config]) => config.enabled)

@@ -9,13 +9,7 @@ import {
   DexAdapterError,
 } from "../types/core.types";
 
-/**
- * Unified service for position operations across all DEXes
- */
 export class UnifiedPositionService {
-  /**
-   * Get user positions from a specific DEX
-   */
   async getUserPositions(
     userAddress: string,
     dexType: DexType
@@ -33,9 +27,6 @@ export class UnifiedPositionService {
     }
   }
 
-  /**
-   * Get user positions from all enabled DEXes
-   */
   async getAllUserPositions(userAddress: string): Promise<{
     positions: UnifiedPosition[];
     dexBreakdown: Record<DexType, UnifiedPosition[]>;
@@ -46,14 +37,16 @@ export class UnifiedPositionService {
     const dexBreakdown: Record<string, UnifiedPosition[]> = {};
     const errors: Record<string, string> = {};
 
-    // Fetch from all DEXes in parallel
     const promises = enabledAdapters.map(async (adapter) => {
       try {
         const positions = await adapter.getUserPositions(userAddress);
         dexBreakdown[adapter.dexType] = positions;
         return positions;
       } catch (error) {
-        console.error(`Failed to fetch positions from ${adapter.dexType}:`, error);
+        console.error(
+          `Failed to fetch positions from ${adapter.dexType}:`,
+          error
+        );
         errors[adapter.dexType] = (error as Error).message;
         dexBreakdown[adapter.dexType] = [];
         return [];
@@ -61,7 +54,7 @@ export class UnifiedPositionService {
     });
 
     const results = await Promise.all(promises);
-    results.forEach(positions => allPositions.push(...positions));
+    results.forEach((positions) => allPositions.push(...positions));
 
     // Sort by current value (descending)
     allPositions.sort((a, b) => b.currentValueUsd - a.currentValueUsd);
@@ -73,9 +66,6 @@ export class UnifiedPositionService {
     };
   }
 
-  /**
-   * Get a specific position
-   */
   async getPosition(
     positionAddress: string,
     dexType: DexType
@@ -93,9 +83,6 @@ export class UnifiedPositionService {
     }
   }
 
-  /**
-   * Create a new position
-   */
   async createPosition(
     dexType: DexType,
     params: CreatePositionParams
@@ -113,9 +100,6 @@ export class UnifiedPositionService {
     }
   }
 
-  /**
-   * Close a position
-   */
   async closePosition(
     positionAddress: string,
     dexType: DexType
@@ -133,9 +117,6 @@ export class UnifiedPositionService {
     }
   }
 
-  /**
-   * Claim fees from a position
-   */
   async claimFees(
     positionAddress: string,
     dexType: DexType
@@ -153,9 +134,6 @@ export class UnifiedPositionService {
     }
   }
 
-  /**
-   * Rebalance a position
-   */
   async rebalancePosition(
     positionAddress: string,
     dexType: DexType,
@@ -174,21 +152,16 @@ export class UnifiedPositionService {
     }
   }
 
-  /**
-   * Get user's complete portfolio across all DEXes
-   */
   async getUserPortfolio(userAddress: string): Promise<UnifiedPortfolio> {
-    const { positions, dexBreakdown, errors } = await this.getAllUserPositions(userAddress);
+    const { positions, dexBreakdown, errors } =
+      await this.getAllUserPositions(userAddress);
 
     const totalValueUsd = positions.reduce(
       (sum, pos) => sum + pos.currentValueUsd,
       0
     );
 
-    const totalPnlUsd = positions.reduce(
-      (sum, pos) => sum + pos.pnlUsd,
-      0
-    );
+    const totalPnlUsd = positions.reduce((sum, pos) => sum + pos.pnlUsd, 0);
 
     const totalFeesUsd = positions.reduce(
       (sum, pos) => sum + pos.claimedFeesUsd + pos.unclaimedFeesUsd,
@@ -196,17 +169,21 @@ export class UnifiedPositionService {
     );
 
     const totalRewardsUsd = positions.reduce(
-      (sum, pos) => sum + (pos.claimedRewardsUsd || 0) + (pos.unclaimedRewardsUsd || 0),
+      (sum, pos) =>
+        sum + (pos.claimedRewardsUsd || 0) + (pos.unclaimedRewardsUsd || 0),
       0
     );
 
     // Calculate DEX breakdown
     const dexBreakdownSummary: Record<DexType, any> = {} as any;
-    
+
     for (const [dexType, dexPositions] of Object.entries(dexBreakdown)) {
       dexBreakdownSummary[dexType as DexType] = {
         positions: dexPositions.length,
-        valueUsd: dexPositions.reduce((sum, pos) => sum + pos.currentValueUsd, 0),
+        valueUsd: dexPositions.reduce(
+          (sum, pos) => sum + pos.currentValueUsd,
+          0
+        ),
         pnlUsd: dexPositions.reduce((sum, pos) => sum + pos.pnlUsd, 0),
       };
     }
