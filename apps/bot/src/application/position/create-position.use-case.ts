@@ -4,7 +4,8 @@ import { DexType, CreatePositionParams, TransactionResult } from '@/types/core.t
 import { IDexAdapter } from '@/types/dex-adapter.interface';
 import { logger } from '@/utils/logger';
 import { db, pendingTransactions } from '@/db';
-import { JobQueueService } from '@/services/job-queue.service';
+import { JobQueueService } from '@/infrastructure/jobs/job-queue.service';
+import { JOB_TX_CONFIRM } from '@/infrastructure/jobs/job-definitions';
 
 export interface DexRegistryLike {
   get(dexType: DexType): IDexAdapter;
@@ -168,19 +169,17 @@ export class CreatePositionUseCase {
         };
       }
 
-      // Enqueue transaction processing job
+      // Enqueue transaction confirmation job
       try {
-        const jobQueue = new JobQueueService();
-        await jobQueue.queueTransactionProcessingJob(
-          {
-            signature,
-            operationType: 'CREATE_POSITION',
-            userId: command.userId,
-          },
-          500
-        );
+        const jobQueue = new JobQueueService({ producerOnly: true });
+        await jobQueue.enqueue(JOB_TX_CONFIRM, {
+          signature,
+          operationType: 'CREATE_POSITION',
+          userId: command.userId,
+          submittedAt: Date.now(),
+        }, { delay: 500 });
       } catch (err) {
-        logger.error('Failed to enqueue transaction processing job', { err });
+        logger.error('Failed to enqueue transaction confirmation job', { err });
         // We do not fail the whole flow if the job enqueue fails; consumers can retry enqueueing.
       }
 

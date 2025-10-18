@@ -31,6 +31,7 @@ export class GetPortfolioUseCase {
    * - return Portfolio aggregate and cache for 5 minutes
    */
   async execute(userId: string, forceRefresh = false): Promise<Portfolio> {
+    const tStart = Date.now();
     const cacheKey = CacheKeys.portfolioKey(userId);
 
     if (!forceRefresh) {
@@ -61,41 +62,45 @@ export class GetPortfolioUseCase {
         byDex.set(pos.dex, arr);
       }
 
-      // For each DEX, fetch user's positions from adapter and map updates
-      for (const [dex, positions] of byDex) {
-        try {
-          const adapter = this.dexRegistry.get(dex);
-          const unifiedPositions: UnifiedPosition[] = await adapter.getUserPositions(
-            userAddress
-          );
+      // For each DEX, fetch user's positions from adapter and map updates in parallel
+      await Promise.all(
+        Array.from(byDex.entries()).map(async ([dex, positions]) => {
+          const t0 = Date.now();
+          try {
+            const adapter = this.dexRegistry.get(dex);
+            const unifiedPositions: UnifiedPosition[] = await adapter.getUserPositions(userAddress);
 
-          // Index by address for quick lookup
-          const byAddress = new Map<string, UnifiedPosition>();
-          for (const up of unifiedPositions) byAddress.set(up.address, up);
+            // Index by address for quick lookup
+            const byAddress = new Map<string, UnifiedPosition>();
+            for (const up of unifiedPositions) byAddress.set(up.address, up);
 
-          for (const p of positions) {
-            const up = byAddress.get(p.positionAddress);
-            if (!up) continue;
+            for (const p of positions) {
+              const up = byAddress.get(p.positionAddress);
+              if (!up) continue;
 
-            // Update current token amounts and USD value
-            const xAmount = TokenAmount.fromUi(
-              p.tokenX.symbol,
-              parseFloat(up.tokenAAmount),
-              p.tokenX.decimals
-            );
-            const yAmount = TokenAmount.fromUi(
-              p.tokenY.symbol,
-              parseFloat(up.tokenBAmount),
-              p.tokenY.decimals
-            );
-            p.updateTokenAmounts(xAmount, yAmount);
-            p.updateCurrentValue(Money.usd(up.currentValueUsd));
+              // Update current token amounts and USD value
+              const xAmount = TokenAmount.fromUi(
+                p.tokenX.symbol,
+                parseFloat(up.tokenAAmount),
+                p.tokenX.decimals
+              );
+              const yAmount = TokenAmount.fromUi(
+                p.tokenY.symbol,
+                parseFloat(up.tokenBAmount),
+                p.tokenY.decimals
+              );
+              p.updateTokenAmounts(xAmount, yAmount);
+              p.updateCurrentValue(Money.usd(up.currentValueUsd));
+            }
+          } catch (e) {
+            // Log and continue; portfolio can still be built with DB values
+            console.warn(`[GetPortfolioUseCase] Enrichment failed for ${dex}:`, e);
+          } finally {
+            const duration = Date.now() - t0;
+            try { const { logger } = await import('@/utils/logger'); logger.debug({ dex, duration }, '[GetPortfolioUseCase] enrichment timing'); } catch {}
           }
-        } catch (e) {
-          // Log and continue; portfolio can still be built with DB values
-          console.warn(`[GetPortfolioUseCase] Enrichment failed for ${dex}:`, e);
-        }
-      }
+        })
+      );
     }
 
     const portfolio = Portfolio.create(userId, dbPositions);
@@ -132,6 +137,7 @@ export class GetPortfolioUseCase {
       console.warn('[GetPortfolioUseCase] Cache set failed:', e);
     }
 
+    try { const { logger } = await import('@/utils/logger'); const dur = Date.now() - tStart; logger.debug({ userId, dur }, '[GetPortfolioUseCase] total timing'); } catch {}
     return portfolio;
   }
 }

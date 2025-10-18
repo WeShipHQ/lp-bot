@@ -4,7 +4,8 @@ import { DexType, TransactionResult } from '@/types/core.types';
 import { IDexAdapter } from '@/types/dex-adapter.interface';
 import { logger } from '@/utils/logger';
 import { db, pendingTransactions } from '@/db';
-import { JobQueueService } from '@/services/job-queue.service';
+import { JobQueueService } from '@/infrastructure/jobs/job-queue.service';
+import { JOB_TX_CONFIRM } from '@/infrastructure/jobs/job-definitions';
 import { DexRegistryLike, ITransactionService } from './create-position.use-case';
 import { Money } from '@/domain/shared/value-objects';
 
@@ -144,15 +145,18 @@ export class ClaimFeesUseCase {
         // Not fatal; processor can reconcile later
       }
 
-      // Enqueue processing job (even if not fully implemented for CLAIM yet)
+      // Enqueue confirmation job
       try {
-        const jobQueue = new JobQueueService();
-        await jobQueue.queueTransactionProcessingJob(
-          { signature, operationType: 'CLAIM_FEES', userId: command.userId },
-          500
-        );
+        const jobQueue = new JobQueueService({ producerOnly: true });
+        await jobQueue.enqueue(JOB_TX_CONFIRM, {
+          signature,
+          operationType: 'CLAIM_FEES',
+          userId: command.userId,
+          positionId: command.positionId,
+          submittedAt: Date.now(),
+        }, { delay: 500 });
       } catch (err) {
-        logger.error('Failed to enqueue transaction processing job (claim)', { err });
+        logger.error('Failed to enqueue transaction confirmation job (claim)', { err });
       }
 
       return { success: true, signature, claimedFeesUsd: estimatedUnclaimedFeesUsd };
