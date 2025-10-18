@@ -9,9 +9,31 @@ export function trendingCommand(
   bot: Telegraf<BotContext>,
   server: FastifyInstance
 ) {
-  bot.command("trending", (context: Context) =>
-    trendingHandler(context as any, server)
-  );
+  bot.command("trending", async (context: Context) => {
+    try {
+      const { GetTrendingPoolsUseCase } = await import("@/application/trending/get-trending-pools.use-case");
+      const { PoolsFormatter } = await import("@/bot/utils/messages/pool.formatter");
+      const { getSarosTrendingKeyboard } = await import("../keyboards/trending-menu");
+      const { TRENDING_CONSTANTS } = await import("../constants/trending.constants");
+      const chatId = (context as any).chat?.id as number;
+      const useCase = new GetTrendingPoolsUseCase();
+      const res = await useCase.execute({ dex: (SELECTED_DEX as any) || 'saros', page: 1, limit: TRENDING_CONSTANTS.PAGE_SIZE, sortBy: 'apy' });
+      const message = PoolsFormatter.formatTrendingPoolsMessage(
+        res.pools as any,
+        res.sortBy,
+        res.currentPage,
+        res.totalPages
+      );
+      await (context as any).reply(message, {
+        parse_mode: 'Markdown',
+        link_preview_options: { is_disabled: true },
+        reply_markup: getSarosTrendingKeyboard(res.currentPage, res.sortBy, res.totalPages),
+      });
+    } catch (e) {
+      console.error('[Trending] Error in command handler:', e);
+      return trendingHandler(context as any, server);
+    }
+  });
 
   bot.action(/^tr_(next|prev|refresh)_[0-9]+$/, (context) =>
     handleTrendingCallback(context, server)
