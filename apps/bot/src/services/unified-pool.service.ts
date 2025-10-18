@@ -7,7 +7,12 @@ import {
   PaginatedTrendingPools,
 } from "../types/core.types";
 
+import { getCacheService } from '@/infrastructure/cache/cache.service';
+import { CacheKeys } from '@/infrastructure/cache/cache-keys';
+
 export class UnifiedPoolService {
+  private readonly cache = getCacheService();
+
   async getPool(poolId: string, dexType: DexType): Promise<UnifiedPool> {
     try {
       const adapter = dexRegistry.get(dexType);
@@ -28,7 +33,16 @@ export class UnifiedPoolService {
   ): Promise<PaginatedTrendingPools> {
     try {
       const adapter = dexRegistry.get(dexType);
-      return await adapter.getTrendingPools(params);
+      const page = params?.page ?? 1;
+      const sortBy = params?.sortBy ?? 'tvl';
+      const key = CacheKeys.trendingPoolsKey(dexType, sortBy, page);
+
+      const cached = await this.cache.get<PaginatedTrendingPools>(key);
+      if (cached) return cached;
+
+      const result = await adapter.getTrendingPools(params);
+      await this.cache.set(key, result, 600); // 10-minute TTL
+      return result;
     } catch (error) {
       throw new DexAdapterError(
         `Failed to get trending pools from ${dexType}`,

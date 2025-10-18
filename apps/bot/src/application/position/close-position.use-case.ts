@@ -25,12 +25,19 @@ export interface ClosePositionResult {
   error?: string;
 }
 
+import { getCacheService, ICacheService } from '@/infrastructure/cache/cache.service';
+import { CachePatterns, CacheKeys } from '@/infrastructure/cache/cache-keys';
+
 export class ClosePositionUseCase {
+  private readonly cache: ICacheService;
   constructor(
     private readonly positionRepository: IPositionRepository,
     private readonly dexRegistry: DexRegistryLike,
-    private readonly transactionService: ITransactionService
-  ) {}
+    private readonly transactionService: ITransactionService,
+    cacheService?: ICacheService
+  ) {
+    this.cache = cacheService ?? getCacheService();
+  }
 
   async execute(command: ClosePositionCommand): Promise<ClosePositionResult> {
     try {
@@ -59,7 +66,10 @@ export class ClosePositionUseCase {
 
       let txResult: TransactionResult;
       try {
-        txResult = await adapter.closePosition(positionAddress);
+        txResult = await adapter.closePosition(positionAddress as string, {
+          userAddress: command.userAddress,
+          poolAddress: position.poolAddress,
+        } as any);
       } catch (error) {
         logger.error('Adapter.closePosition failed', { error });
         return {
@@ -135,6 +145,12 @@ export class ClosePositionUseCase {
       } catch (err) {
         logger.error('Failed to enqueue transaction processing job (close)', { err });
       }
+
+      try {
+        // Invalidate caches: portfolio for user and this position
+        await this.cache.invalidate(CachePatterns.portfolioPattern(command.userId));
+        await this.cache.invalidate(CachePatterns.positionPattern(command.positionId));
+      } catch {}
 
       return { success: true, signature };
     } catch (error) {

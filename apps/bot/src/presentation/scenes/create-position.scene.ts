@@ -22,6 +22,12 @@ import { DISABLE_LINK_PREVIEW } from "../handlers";
 import { Token } from "@/types/token.types";
 import { getSolscanLink } from "@/utils/link";
 import { SarosDlmmService } from "@/services/saros/dlmm.service";
+import { CreatePositionUseCase } from "@/application/position/create-position.use-case";
+import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
+import { dexRegistry } from "@/services/dex-registry.service";
+import { PrivyTransactionService } from "@/services/transaction.service";
+import { db } from "@/db";
+import { DexType } from "@/types/core.types";
 
 type WizardState = {
   step?:
@@ -694,48 +700,57 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       { parse_mode: "Markdown" }
     );
 
-    const { strategy, amount, poolData, autoRebalancing } = ctx.scene
+    const { strategy, amount, poolData, autoRebalancing, dex } = ctx.scene
       .state as WizardState;
     if (!poolData || !strategy || !amount || amount <= 0) {
       await ctx.reply(MessageService.getErrorMessage("Unknown error"));
       return ctx.scene.leave();
     }
 
-    // FIXME handle single sided position
-    const result = await positionService.createBalancedPositionV1(
-      ctx.user,
-      poolData.address,
-      strategy,
-      amount,
-      autoRebalancing === "yes"
-    );
+    try {
+      // Recalculate token distribution for balanced position
+      const { tokenAAmount, tokenBAmount } =
+        await calculateTokenDistributionForBalancedPosition(
+          poolData,
+          amount || 0
+        );
 
-    // await delay(4000);
-    // const result = {
-    //   success: false,
-    //   transactionId:
-    //     "2McRLxiP9AERr1qDog4wGuB6x7AXqp5pECjEEyZkRE7bw5QLFGHMde3mK1CN52nyLPMeR47w2TvvyhMDUoKqW3c8",
-    //   error: "Unknown error",
-    //   positionId: "456",
-    // };
+      const repo = new PositionRepository(db as any);
+      const txService = new PrivyTransactionService();
+      const createUC = new CreatePositionUseCase(repo, dexRegistry, txService);
+      const res = await createUC.execute({
+        userId: ctx.user.id,
+        dex: (dex as DexType) || 'meteora',
+        poolAddress: poolData.address,
+        userAddress: ctx.user.walletAddress!,
+        walletId: ctx.user.walletId,
+        tokenAAmount: String(tokenAAmount),
+        tokenBAmount: String(tokenBAmount),
+        strategy,
+        slippage: SLIPPAGE_SMALL,
+        metadata: { rangeInterval: ctx.user.balancedPositionBinRange, autoRebalancing: autoRebalancing === 'yes' }
+      });
 
-    if (result.success) {
+      if (!res.success || !res.signature) {
+        await ctx.editMessageText(
+          `Failure: ❌ Failed: ${res.error || 'Unknown error'}`,
+          { parse_mode: "Markdown" }
+        );
+        return ctx.scene.leave();
+      }
+
       const solScanLink = link(
         "View on Solscan",
-        getSolscanLink("tx", result.transactionId!)
+        getSolscanLink("tx", res.signature)
       );
       await ctx.editMessageText(
         `Success: 🎉 Position Created! ${solScanLink}`,
-        // `🎉 *Position Created Successfully!*\n\n` +
-        //   `📊 *Transaction*: \`${result.transactionId}\`\n\n` +
-        //   `You can view your position in the portfolio section.`
         { parse_mode: "Markdown", ...DISABLE_LINK_PREVIEW }
       );
-    } else {
+    } catch (error) {
+      console.error("Error creating position via use case:", error);
       await ctx.editMessageText(
-        `Failure: ❌ Failed: ${result.error} | Retry or contact support.`,
-        // `Error: ${result.error}\n\n` +
-        // `Please try again or contact support.`,
+        MessageService.getErrorMessage("Failed to create position. Please try again."),
         { parse_mode: "Markdown" }
       );
     }

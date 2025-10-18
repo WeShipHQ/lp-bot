@@ -51,12 +51,19 @@ export interface ITransactionService {
   submit(built: any, context: { userId: string; walletId?: string; userAddress: string }): Promise<string>;
 }
 
+import { getCacheService, ICacheService } from '@/infrastructure/cache/cache.service';
+import { CachePatterns } from '@/infrastructure/cache/cache-keys';
+
 export class CreatePositionUseCase {
+  private readonly cache: ICacheService;
   constructor(
     private readonly positionRepository: IPositionRepository,
     private readonly dexRegistry: DexRegistryLike,
-    private readonly transactionService: ITransactionService
-  ) {}
+    private readonly transactionService: ITransactionService,
+    cacheService?: ICacheService
+  ) {
+    this.cache = cacheService ?? getCacheService();
+  }
 
   async execute(command: CreatePositionCommand): Promise<CreatePositionResult> {
     try {
@@ -181,6 +188,11 @@ export class CreatePositionUseCase {
       const positionId =
         (txResult.metadata && (txResult.metadata['positionAddress'] as string)) ||
         (command.metadata && (command.metadata['positionAddress'] as string));
+
+      try {
+        // Invalidate portfolio cache for this user
+        await this.cache.invalidate(CachePatterns.portfolioPattern(command.userId));
+      } catch {}
 
       return {
         success: true,

@@ -22,12 +22,19 @@ export interface ClaimFeesResult {
   error?: string;
 }
 
+import { getCacheService, ICacheService } from '@/infrastructure/cache/cache.service';
+import { CachePatterns } from '@/infrastructure/cache/cache-keys';
+
 export class ClaimFeesUseCase {
+  private readonly cache: ICacheService;
   constructor(
     private readonly positionRepository: IPositionRepository,
     private readonly dexRegistry: DexRegistryLike,
-    private readonly transactionService: ITransactionService
-  ) {}
+    private readonly transactionService: ITransactionService,
+    cacheService?: ICacheService
+  ) {
+    this.cache = cacheService ?? getCacheService();
+  }
 
   async execute(command: ClaimFeesCommand): Promise<ClaimFeesResult> {
     try {
@@ -64,7 +71,10 @@ export class ClaimFeesUseCase {
 
       let txResult: TransactionResult;
       try {
-        txResult = await adapter.claimFees(positionAddress);
+        txResult = await adapter.claimFees(positionAddress as string, {
+          userAddress: command.userAddress,
+          poolAddress: position.poolAddress,
+        } as any);
       } catch (error) {
         logger.error('Adapter.claimFees failed', { error });
         return {
@@ -125,6 +135,9 @@ export class ClaimFeesUseCase {
         if (estimatedUnclaimedFeesUsd > 0) {
           position.addClaimedFees(Money.usd(estimatedUnclaimedFeesUsd));
           await this.positionRepository.update(position);
+          // Invalidate caches impacted by position update
+          await this.cache.invalidate(CachePatterns.positionPattern(command.positionId));
+          await this.cache.invalidate(CachePatterns.portfolioPattern(command.userId));
         }
       } catch (err) {
         logger.error('Failed to update position claimed fees', { err });
