@@ -8,6 +8,7 @@ import { DISABLE_LINK_PREVIEW } from "../handlers";
 import { Pool, PoolDex } from "@/types/pool.types";
 import { formatNumber, formatPercentage, formatAPR } from "../utils/formatters";
 import { UnifiedPool, unifiedPoolService } from "@/v2";
+import { PoolFormatter } from "../formatters/pool.formatter";
 
 function formatPoolDetails(pool: UnifiedPool): string {
   const tokenASymbol = pool.tokenA?.symbol || "Unknown";
@@ -116,7 +117,7 @@ poolDetailScene.enter(async (ctx) => {
       return ctx.scene.leave();
     }
 
-    const message = formatPoolDetails(poolData);
+    const message = PoolFormatter.formatPoolDetails(poolData);
     const keyboard = getPoolInfoKeyboard(poolData.address);
 
     await ctx.telegram.editMessageText(
@@ -193,7 +194,7 @@ poolDetailScene.action("refresh_pool_detail", async (ctx) => {
     return ctx.scene.leave();
   }
 
-  const message = formatPoolDetails(poolData);
+  const message = PoolFormatter.formatPoolDetails(poolData);
   const keyboard = getPoolInfoKeyboard(poolData.address);
 
   if (ctx.callbackQuery.message) {

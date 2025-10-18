@@ -1,5 +1,6 @@
 import { ApplicationError, BadRequestError, ForbiddenError, NotFoundError, RateLimitError, UnauthorizedError } from './application-error';
 import { InfrastructureError, ExternalApiError, CacheError, BlockchainError, TransactionError, DatabaseError } from './infrastructure-error';
+import { DomainError, ValidationError as DomainValidationError, InsufficientBalanceError } from '@/domain/shared/errors/domain-error';
 
 export class ErrorHandler {
   handle(error: unknown, context?: Record<string, any>): { userMessage: string; logLevel: 'debug' | 'info' | 'warn' | 'error' } {
@@ -18,6 +19,17 @@ export class ErrorHandler {
     }
     if (error instanceof RateLimitError) {
       return { userMessage: '⚠️ Too many requests. Please slow down and try again later.', logLevel: 'warn' };
+    }
+
+    // Map domain errors
+    if (error instanceof DomainValidationError) {
+      return { userMessage: `❌ ${error.message}`, logLevel: 'info' };
+    }
+    if (error instanceof InsufficientBalanceError) {
+      return { userMessage: '❌ Insufficient balance to perform this action.', logLevel: 'info' };
+    }
+    if (error instanceof DomainError) {
+      return { userMessage: `❌ ${error.message}`, logLevel: 'warn' };
     }
 
     // Map infrastructure errors

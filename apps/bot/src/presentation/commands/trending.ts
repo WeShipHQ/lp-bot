@@ -4,6 +4,7 @@ import { BotContext } from "@/types/bot.types";
 import { handleTrendingCallback, trendingHandler } from "../handlers/trending";
 import { trendingService } from "@/services/trending.service";
 import { SCENE_IDS } from "../config/scenes";
+import { SELECTED_DEX } from "@/bot/config/constants";
 
 export function trendingCommand(
   bot: Telegraf<BotContext>,
@@ -12,17 +13,17 @@ export function trendingCommand(
   bot.command("trending", async (context: Context) => {
     try {
       const { GetTrendingPoolsUseCase } = await import("@/application/trending/get-trending-pools.use-case");
-      const { PoolsFormatter } = await import("@/bot/utils/messages/pool.formatter");
+      const { PoolFormatter } = await import("../formatters/pool.formatter");
       const { getSarosTrendingKeyboard } = await import("../keyboards/trending-menu");
       const { TRENDING_CONSTANTS } = await import("../constants/trending.constants");
       const chatId = (context as any).chat?.id as number;
       const useCase = new GetTrendingPoolsUseCase();
       const res = await useCase.execute({ dex: (SELECTED_DEX as any) || 'saros', page: 1, limit: TRENDING_CONSTANTS.PAGE_SIZE, sortBy: 'apy' });
-      const message = PoolsFormatter.formatTrendingPoolsMessage(
+      const message = PoolFormatter.formatTrendingList(
         res.pools as any,
-        res.sortBy,
         res.currentPage,
-        res.totalPages
+        res.totalPages,
+        res.sortBy
       );
       await (context as any).reply(message, {
         parse_mode: 'Markdown',
