@@ -76,10 +76,12 @@
     "pino-pretty": "^13.0.0",
     "postgres": "^3.4.7",
     "qrcode": "^1.5.4",
+    "reflect-metadata": "^0.2.2",
     "speakeasy": "^2.0.0",
     "superjson": "^2.2.2",
     "telegraf": "^4.16.3",
     "telegram": "^2.26.16",
+    "tsyringe": "^4.8.0",
     "uuid": "^11.1.0",
     "zod": "^3.24.1"
   },

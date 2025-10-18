@@ -1,3 +1,7 @@
+/**
+ * @deprecated Use GetTrendingPoolsUseCase from application layer together with DEX adapters via dexRegistry.
+ * This service was used by legacy UI and will be removed after migration.
+ */
 import {
   TrendingPoolsSortCriteria,
   PoolTrendingItem,

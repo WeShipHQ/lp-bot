@@ -1,3 +1,10 @@
+/**
+ * @deprecated This legacy service aggregates blockchain and DB logic and is being phased out.
+ * Use application-layer use cases with DI instead:
+ *  - CreatePositionUseCase, ClosePositionUseCase, ClaimFeesUseCase, RebalancePositionUseCase, GetPositionUseCase
+ * And access DEX/blockchain via adapters (e.g., MeteoraAdapter, SarosAdapter) resolved from the DI container.
+ * This file remains for backward compatibility during migration and will be removed in a later phase.
+ */
 import { meteoraDlmmService } from "./meteora/dlmm.service";
 import { JupiterService, jupiterService } from "./jupiter.service";
 import BN from "bn.js";
