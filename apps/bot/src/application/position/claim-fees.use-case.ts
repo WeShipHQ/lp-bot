@@ -22,12 +22,19 @@ export interface ClaimFeesResult {
   error?: string;
 }
 
+import { getCacheService, ICacheService } from '@/infrastructure/cache/cache.service';
+import { CachePatterns } from '@/infrastructure/cache/cache-keys';
+
 export class ClaimFeesUseCase {
+  private readonly cache: ICacheService;
   constructor(
     private readonly positionRepository: IPositionRepository,
     private readonly dexRegistry: DexRegistryLike,
-    private readonly transactionService: ITransactionService
-  ) {}
+    private readonly transactionService: ITransactionService,
+    cacheService?: ICacheService
+  ) {
+    this.cache = cacheService ?? getCacheService();
+  }
 
   async execute(command: ClaimFeesCommand): Promise<ClaimFeesResult> {
     try {
