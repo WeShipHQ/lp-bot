@@ -11,10 +11,13 @@ import {
 } from "../types/jupiter.types";
 import { VersionedTransaction } from "@solana/web3.js";
 import { api } from "@/bot/utils/http-client.util";
+import { getCacheService } from '@/infrastructure/cache/cache.service';
+import { CacheKeys } from '@/infrastructure/cache/cache-keys';
 
 export class JupiterService {
   private readonly baseUrl = "https://lite-api.jup.ag";
   private readonly tokenBaseUrl = "https://lite-api.jup.ag/tokens/v2";
+  private readonly cache = getCacheService();
 
   private mapJupiterTokenToTokenInfo(
     jupiterToken: JupiterToken
@@ -121,8 +124,16 @@ export class JupiterService {
 
   async getTokenPrice(tokenAddress: string): Promise<number | null> {
     try {
+      const key = CacheKeys.tokenPriceKey(tokenAddress);
+      const cached = await this.cache.get<number>(key);
+      if (typeof cached === 'number') return cached;
+
       const tokenInfo = await this.getTokenInfo(tokenAddress);
-      return tokenInfo?.price || null;
+      const price = tokenInfo?.price || null;
+      if (price != null) {
+        await this.cache.set(key, price, 60); // 1-minute TTL
+      }
+      return price;
     } catch (error) {
       console.error(
         `[Jupiter] Error fetching price for ${tokenAddress}:`,
@@ -141,10 +152,22 @@ export class JupiterService {
 
     const prices: Record<string, number> = {};
 
-    // Process tokens in batches to avoid overwhelming the API
+    // First, try cache for each
+    const misses: string[] = [];
+    for (const address of tokenAddresses) {
+      const key = CacheKeys.tokenPriceKey(address);
+      const cached = await this.cache.get<number>(key);
+      if (typeof cached === 'number') {
+        prices[address] = cached;
+      } else {
+        misses.push(address);
+      }
+    }
+
+    // Process remaining tokens in batches
     const batchSize = 5;
-    for (let i = 0; i < tokenAddresses.length; i += batchSize) {
-      const batch = tokenAddresses.slice(i, i + batchSize);
+    for (let i = 0; i < misses.length; i += batchSize) {
+      const batch = misses.slice(i, i + batchSize);
 
       const batchPromises = batch.map(async (address) => {
         try {
@@ -162,7 +185,7 @@ export class JupiterService {
 
       await Promise.all(batchPromises);
 
-      if (i + batchSize < tokenAddresses.length) {
+      if (i + batchSize < misses.length) {
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
     }

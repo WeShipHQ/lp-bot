@@ -3,7 +3,7 @@ import { meteoraPoolService } from "./meteora/pool.service";
 import { TokenAdapter } from "@/adapters/token.adapter";
 import { Pool, PoolDex } from "@/types/pool.types";
 import { MeteoraApiService } from "./meteora/meteora-api.service";
-import { MeteoraAdapter } from "./meteora/meteora.adapter";
+import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
 import { SarosPoolService } from "./saros/pool.service";
 import { SarosAdapter } from "./saros/saros.adapter";
 

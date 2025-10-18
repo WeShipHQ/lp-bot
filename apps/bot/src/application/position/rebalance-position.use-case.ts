@@ -1,0 +1,158 @@
+import { IPositionRepository } from '@/domain/position/position.repository';
+import { validateWalletAddress } from '@/domain/position/position.validators';
+import { DexType, RebalanceParams, TransactionResult } from '@/types/core.types';
+import { IDexAdapter } from '@/types/dex-adapter.interface';
+import { logger } from '@/utils/logger';
+import { db, pendingTransactions } from '@/db';
+import { JobQueueService } from '@/services/job-queue.service';
+import { DexRegistryLike, ITransactionService } from './create-position.use-case';
+
+export interface RebalancePositionCommand {
+  userId: string;
+  positionId: string;
+  userAddress: string; // wallet public key (base58)
+  walletId?: string;
+  // Optional execution params
+  newStrategy?: string;
+  slippage?: number;
+  metadata?: Record<string, any>;
+}
+
+export interface RebalancePositionResult {
+  success: boolean;
+  signature?: string;
+  newPositionAddress?: string;
+  error?: string;
+}
+
+export class RebalancePositionUseCase {
+  constructor(
+    private readonly positionRepository: IPositionRepository,
+    private readonly dexRegistry: DexRegistryLike,
+    private readonly transactionService: ITransactionService
+  ) {}
+
+  async execute(command: RebalancePositionCommand): Promise<RebalancePositionResult> {
+    try {
+      if (!command?.userId) {
+        return { success: false, error: 'User ID is required' };
+      }
+      if (!command?.positionId) {
+        return { success: false, error: 'Position ID is required' };
+      }
+      validateWalletAddress(command.userAddress);
+
+      const position = await this.positionRepository.findById(command.positionId);
+      if (!position) {
+        return { success: false, error: 'Position not found' };
+      }
+      if (position.userId !== command.userId) {
+        return { success: false, error: 'Unauthorized: position does not belong to user' };
+      }
+
+      const dexType: DexType = position.dex;
+      const positionAddress = position.positionAddress;
+
+      const adapter: IDexAdapter = this.dexRegistry.get(dexType);
+
+      const params: RebalanceParams = {
+        newStrategy: command.newStrategy,
+        slippage: command.slippage,
+        metadata: command.metadata,
+      };
+
+      let txResult: TransactionResult;
+      try {
+        txResult = await adapter.rebalancePosition(positionAddress, params);
+      } catch (error) {
+        logger.error('Adapter.rebalancePosition failed', { error });
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to build rebalance transaction',
+        };
+      }
+
+      if (!txResult?.success) {
+        return { success: false, error: txResult?.error || 'Rebalance position failed' };
+      }
+
+      let signature = txResult.signature as string | undefined;
+      if (!signature) {
+        try {
+          signature = await this.transactionService.submit(txResult.metadata ?? {}, {
+            userId: command.userId,
+            walletId: command.walletId,
+            userAddress: command.userAddress,
+          });
+        } catch (err) {
+          logger.error('Transaction submission failed', { err });
+        }
+      }
+
+      if (!signature) {
+        return { success: false, error: 'Transaction signature missing after submission attempt' };
+      }
+
+      // Record pending transaction for async processing
+      try {
+        const metadata = {
+          dex: dexType,
+          positionAddress,
+          poolAddress: position.poolAddress,
+          userAddress: command.userAddress,
+          params,
+          extras: txResult.metadata ?? command.metadata ?? {},
+        } as Record<string, any>;
+
+        await db.insert(pendingTransactions).values({
+          signature,
+          operationType: 'REBALANCE',
+          userId: command.userId,
+          status: 'PENDING',
+          metadata: JSON.stringify(metadata),
+          retryCount: 0,
+          maxRetries: 3,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+      } catch (err) {
+        logger.error('Failed to insert pending transaction (rebalance)', { err });
+        return { success: false, error: 'Failed to persist pending transaction for processing' };
+      }
+
+      // Optimistically mark position as REBALANCING (will be returned to ACTIVE after completion)
+      try {
+        position.startRebalancing();
+        await this.positionRepository.update(position);
+      } catch (err) {
+        logger.error('Failed to update position status to REBALANCING', { err });
+      }
+
+      // Enqueue processing job
+      try {
+        const jobQueue = new JobQueueService();
+        await jobQueue.queueTransactionProcessingJob(
+          { signature, operationType: 'REBALANCE', userId: command.userId },
+          500
+        );
+      } catch (err) {
+        logger.error('Failed to enqueue transaction processing job (rebalance)', { err });
+      }
+
+      // Invalidate caches optimistically
+      try {
+        const { getCacheService } = await import('@/infrastructure/cache/cache.service');
+        const { CachePatterns } = await import('@/infrastructure/cache/cache-keys');
+        const cache = getCacheService();
+        await cache.invalidate(CachePatterns.portfolioPattern(command.userId));
+        await cache.invalidate(CachePatterns.positionPattern(command.positionId));
+      } catch {}
+
+      const newPositionAddress = txResult.metadata?.['newPositionAddress'] as string | undefined;
+      return { success: true, signature, newPositionAddress };
+    } catch (error) {
+      logger.error('RebalancePositionUseCase.execute unexpected error', { error });
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  }
+}
