@@ -10,6 +10,10 @@ import { BotContext } from "@/types/bot.types";
 import { jupiterService } from "../../services/jupiter.service";
 import { userService } from "../../services/user.service";
 import { twoFactorAuthService } from "../../services/two-factor-auth.service";
+import { GetBalanceUseCase } from "@/application/wallet/get-balance.use-case";
+import { SendTokensUseCase } from "@/application/wallet/send-tokens.use-case";
+import { UserRepository } from "@/infrastructure/database/repositories/user.repository";
+import { db } from "@/db";
 
 export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
   try {
@@ -38,10 +42,10 @@ export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
     let solPrice = 0;
 
     try {
-      [solBalance, solPrice] = await Promise.all([
-        solanaService.getBalance(user.walletAddress),
-        solanaService.getSolPrice(),
-      ]);
+      const balanceUc = new GetBalanceUseCase();
+      const { sol } = await balanceUc.execute(user.walletAddress);
+      solBalance = sol;
+      solPrice = await solanaService.getSolPrice();
     } catch (error) {
       // Continue with 0 balance if fetch fails
     }
@@ -491,10 +495,9 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
           if (!wallet) {
             return await ctx.answerCbQuery("❌ No wallet address found");
           }
-          const [solBalance, solPrice] = await Promise.all([
-            solanaService.getBalance(wallet),
-            solanaService.getSolPrice(),
-          ]);
+          const balanceUc = new GetBalanceUseCase();
+          const { sol: solBalance } = await balanceUc.execute(wallet);
+          const solPrice = await solanaService.getSolPrice();
 
           const usdValue = solBalance * solPrice;
           const messageText = MessageService.getWalletMessage(
@@ -566,7 +569,8 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
             return;
           }
 
-          const solBalance = await solanaService.getBalance(
+          const balanceUc = new GetBalanceUseCase();
+          const { sol: solBalance } = await balanceUc.execute(
             ctx.user.walletAddress
           );
 
@@ -811,15 +815,13 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
             transferState.tokenAddress &&
             transferState.step === "token_confirmation"
           ) {
-            const result = await solanaService.transferToken({
-              walletId: ctx.user.walletId,
-              walletAddress: ctx.user.walletAddress as string,
+            const sendUc = new SendTokensUseCase(new UserRepository(db as any));
+            const { signature } = await sendUc.execute({
+              userId: ctx.user.id,
               recipientAddress: transferState.recipientAddress,
-              tokenAddress: transferState.tokenAddress,
               amount: transferState.amount,
-              decimals: transferState.decimals || 0,
+              tokenAddress: transferState.tokenAddress,
             });
-            const { signature } = result;
 
             const message = MessageService.getTransferTokenSuccessMessage(
               transferState.tokenSymbol || "Unknown",
@@ -840,14 +842,12 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
           } else {
             const requestedAmount = transferState.amount;
 
-            const result = await solanaService.transferSol({
-              walletId: ctx.user.walletId,
-              walletAddress: ctx.user.walletAddress as string,
+            const sendUc = new SendTokensUseCase(new UserRepository(db as any));
+            const { signature, actualAmount } = await sendUc.execute({
+              userId: ctx.user.id,
               recipientAddress: transferState.recipientAddress,
               amount: transferState.amount,
             });
-
-            const { signature, actualAmount } = result;
 
             let message;
             if (

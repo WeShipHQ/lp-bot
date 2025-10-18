@@ -12,20 +12,32 @@ import {
   DlmmPoolsPaginationParams,
 } from "@/types/meteora.types";
 import type { MeteoraPoolData, MeteoraPoolType } from "@/types/meteora.types";
+import { CircuitBreaker } from "@/infrastructure/resilience/circuit-breaker";
+import { getCacheService } from "@/infrastructure/cache/cache.service";
+import { CacheKeys } from "@/infrastructure/cache/cache-keys";
 
 export class MeteoraApiService {
   private readonly dlmmApiUrl = "https://dlmm-api.meteora.ag";
   private readonly dammV1ApiUrl = "https://damm-api.meteora.ag";
   private readonly dammV2ApiUrl = "https://dammv2-api.meteora.ag";
+  private readonly breaker = new CircuitBreaker({ name: 'meteora', failureThreshold: 5, successThreshold: 2, timeoutMs: 15000 });
+  private readonly cache = getCacheService();
 
   async getDlmmPool(poolAddress: string): Promise<MeteoraDlmmPoolResponse> {
     try {
       console.log(`[Meteora] Fetching DLMM pool: ${poolAddress}`);
 
-      const data = await api.getWithRetry<MeteoraDlmmPoolResponse>(
-        `${this.dlmmApiUrl}/pair/${poolAddress}`
+      const data = await this.breaker.execute(
+        () => api.getWithRetry<MeteoraDlmmPoolResponse>(`${this.dlmmApiUrl}/pair/${poolAddress}`),
+        async () => {
+          const cached = await this.cache.get<MeteoraDlmmPoolResponse>(CacheKeys.poolKey('meteora', poolAddress));
+          if (!cached) throw new Error('Meteora DLMM API unavailable');
+          return cached;
+        }
       );
 
+      // Cache fresh result
+      await this.cache.set(CacheKeys.poolKey('meteora', poolAddress), data, 60);
       return data;
     } catch (error) {
       console.error(
@@ -41,9 +53,12 @@ export class MeteoraApiService {
       console.log(`[Meteora] Fetching DAMM v1 pool: ${poolId}`);
 
       const url = `${this.dammV1ApiUrl}/pools?address=${poolId}&unknown=true&pool_type=dynamic&is_monitoring=true`;
-      const data = await api.getWithRetry<MeteoraDammV1PoolResponse[]>(url);
+      const arr = await this.breaker.execute(
+        () => api.getWithRetry<MeteoraDammV1PoolResponse[]>(url),
+        async () => []
+      );
 
-      return data[0];
+      return arr[0] as any;
     } catch (error) {
       console.error(`[Meteora] Error fetching DAMM v1 pool ${poolId}:`, error);
       throw error;
@@ -54,11 +69,12 @@ export class MeteoraApiService {
     try {
       console.log(`[Meteora] Fetching DAMM v2 pool: ${poolId}`);
 
-      const data = await api.getWithRetry<MeteoraDammV2PoolResponse>(
-        `${this.dammV2ApiUrl}/pools/${poolId}`
+      const data = await this.breaker.execute(
+        () => api.getWithRetry<MeteoraDammV2PoolResponse>(`${this.dammV2ApiUrl}/pools/${poolId}`),
+        async () => ({ } as any)
       );
 
-      return data;
+      return data as any;
     } catch (error) {
       console.error(`[Meteora] Error fetching DAMM v2 pool ${poolId}:`, error);
       throw error;
