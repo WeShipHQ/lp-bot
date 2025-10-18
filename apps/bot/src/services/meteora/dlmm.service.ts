@@ -5,7 +5,7 @@ import DLMM, {
   LbPosition,
   LbPair,
 } from "@meteora-ag/dlmm";
-import { Connection, PublicKey, TransactionInstruction } from "@solana/web3.js";
+import { Connection, PublicKey, TransactionInstruction, Keypair } from "@solana/web3.js";
 import BN from "bn.js";
 import { CONFIG } from "@/config";
 import Decimal from "decimal.js";
@@ -154,6 +154,76 @@ export class MeteoraDlmmService {
     return {
       instructions: claimFeeTxs.flatMap((tx) => tx.instructions),
     };
+  }
+
+  // New SDK wrapper helpers (Phase 2.3.10)
+  async buildCreatePositionTx(
+    poolAddress: string | PublicKey,
+    userPublicKey: string | PublicKey,
+    totalXAmount: Decimal,
+    totalYAmount: Decimal,
+    strategy: StrategyType,
+    rangeInterval: number
+  ): Promise<{
+    instructions: TransactionInstruction[];
+    positionPublicKey: PublicKey;
+  }> {
+    const dlmmPool = await this.createInstance(poolAddress);
+
+    const activeBin = await dlmmPool.getActiveBin();
+    const minBinId = activeBin.binId - rangeInterval;
+    const maxBinId = activeBin.binId + rangeInterval;
+
+    if (totalXAmount.isZero() && totalYAmount.isZero()) {
+      throw new Error("Invalid amount");
+    }
+
+    const positionKeypair = Keypair.generate();
+
+    const createPositionTx = await dlmmPool.initializePositionAndAddLiquidityByStrategy({
+      positionPubKey: positionKeypair.publicKey,
+      user: typeof userPublicKey === "string" ? new PublicKey(userPublicKey) : userPublicKey,
+      totalXAmount: new BN(totalXAmount.toString()),
+      totalYAmount: new BN(totalYAmount.toString()),
+      strategy: {
+        maxBinId,
+        minBinId,
+        strategyType: strategy,
+      },
+    });
+
+    return {
+      instructions: createPositionTx.instructions,
+      positionPublicKey: positionKeypair.publicKey,
+    };
+  }
+
+  async buildClosePositionTx(
+    ownerAddress: string | PublicKey,
+    poolAddress: string | PublicKey,
+    positionAddress: string | PublicKey
+  ): Promise<{ instructions: TransactionInstruction[] }> {
+    return this.closePositionIx(
+      typeof ownerAddress === "string" ? new PublicKey(ownerAddress) : ownerAddress,
+      typeof poolAddress === "string" ? new PublicKey(poolAddress) : poolAddress,
+      typeof positionAddress === "string" ? new PublicKey(positionAddress) : positionAddress
+    );
+  }
+
+  async buildClaimFeesTx(
+    ownerAddress: string | PublicKey,
+    poolAddress: string | PublicKey,
+    positionAddress: string | PublicKey
+  ): Promise<{ instructions: TransactionInstruction[] }> {
+    return this.claimFeesIx(
+      typeof ownerAddress === "string" ? new PublicKey(ownerAddress) : ownerAddress,
+      typeof poolAddress === "string" ? new PublicKey(poolAddress) : poolAddress,
+      typeof positionAddress === "string" ? new PublicKey(positionAddress) : positionAddress
+    );
+  }
+
+  async getPositions(userAddress: string | PublicKey): Promise<Map<string, PositionInfo>> {
+    return this.getAllLbPairPositionsByUser(userAddress);
   }
 
   async getPriceRange(
