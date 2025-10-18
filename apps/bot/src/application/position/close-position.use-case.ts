@@ -4,7 +4,8 @@ import { DexType, TransactionResult } from '@/types/core.types';
 import { IDexAdapter } from '@/types/dex-adapter.interface';
 import { logger } from '@/utils/logger';
 import { db, pendingTransactions } from '@/db';
-import { JobQueueService } from '@/services/job-queue.service';
+import { JobQueueService } from '@/infrastructure/jobs/job-queue.service';
+import { JOB_TX_CONFIRM } from '@/infrastructure/jobs/job-definitions';
 import { DexRegistryLike, ITransactionService } from './create-position.use-case';
 
 export interface ClosePositionCommand {
@@ -135,15 +136,18 @@ export class ClosePositionUseCase {
         // Do not fail the overall flow; background processor may reconcile later
       }
 
-      // Enqueue processing job (even if not fully implemented for CLOSE yet)
+      // Enqueue confirmation job
       try {
         const jobQueue = new JobQueueService();
-        await jobQueue.queueTransactionProcessingJob(
-          { signature, operationType: 'CLOSE_POSITION', userId: command.userId },
-          500
-        );
+        await jobQueue.enqueue(JOB_TX_CONFIRM, {
+          signature,
+          operationType: 'CLOSE_POSITION',
+          userId: command.userId,
+          positionId: command.positionId,
+          submittedAt: Date.now(),
+        }, { delay: 500 });
       } catch (err) {
-        logger.error('Failed to enqueue transaction processing job (close)', { err });
+        logger.error('Failed to enqueue transaction confirmation job (close)', { err });
       }
 
       try {

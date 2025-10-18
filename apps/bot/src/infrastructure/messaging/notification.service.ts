@@ -1,6 +1,7 @@
 import { ITelegramClient } from "./telegram-client";
 import { IUserRepository } from "@/domain/user/user.repository";
-import { JobQueueService } from "@/services/job-queue.service";
+import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
+import { JOB_NOTIFICATION, NotificationJobData } from "@/infrastructure/jobs/job-definitions";
 
 export interface Notification {
   type: "price" | "rebalance" | "general";
@@ -12,7 +13,7 @@ export class NotificationService {
   constructor(
     private readonly telegramClient: ITelegramClient,
     private readonly userRepository: IUserRepository,
-    private readonly jobQueue: JobQueueService
+    private readonly jobQueue?: JobQueueService
   ) {}
 
   async sendNotification(userId: string, notification: Notification): Promise<void> {
@@ -31,10 +32,9 @@ export class NotificationService {
     notification: Notification,
     scheduleAt: Date
   ): Promise<void> {
-    await this.jobQueue.addJob("delayed-notification", {
-      userId,
-      notification,
-    }, {
+    if (!this.jobQueue) return;
+    const data: NotificationJobData = { userId, notification };
+    await this.jobQueue.enqueue(JOB_NOTIFICATION, data, {
       delay: Math.max(0, scheduleAt.getTime() - Date.now()),
     });
   }
