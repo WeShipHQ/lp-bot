@@ -1,3 +1,7 @@
+/**
+ * @deprecated Legacy job queue (BullMQ) used in V1 services. Replaced by infrastructure/jobs/JobQueueService.
+ * New code should interact with the JobQueueService resolved from DI.
+ */
 import { Queue, Worker, Job, QueueOptions, WorkerOptions } from "bullmq";
 import Redis from "ioredis";
 import { logger } from "../utils/logger";

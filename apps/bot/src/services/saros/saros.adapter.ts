@@ -21,6 +21,12 @@ import { TRENDING_CONSTANTS } from "@/bot/config/constants";
 import { SarosDlmmService } from "./dlmm.service";
 import { BaseDexAdapter } from "@/adapters/base-dex.adapter";
 
+/**
+ * SarosAdapter
+ * Implements IDexAdapter for Saros DLMM pools.
+ * - Transforms Saros API/SDK responses to Unified types
+ * - Provides trending/search/positions endpoints, reusing Saros services
+ */
 export class SarosAdapter extends BaseDexAdapter {
   readonly dexType: DexType = "saros";
   readonly name: string = "Saros";

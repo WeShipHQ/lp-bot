@@ -7,6 +7,14 @@ export interface WalletBalances {
   // future: tokens: Record<string, number>
 }
 
+/**
+ * Use case to read wallet balances with short-lived cache.
+ * Currently fetches SOL balance; can be extended to SPL tokens.
+ *
+ * Example:
+ * const uc = container.resolve(GetBalanceUseCase)
+ * const { sol } = await uc.execute(wallet)
+ */
 export class GetBalanceUseCase {
   private readonly cache: ICacheService;
   constructor(
@@ -16,6 +24,9 @@ export class GetBalanceUseCase {
     this.cache = cacheService;
   }
 
+  /**
+   * Fetch balances with cache.
+   */
   async execute(walletAddress: string): Promise<WalletBalances> {
     const cacheKey = CacheKeys.walletBalanceKey(walletAddress);
     const cached = await this.cache.get<WalletBalances>(cacheKey);

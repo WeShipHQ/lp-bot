@@ -72,13 +72,13 @@ function registerBase() {
   // Repositories (singleton)
   container.register<IPositionRepository>(DI_TOKENS.PositionRepo, {
     useFactory: () => new PositionRepository(db as any),
-  });
+  }, { lifecycle: Lifecycle.Singleton });
   container.register<IUserRepository>(DI_TOKENS.UserRepo, {
     useFactory: () => new UserRepository(db as any),
-  });
+  }, { lifecycle: Lifecycle.Singleton });
 
   // Cache service (singleton)
-  container.register<ICacheService>(DI_TOKENS.Cache, { useClass: CacheService });
+  container.register<ICacheService>(DI_TOKENS.Cache, { useClass: CacheService }, { lifecycle: Lifecycle.Singleton });
 
   // Dex registry (singleton instance)
   container.registerInstance(DI_TOKENS.DexRegistry, dexRegistry);
@@ -91,14 +91,14 @@ function registerBase() {
   container.register(SarosAdapter, { useClass: SarosAdapter }, { lifecycle: Lifecycle.Singleton });
 
   // Transaction service (singleton)
-  container.register(DI_TOKENS.TransactionService, { useClass: PrivyTransactionService });
+  container.register(DI_TOKENS.TransactionService, { useClass: PrivyTransactionService }, { lifecycle: Lifecycle.Singleton });
 
   // Use-cases (transient)
   container.register(CreatePositionUseCase, {
     useFactory: (c) => new CreatePositionUseCase(
       c.resolve<IPositionRepository>(DI_TOKENS.PositionRepo),
       c.resolve(DI_TOKENS.DexRegistry) as any,
-      c.resolve(PrivyTransactionService),
+      c.resolve(DI_TOKENS.TransactionService) as any,
       c.resolve<ICacheService>(DI_TOKENS.Cache),
     ),
   }, { lifecycle: Lifecycle.Transient });
@@ -107,7 +107,7 @@ function registerBase() {
     useFactory: (c) => new ClosePositionUseCase(
       c.resolve<IPositionRepository>(DI_TOKENS.PositionRepo),
       c.resolve(DI_TOKENS.DexRegistry) as any,
-      c.resolve(PrivyTransactionService),
+      c.resolve(DI_TOKENS.TransactionService) as any,
     ),
   }, { lifecycle: Lifecycle.Transient });
 
@@ -115,7 +115,7 @@ function registerBase() {
     useFactory: (c) => new ClaimFeesUseCase(
       c.resolve<IPositionRepository>(DI_TOKENS.PositionRepo),
       c.resolve(DI_TOKENS.DexRegistry) as any,
-      c.resolve(PrivyTransactionService),
+      c.resolve(DI_TOKENS.TransactionService) as any,
     ),
   }, { lifecycle: Lifecycle.Transient });
 
@@ -130,7 +130,7 @@ function registerBase() {
     useFactory: (c) => new RebalancePositionUseCase(
       c.resolve<IPositionRepository>(DI_TOKENS.PositionRepo),
       c.resolve(DI_TOKENS.DexRegistry) as any,
-      c.resolve(PrivyTransactionService),
+      c.resolve(DI_TOKENS.TransactionService) as any,
     ),
   }, { lifecycle: Lifecycle.Transient });
 

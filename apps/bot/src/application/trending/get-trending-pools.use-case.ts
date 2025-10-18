@@ -7,12 +7,27 @@ export interface GetTrendingPoolsParams extends TrendingParams {
   dex?: DexType | "all";
 }
 
+/**
+ * Use case to fetch trending pools, optionally across all enabled DEX adapters.
+ * - Reads from cache when available
+ * - Falls back to adapters via dexRegistry
+ * - Sorts/merges results when dex = "all"
+ *
+ * Example:
+ * const uc = container.resolve(GetTrendingPoolsUseCase)
+ * const res = await uc.execute({ dex: 'saros', page: 1, limit: 5, sortBy: 'apy' })
+ */
 export class GetTrendingPoolsUseCase {
   private readonly cache: ICacheService;
   constructor(cacheService: ICacheService = getCacheService()) {
     this.cache = cacheService;
   }
 
+  /**
+   * Execute the query
+   * @param params filters, pagination and sort options
+   * @returns paginated trending pools
+   */
   async execute(params: GetTrendingPoolsParams = {}): Promise<PaginatedTrendingPools> {
     const { dex = "all", page = 1, limit = 5, sortBy = "apy" } = params;
 

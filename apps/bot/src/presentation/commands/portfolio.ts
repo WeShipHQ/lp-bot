@@ -2,19 +2,16 @@ import { Telegraf } from "telegraf";
 import { BotContext } from "@/types/bot.types";
 import { GetPortfolioUseCase } from "@/application/portfolio/get-portfolio.use-case";
 import { CalculateMetricsUseCase } from "@/application/portfolio/calculate-metrics.use-case";
-import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
-import { db } from "@/db";
-import { dexRegistry } from "@/services/dex-registry.service";
 import { registerPortfolioCallbacks } from "../handlers/portfolio";
+import { container } from "tsyringe";
 
 export function portfolioCommand(bot: Telegraf<BotContext>) {
   bot.command("portfolio", async (ctx) => {
     const loading = await ctx.reply("Loading portfolio...");
     try {
-      const repo = new PositionRepository(db as any);
-      const useCase = new GetPortfolioUseCase(repo, dexRegistry);
+      const useCase = container.resolve(GetPortfolioUseCase);
       const portfolio = await useCase.execute(ctx.user.id, false);
-      const metrics = new CalculateMetricsUseCase().execute(portfolio);
+      const metrics = container.resolve(CalculateMetricsUseCase).execute(portfolio);
 
       const lines: string[] = [];
       lines.push("📊 Portfolio Overview");

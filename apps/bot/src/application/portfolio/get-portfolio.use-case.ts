@@ -12,6 +12,15 @@ export interface DexRegistryLike {
   get(dexType: DexType): IDexAdapter;
 }
 
+/**
+ * Use case to assemble a user's Portfolio aggregate from DB and on-chain enrichment.
+ * - Leverages cache to avoid repeated heavy operations
+ * - Fetches positions by user, groups by DEX, and enriches via adapters
+ *
+ * Example:
+ * const uc = container.resolve(GetPortfolioUseCase)
+ * const portfolio = await uc.execute(userId)
+ */
 export class GetPortfolioUseCase {
   private readonly cache: ICacheService;
 
