@@ -32,14 +32,16 @@ type QueueEntry<N extends KnownJobNames> = {
 export class JobQueueService {
   private readonly redis: Redis;
   private readonly registry = new WorkerRegistry();
-
   private readonly entries = new Map<KnownJobNames, QueueEntry<any>>();
+  private readonly qOpts: QueueOptions;
+  private readonly producerOnly: boolean;
 
-  constructor(opts?: { bot?: Telegraf<BotContext> }) {
+  constructor(opts?: { bot?: Telegraf<BotContext>; producerOnly?: boolean }) {
     this.redis = new Redis(CONFIG.REDIS.URL, { maxRetriesPerRequest: null, lazyConnect: true });
+    this.producerOnly = !!opts?.producerOnly;
 
     // Common queue options
-    const qOpts: QueueOptions = {
+    this.qOpts = {
       connection: this.redis,
       defaultJobOptions: {
         removeOnComplete: 100,
@@ -47,39 +49,43 @@ export class JobQueueService {
         attempts: 3,
         backoff: { type: 'exponential', delay: 2000 },
       },
-    };
+    } as QueueOptions;
 
-    // Instantiate infrastructure dependencies
-    const userRepo = new UserRepository(db as any);
-    const positionRepo = new PositionRepository(db as any);
+    if (!this.producerOnly) {
+      // Instantiate infrastructure dependencies
+      const userRepo = new UserRepository(db as any);
+      const positionRepo = new PositionRepository(db as any);
 
-    const telegramClient = opts?.bot ? new TelegramClient(opts.bot) : undefined;
-    const notificationService = new NotificationService(
-      telegramClient as any,
-      userRepo,
-      // pass this to avoid circular dependency; will be set after instantiation
-      this as any,
-    );
+      const telegramClient = opts?.bot ? new TelegramClient(opts.bot) : undefined;
+      const notificationService = new NotificationService(
+        telegramClient as any,
+        userRepo,
+        // pass this to avoid circular dependency; will be set after instantiation
+        this as any,
+      );
 
-    const getPositionUseCase = new GetPositionUseCase(positionRepo, dexRegistry);
-    const txService = new PrivyTransactionService();
-    const rebalanceUseCase = new RebalancePositionUseCase(positionRepo, dexRegistry, txService);
+      const getPositionUseCase = new GetPositionUseCase(positionRepo, dexRegistry);
+      const txService = new PrivyTransactionService();
+      const rebalanceUseCase = new RebalancePositionUseCase(positionRepo, dexRegistry, txService);
 
-    const solana = new SolanaAdapter();
+      const solana = new SolanaAdapter();
 
-    // Register workers
-    this.registry.register(JOB_POSITION_MONITOR, new PositionMonitorWorker(getPositionUseCase, notificationService, this));
-    this.registry.register(JOB_REBALANCE, new RebalanceWorker(rebalanceUseCase, notificationService));
-    if (telegramClient) this.registry.register(JOB_NOTIFICATION, new NotificationWorker(notificationService));
-    this.registry.register(JOB_TX_CONFIRM, new TransactionConfirmWorker(solana, positionRepo));
+      // Register workers
+      this.registry.register(JOB_POSITION_MONITOR, new PositionMonitorWorker(getPositionUseCase, notificationService, this));
+      this.registry.register(JOB_REBALANCE, new RebalanceWorker(rebalanceUseCase, notificationService));
+      if (telegramClient) this.registry.register(JOB_NOTIFICATION, new NotificationWorker(notificationService));
+      this.registry.register(JOB_TX_CONFIRM, new TransactionConfirmWorker(solana, positionRepo));
 
-    // Setup queues and workers
-    this.createQueueAndWorker(JOB_POSITION_MONITOR, qOpts, { concurrency: 5 });
-    this.createQueueAndWorker(JOB_REBALANCE, qOpts, { concurrency: 2 });
-    this.createQueueAndWorker(JOB_TX_CONFIRM, qOpts, { concurrency: 20 });
-    if (telegramClient) this.createQueueAndWorker(JOB_NOTIFICATION, qOpts, { concurrency: 10 });
+      // Setup queues and workers
+      this.createQueueAndWorker(JOB_POSITION_MONITOR, this.qOpts, { concurrency: 5 });
+      this.createQueueAndWorker(JOB_REBALANCE, this.qOpts, { concurrency: 2 });
+      this.createQueueAndWorker(JOB_TX_CONFIRM, this.qOpts, { concurrency: 20 });
+      if (telegramClient) this.createQueueAndWorker(JOB_NOTIFICATION, this.qOpts, { concurrency: 10 });
 
-    logger.info('[JobQueue] initialized');
+      logger.info('[JobQueue] initialized');
+    } else {
+      logger.info('[JobQueue] producer-only mode initialized');
+    }
   }
 
   private createQueueAndWorker<N extends KnownJobNames>(name: N, qOpts: QueueOptions, w: { concurrency: number }) {
@@ -104,8 +110,14 @@ export class JobQueueService {
   }
 
   async enqueue<N extends KnownJobNames>(queueName: N, data: KnownJobDataMap[N], options?: EnqueueOptions): Promise<void> {
-    const entry = this.entries.get(queueName);
-    if (!entry) throw new Error(`Queue not found for ${queueName}`);
+    let entry = this.entries.get(queueName);
+    if (!entry) {
+      // In producer-only mode, lazily create a queue without a worker
+      const queue = new Queue<KnownJobDataMap[N]>(queueName, this.qOpts);
+      // @ts-expect-error: no worker in producer-only mode
+      entry = { queue, worker: undefined as any, concurrency: 0 } as QueueEntry<N> as any;
+      this.entries.set(queueName, entry as any);
+    }
     await entry.queue.add(queueName, data, {
       delay: options?.delay,
       jobId: options?.jobId,

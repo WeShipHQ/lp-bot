@@ -49,16 +49,21 @@ export class PositionMonitorWorker implements IWorker<PositionMonitorJobData> {
       // Check if rebalancing needed: if out of range and auto-rebalance enabled
       const shouldRebalance = (inRange === false) && (position as any)['isRebalancingEnabled'];
       if (shouldRebalance) {
-        const payload: RebalanceJobData = {
-          userId,
-          positionId,
-          userAddress: (res.onchain?.metadata?.userAddress as string) || '',
-          reason: 'out_of_range_auto',
-        };
-        try {
-          await this.jobQueue.enqueue(JOB_REBALANCE, payload, { attempts: 1 });
-        } catch (err) {
-          logger.error({ err }, '[PositionMonitorWorker] Failed to enqueue rebalance job');
+        const userAddress = (res.onchain?.metadata?.userAddress as string) || '';
+        if (userAddress) {
+          const payload: RebalanceJobData = {
+            userId,
+            positionId,
+            userAddress,
+            reason: 'out_of_range_auto',
+          };
+          try {
+            await this.jobQueue.enqueue(JOB_REBALANCE, payload, { attempts: 1 });
+          } catch (err) {
+            logger.error({ err }, '[PositionMonitorWorker] Failed to enqueue rebalance job');
+          }
+        } else {
+          logger.debug({ positionId }, '[PositionMonitorWorker] Auto-rebalance skipped: missing userAddress');
         }
       }
 

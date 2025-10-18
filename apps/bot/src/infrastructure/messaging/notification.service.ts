@@ -1,6 +1,6 @@
 import { ITelegramClient } from "./telegram-client";
 import { IUserRepository } from "@/domain/user/user.repository";
-import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
+import type { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 import { JOB_NOTIFICATION, NotificationJobData } from "@/infrastructure/jobs/job-definitions";
 
 export interface Notification {

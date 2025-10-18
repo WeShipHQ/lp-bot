@@ -1,4 +1,4 @@
-import { Connection, PublicKey, VersionedTransaction, clusterApiUrl, RpcResponseAndContext, SignatureResult } from '@solana/web3.js';
+import { Connection, PublicKey, VersionedTransaction, clusterApiUrl } from '@solana/web3.js';
 import { CONFIG } from '@/config';
 import { logger } from '@/utils/logger';
 

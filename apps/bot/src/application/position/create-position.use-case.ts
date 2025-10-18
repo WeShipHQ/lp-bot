@@ -171,7 +171,7 @@ export class CreatePositionUseCase {
 
       // Enqueue transaction confirmation job
       try {
-        const jobQueue = new JobQueueService();
+        const jobQueue = new JobQueueService({ producerOnly: true });
         await jobQueue.enqueue(JOB_TX_CONFIRM, {
           signature,
           operationType: 'CREATE_POSITION',

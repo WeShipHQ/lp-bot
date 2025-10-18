@@ -138,7 +138,7 @@ export class ClosePositionUseCase {
 
       // Enqueue confirmation job
       try {
-        const jobQueue = new JobQueueService();
+        const jobQueue = new JobQueueService({ producerOnly: true });
         await jobQueue.enqueue(JOB_TX_CONFIRM, {
           signature,
           operationType: 'CLOSE_POSITION',

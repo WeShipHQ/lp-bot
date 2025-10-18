@@ -4,7 +4,7 @@ import { TransactionConfirmJobData } from "../job-definitions";
 import { logger } from "@/utils/logger";
 import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
 import { db, pendingTransactions } from "@/db";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
 
 export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobData> {
