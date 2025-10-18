@@ -16,6 +16,11 @@ import { getTokenPriceService } from "@/services/token-price.service";
 import { formatNumber, formatPrice } from "../utils/formatters";
 import { getSolscanLink } from "@/utils/link";
 import { loading } from "../utils/text-formatters";
+import { ClosePositionUseCase } from "@/application/position/close-position.use-case";
+import { ClaimFeesUseCase } from "@/application/position/claim-fees.use-case";
+import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
+import { dexRegistry } from "@/services/dex-registry.service";
+import { PrivyTransactionService } from "@/services/transaction.service";
 
 type SceneState = {
   positionAddress?: string;
@@ -146,33 +151,31 @@ positionDetailScene.action("pos_close_yes", async (ctx) => {
   });
 
   try {
-    const { success, transactionId, error } =
-      await positionService.closePositionV1(
-        ctx.user,
-        position.poolAddress,
-        position.positionAddress
-      );
+    const repo = new PositionRepository(db as any);
+    const txService = new PrivyTransactionService();
+    const closeUC = new ClosePositionUseCase(repo, dexRegistry, txService);
 
-    if (!success) {
+    const res = await closeUC.execute({
+      userId: ctx.user.id,
+      positionId: position.id,
+      userAddress: ctx.user.walletAddress!,
+      walletId: ctx.user.walletId,
+    });
+
+    if (!res.success || !res.signature) {
       await ctx.telegram.editMessageText(
         ctx.chat?.id,
         loadingMsg.message_id,
         undefined,
-        MessageService.getErrorMessage(error || "Failed to close position"),
+        MessageService.getErrorMessage(res.error || "Failed to close position"),
         { parse_mode: "Markdown" }
       );
       return;
     }
 
-    const pnl = {
-      usd: "$1.00",
-      percentage: "2.00%",
-    };
-
     const successMessage =
       `✅ **Position Closed**\n\n` +
-      `PnL: ${pnl?.usd || "$0.00"} (${pnl?.percentage || "0.00%"})\n` +
-      `Transaction: [View on Solscan](https://solscan.io/tx/${transactionId})`;
+      `Transaction: [View on Solscan](${getSolscanLink("tx", res.signature)})`;
 
     await ctx.telegram.editMessageText(
       ctx.chat?.id,
@@ -262,22 +265,32 @@ positionDetailScene.action(/^pos_claim_yes_(.+)$/, async (ctx) => {
       return;
     }
 
-    // await delay(1000);
+    const repo = new PositionRepository(db as any);
+    const txService = new PrivyTransactionService();
+    const claimUC = new ClaimFeesUseCase(repo, dexRegistry, txService);
+    const res = await claimUC.execute({
+      userId: ctx.user.id,
+      positionId: position.id,
+      userAddress: ctx.user.walletAddress!,
+      walletId: ctx.user.walletId,
+    });
 
-    const results = await positionService.claimFeeV1(ctx.user, position.id);
-    console.log("results", results);
+    if (!res.success || !res.signature) {
+      await ctx.telegram.editMessageText(
+        ctx.chat?.id,
+        loadingMsg.message_id,
+        undefined,
+        MessageService.getErrorMessage(res.error || "Failed to claim fees"),
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
 
+    const claimedStr = res.claimedFeesUsd != null ? formatPrice(Number(res.claimedFeesUsd), { maxDecimals: 2 }) : 'N/A';
     const successMessage =
       `✅ *Fees Claimed Successfully*\n\n` +
-      `All available LP fees have been claimed and swapped to SOL.\n\n` +
-      `💰 *Claimed Details:*\n` +
-      `• ${position.tokenX?.symbol}: ${formatNumber(Number(results.claimedFeeXAmount), { maxDecimals: 5 })} (${formatPrice(Number(results.claimedFeeXValueUSD), { maxDecimals: 2 })})\n` +
-      `• ${position.tokenY?.symbol}: ${formatNumber(Number(results.claimedFeeYAmount), { maxDecimals: 5 })} (${formatPrice(Number(results.claimedFeeYValueUSD), { maxDecimals: 2 })})\n` +
-      `• Total USD Value: ${formatPrice(Number(results.totalClaimedFeeUSD), { maxDecimals: 2 })}\n` +
-      `• Transaction: [View on Solscan](${getSolscanLink("tx", results.transactionId || "")})\n\n` +
-      `📊 *Updated Position:*\n` +
-      `• Total Claimed Fees: ${formatPrice(Number(results.totalClaimedFees), { maxDecimals: 2 })}\n` +
-      `• Cumulative PnL: ${formatPrice(Number(results.cumulativePnL), { maxDecimals: 2 })}\n`;
+      `Claimed Amount (est.): ${claimedStr}\n` +
+      `Transaction: [View on Solscan](${getSolscanLink("tx", res.signature)})`;
 
     await ctx.telegram.editMessageText(
       ctx.chat?.id,

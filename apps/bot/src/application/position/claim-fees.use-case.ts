@@ -71,7 +71,10 @@ export class ClaimFeesUseCase {
 
       let txResult: TransactionResult;
       try {
-        txResult = await adapter.claimFees(positionAddress);
+        txResult = await adapter.claimFees(positionAddress as string, {
+          userAddress: command.userAddress,
+          poolAddress: position.poolAddress,
+        } as any);
       } catch (error) {
         logger.error('Adapter.claimFees failed', { error });
         return {
@@ -132,6 +135,9 @@ export class ClaimFeesUseCase {
         if (estimatedUnclaimedFeesUsd > 0) {
           position.addClaimedFees(Money.usd(estimatedUnclaimedFeesUsd));
           await this.positionRepository.update(position);
+          // Invalidate caches impacted by position update
+          await this.cache.invalidate(CachePatterns.positionPattern(command.positionId));
+          await this.cache.invalidate(CachePatterns.portfolioPattern(command.userId));
         }
       } catch (err) {
         logger.error('Failed to update position claimed fees', { err });

@@ -66,7 +66,10 @@ export class ClosePositionUseCase {
 
       let txResult: TransactionResult;
       try {
-        txResult = await adapter.closePosition(positionAddress);
+        txResult = await adapter.closePosition(positionAddress as string, {
+          userAddress: command.userAddress,
+          poolAddress: position.poolAddress,
+        } as any);
       } catch (error) {
         logger.error('Adapter.closePosition failed', { error });
         return {

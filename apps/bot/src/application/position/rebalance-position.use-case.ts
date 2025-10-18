@@ -139,6 +139,15 @@ export class RebalancePositionUseCase {
         logger.error('Failed to enqueue transaction processing job (rebalance)', { err });
       }
 
+      // Invalidate caches optimistically
+      try {
+        const { getCacheService } = await import('@/infrastructure/cache/cache.service');
+        const { CachePatterns } = await import('@/infrastructure/cache/cache-keys');
+        const cache = getCacheService();
+        await cache.invalidate(CachePatterns.portfolioPattern(command.userId));
+        await cache.invalidate(CachePatterns.positionPattern(command.positionId));
+      } catch {}
+
       const newPositionAddress = txResult.metadata?.['newPositionAddress'] as string | undefined;
       return { success: true, signature, newPositionAddress };
     } catch (error) {
