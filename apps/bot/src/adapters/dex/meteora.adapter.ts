@@ -20,6 +20,12 @@ import Decimal from "decimal.js";
 import { MeteoraDlmmPoolResponse } from "@/types/meteora.types";
 import { StrategyType } from "@meteora-ag/dlmm";
 
+/**
+ * MeteoraAdapter
+ * Implements IDexAdapter for Meteora DLMM pools.
+ * - Transforms Meteora API and DLMM SDK responses into UnifiedPool/UnifiedPosition
+ * - Builds transactions (create/close/claim/rebalance) via Meteora SDK
+ */
 export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
   readonly dexType: DexType = "meteora";
   readonly name: string = "Meteora";

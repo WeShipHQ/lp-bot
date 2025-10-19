@@ -14,6 +14,7 @@ import { GetBalanceUseCase } from "@/application/wallet/get-balance.use-case";
 import { SendTokensUseCase } from "@/application/wallet/send-tokens.use-case";
 import { UserRepository } from "@/infrastructure/database/repositories/user.repository";
 import { db } from "@/db";
+import { container } from "tsyringe";
 
 export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
   try {
@@ -42,7 +43,7 @@ export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
     let solPrice = 0;
 
     try {
-      const balanceUc = new GetBalanceUseCase();
+      const balanceUc = container.resolve(GetBalanceUseCase);
       const { sol } = await balanceUc.execute(user.walletAddress);
       solBalance = sol;
       solPrice = await solanaService.getSolPrice();

@@ -1,3 +1,7 @@
+/**
+ * @deprecated Presentation formatting is being consolidated under presentation/formatters.
+ * For new flows, prefer use cases for data and dedicated formatters for rendering.
+ */
 import {
   formatPrice,
   formatNumber,

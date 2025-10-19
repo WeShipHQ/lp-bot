@@ -1,3 +1,7 @@
+/**
+ * @deprecated Use portfolio use cases via DI (GetPortfolioUseCase, SyncPortfolioUseCase, CalculateMetricsUseCase)
+ * and adapter-based enrichment. This service will be removed after migration.
+ */
 import { PublicKey } from "@solana/web3.js";
 import { PositionInfo } from "@meteora-ag/dlmm";
 import { jupiterService } from "./jupiter.service";

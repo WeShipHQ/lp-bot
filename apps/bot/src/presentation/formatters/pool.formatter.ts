@@ -1,4 +1,4 @@
-import { UnifiedPool } from "@/types/core.types";
+import { UnifiedPool } from "@/shared/types/pool.types";
 import { link } from "@/bot/utils/text-formatters";
 import { getPoolDeeplink } from "@/bot/utils/misc";
 import { formatCurrency, formatNumber, formatPercentage } from "./base.formatter";

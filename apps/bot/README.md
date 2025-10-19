@@ -261,20 +261,64 @@ pnpm test:watch
 ### Project Structure
 
 src/
-├── bot/ # Telegram bot implementation
-│ ├── commands/ # Bot commands (/start, /portfolio, etc.)
-│ ├── handlers/ # Message and callback handlers
-│ ├── keyboards/ # Inline keyboard definitions
-│ ├── middleware/ # Authentication and logging
-│ └── scenes/ # Multi-step user flows
-├── services/ # Business logic layer
-│ ├── saros/ # Saros DLMM integration
-│ ├── meteora/ # Meteora DEX integration
-│ ├── position.service.ts # Position management
-│ └── portfolio.service.ts # Portfolio analytics
-├── db/ # Database schema and migrations
-├── types/ # TypeScript type definitions
-└── utils/ # Utility functions
+├── adapters/                  # Integration adapters (DEX, blockchain, external APIs)
+│   ├── blockchain/            # Solana RPC client wrapper
+│   ├── dex/                   # DEX adapters (e.g., Meteora)
+│   └── external-api/          # External API adapters (Jupiter, Privy)
+├── application/               # Use cases (pure app/business logic)
+│   ├── position/              # Position use cases (create/close/claim/rebalance/get)
+│   ├── portfolio/             # Portfolio use cases (get/sync/calc metrics)
+│   ├── trending/              # Trending use cases
+│   └── wallet/                # Wallet use cases
+├── domain/                    # Domain entities and repositories (interfaces only)
+│   ├── position/
+│   ├── portfolio/
+│   └── user/
+├── infrastructure/            # Infrastructure services
+│   ├── cache/                 # Redis cache wrapper
+│   ├── database/              # Drizzle repositories (implements domain repositories)
+│   ├── di/                    # Dependency injection container (tsyringe)
+│   ├── jobs/                  # BullMQ job queues and workers
+│   └── messaging/             # Telegram messaging/notification abstractions
+├── presentation/              # Presentation (Telegram UI) in clean-arch style
+│   ├── commands/
+│   ├── handlers/
+│   ├── keyboards/
+│   └── scenes/
+├── bot/                       # Legacy V1 bot layer (kept during migration)
+├── services/                  # Legacy services (marked @deprecated; will be removed)
+├── shared/                    # Shared constants/types/errors
+├── db/                        # Database schema and migrations
+├── config/                    # App configuration
+└── utils/                     # Utility functions
+
+### Dependency Injection (Phase 5)
+
+This app uses tsyringe for DI. The container is defined at:
+
+- src/infrastructure/di/container.ts
+
+At runtime, the container is initialized with the Telegram bot instance in the Telegraf plugin. We also import `reflect-metadata` in the app entrypoint.
+
+Key registrations:
+- Repositories: IPositionRepository, IUserRepository (singleton)
+- Services: CacheService, NotificationService, JobQueueService, TelegramClient (singleton)
+- Adapters: SolanaAdapter, JupiterAdapter, PrivyAdapter, MeteoraAdapter, SarosAdapter (singleton)
+- Use cases: All position/portfolio/wallet/trending use cases (transient)
+
+Usage in presentation layer:
+
+```ts
+import { container } from 'tsyringe';
+import { GetPortfolioUseCase } from '@/application/portfolio/get-portfolio.use-case';
+
+const uc = container.resolve(GetPortfolioUseCase);
+const portfolio = await uc.execute(userId);
+```
+
+Notes
+- Do not instantiate repositories/services directly in commands/scenes. Resolve use cases from the container.
+- Legacy services under src/services are marked @deprecated and will be removed after migration.
 
 ### Key Services
 

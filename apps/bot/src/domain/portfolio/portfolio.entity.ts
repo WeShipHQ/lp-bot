@@ -1,6 +1,11 @@
 import { Position, DexType } from '../position/position.entity';
 import { Money, PnL, DexMetrics } from '../shared/value-objects';
 
+/**
+ * Portfolio aggregate root.
+ * Encapsulates a collection of Position entities with helpers to compute totals,
+ * breakdowns and derived metrics (PnL, fees, active/closed counts, etc.).
+ */
 export class Portfolio {
   private constructor(
     public readonly userId: string,
