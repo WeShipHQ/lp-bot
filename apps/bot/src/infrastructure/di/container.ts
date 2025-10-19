@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { container, Lifecycle } from 'tsyringe';
+import { Container } from 'inversify';
 
 // Domain repositories
 import { IPositionRepository } from '@/domain/position/position.repository';
@@ -63,6 +63,9 @@ export const DI_TOKENS = {
   TransactionService: Symbol('ITransactionService'),
 } as const;
 
+// Create Inversify container
+const container = new Container({ defaultScope: 'Transient', skipBaseClassChecks: true });
+
 let baseRegistered = false;
 
 function registerBase() {
@@ -70,87 +73,107 @@ function registerBase() {
   baseRegistered = true;
 
   // Repositories (singleton)
-  container.register<IPositionRepository>(DI_TOKENS.PositionRepo, {
-    useFactory: () => new PositionRepository(db as any),
-  }, { lifecycle: Lifecycle.Singleton });
-  container.register<IUserRepository>(DI_TOKENS.UserRepo, {
-    useFactory: () => new UserRepository(db as any),
-  }, { lifecycle: Lifecycle.Singleton });
+  container.bind<IPositionRepository>(DI_TOKENS.PositionRepo)
+    .toDynamicValue(() => new PositionRepository(db as any))
+    .inSingletonScope();
+
+  container.bind<IUserRepository>(DI_TOKENS.UserRepo)
+    .toDynamicValue(() => new UserRepository(db as any))
+    .inSingletonScope();
 
   // Cache service (singleton)
-  container.register<ICacheService>(DI_TOKENS.Cache, { useClass: CacheService }, { lifecycle: Lifecycle.Singleton });
+  container.bind<ICacheService>(DI_TOKENS.Cache)
+    .toDynamicValue(() => new CacheService())
+    .inSingletonScope();
 
   // Dex registry (singleton instance)
-  container.registerInstance(DI_TOKENS.DexRegistry, dexRegistry);
+  container.bind(DI_TOKENS.DexRegistry).toConstantValue(dexRegistry);
 
   // Adapters (singleton where appropriate)
-  container.register(SolanaAdapter, { useClass: SolanaAdapter }, { lifecycle: Lifecycle.Singleton });
-  container.register(JupiterAdapter, { useClass: JupiterAdapter }, { lifecycle: Lifecycle.Singleton });
-  container.register(PrivyAdapter, { useClass: PrivyAdapter }, { lifecycle: Lifecycle.Singleton });
-  container.register(MeteoraAdapter, { useClass: MeteoraAdapter }, { lifecycle: Lifecycle.Singleton });
-  container.register(SarosAdapter, { useClass: SarosAdapter }, { lifecycle: Lifecycle.Singleton });
+  container.bind(SolanaAdapter).toDynamicValue(() => new SolanaAdapter()).inSingletonScope();
+  container.bind(JupiterAdapter).toDynamicValue(() => new JupiterAdapter()).inSingletonScope();
+  container.bind(PrivyAdapter).toDynamicValue(() => new PrivyAdapter()).inSingletonScope();
+  container.bind(MeteoraAdapter).toDynamicValue(() => new MeteoraAdapter()).inSingletonScope();
+  container.bind(SarosAdapter).toDynamicValue(() => new SarosAdapter()).inSingletonScope();
 
   // Transaction service (singleton)
-  container.register(DI_TOKENS.TransactionService, { useClass: PrivyTransactionService }, { lifecycle: Lifecycle.Singleton });
+  container.bind(DI_TOKENS.TransactionService)
+    .toDynamicValue(() => new PrivyTransactionService())
+    .inSingletonScope();
 
-  // Use-cases (transient)
-  container.register(CreatePositionUseCase, {
-    useFactory: (c) => new CreatePositionUseCase(
-      c.resolve<IPositionRepository>(DI_TOKENS.PositionRepo),
-      c.resolve(DI_TOKENS.DexRegistry) as any,
-      c.resolve(DI_TOKENS.TransactionService) as any,
-      c.resolve<ICacheService>(DI_TOKENS.Cache),
-    ),
-  }, { lifecycle: Lifecycle.Transient });
+  // Use-cases (transient by default)
+  container.bind(CreatePositionUseCase).toDynamicValue((c) =>
+    new CreatePositionUseCase(
+      c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
+      c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
+      c.container.get(DI_TOKENS.TransactionService) as any,
+      c.container.get<ICacheService>(DI_TOKENS.Cache),
+    )
+  );
 
-  container.register(ClosePositionUseCase, {
-    useFactory: (c) => new ClosePositionUseCase(
-      c.resolve<IPositionRepository>(DI_TOKENS.PositionRepo),
-      c.resolve(DI_TOKENS.DexRegistry) as any,
-      c.resolve(DI_TOKENS.TransactionService) as any,
-    ),
-  }, { lifecycle: Lifecycle.Transient });
+  container.bind(ClosePositionUseCase).toDynamicValue((c) =>
+    new ClosePositionUseCase(
+      c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
+      c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
+      c.container.get(DI_TOKENS.TransactionService) as any,
+      c.container.get<ICacheService>(DI_TOKENS.Cache),
+    )
+  );
 
-  container.register(ClaimFeesUseCase, {
-    useFactory: (c) => new ClaimFeesUseCase(
-      c.resolve<IPositionRepository>(DI_TOKENS.PositionRepo),
-      c.resolve(DI_TOKENS.DexRegistry) as any,
-      c.resolve(DI_TOKENS.TransactionService) as any,
-    ),
-  }, { lifecycle: Lifecycle.Transient });
+  container.bind(ClaimFeesUseCase).toDynamicValue((c) =>
+    new ClaimFeesUseCase(
+      c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
+      c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
+      c.container.get(DI_TOKENS.TransactionService) as any,
+      c.container.get<ICacheService>(DI_TOKENS.Cache),
+    )
+  );
 
-  container.register(GetPositionUseCase, {
-    useFactory: (c) => new GetPositionUseCase(
-      c.resolve<IPositionRepository>(DI_TOKENS.PositionRepo),
-      c.resolve(DI_TOKENS.DexRegistry) as any,
-    ),
-  }, { lifecycle: Lifecycle.Transient });
+  container.bind(GetPositionUseCase).toDynamicValue((c) =>
+    new GetPositionUseCase(
+      c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
+      c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
+    )
+  );
 
-  container.register(RebalancePositionUseCase, {
-    useFactory: (c) => new RebalancePositionUseCase(
-      c.resolve<IPositionRepository>(DI_TOKENS.PositionRepo),
-      c.resolve(DI_TOKENS.DexRegistry) as any,
-      c.resolve(DI_TOKENS.TransactionService) as any,
-    ),
-  }, { lifecycle: Lifecycle.Transient });
+  container.bind(RebalancePositionUseCase).toDynamicValue((c) =>
+    new RebalancePositionUseCase(
+      c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
+      c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
+      c.container.get(DI_TOKENS.TransactionService) as any,
+    )
+  );
 
-  container.register(GetPortfolioUseCase, {
-    useFactory: (c) => new GetPortfolioUseCase(
-      c.resolve<IPositionRepository>(DI_TOKENS.PositionRepo),
-      c.resolve(DI_TOKENS.DexRegistry) as any,
-      c.resolve<ICacheService>(DI_TOKENS.Cache),
-    ),
-  }, { lifecycle: Lifecycle.Transient });
+  container.bind(GetPortfolioUseCase).toDynamicValue((c) =>
+    new GetPortfolioUseCase(
+      c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
+      c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
+      c.container.get<ICacheService>(DI_TOKENS.Cache),
+    )
+  );
 
-  container.register(SyncPortfolioUseCase, { useClass: SyncPortfolioUseCase }, { lifecycle: Lifecycle.Transient });
-  container.register(CalculateMetricsUseCase, { useClass: CalculateMetricsUseCase }, { lifecycle: Lifecycle.Transient });
+  container.bind(SyncPortfolioUseCase).toDynamicValue((c) =>
+    new SyncPortfolioUseCase(
+      c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
+      c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
+      c.container.get<ICacheService>(DI_TOKENS.Cache),
+    )
+  );
 
-  container.register(GetBalanceUseCase, { useClass: GetBalanceUseCase }, { lifecycle: Lifecycle.Transient });
-  container.register(ConnectWalletUseCase, { useClass: ConnectWalletUseCase }, { lifecycle: Lifecycle.Transient });
-  container.register(SendTokensUseCase, { useClass: SendTokensUseCase }, { lifecycle: Lifecycle.Transient });
+  container.bind(CalculateMetricsUseCase).toDynamicValue(() => new CalculateMetricsUseCase());
 
-  container.register(GetTrendingPoolsUseCase, { useClass: GetTrendingPoolsUseCase }, { lifecycle: Lifecycle.Transient });
-  container.register(SearchPoolsUseCase, { useClass: SearchPoolsUseCase }, { lifecycle: Lifecycle.Transient });
+  container.bind(GetBalanceUseCase).toDynamicValue(() => new GetBalanceUseCase());
+
+  container.bind(ConnectWalletUseCase).toDynamicValue((c) =>
+    new ConnectWalletUseCase(c.container.get<IUserRepository>(DI_TOKENS.UserRepo))
+  );
+
+  container.bind(SendTokensUseCase).toDynamicValue((c) =>
+    new SendTokensUseCase(c.container.get<IUserRepository>(DI_TOKENS.UserRepo))
+  );
+
+  container.bind(GetTrendingPoolsUseCase).toDynamicValue(() => new GetTrendingPoolsUseCase());
+  container.bind(SearchPoolsUseCase).toDynamicValue(() => new SearchPoolsUseCase());
 }
 
 let runtimeRegistered = false;
@@ -164,30 +187,31 @@ export function initializeContainer(bot?: Telegraf<BotContext>) {
   if (runtimeRegistered) return;
 
   if (bot) {
-    container.registerInstance(DI_TOKENS.TelegramBot, bot);
-    container.register<ITelegramClient>(DI_TOKENS.TelegramClient, {
-      useFactory: (c) => new TelegramClient(c.resolve(DI_TOKENS.TelegramBot) as Telegraf<BotContext>),
-    });
+    container.bind(DI_TOKENS.TelegramBot).toConstantValue(bot);
 
-    container.register<JobQueueService>(DI_TOKENS.JobQueue, {
-      useFactory: () => new JobQueueService({ bot }),
-    }, { lifecycle: Lifecycle.Singleton });
+    container.bind<ITelegramClient>(DI_TOKENS.TelegramClient)
+      .toDynamicValue((c) => new TelegramClient(c.container.get(DI_TOKENS.TelegramBot) as Telegraf<BotContext>))
+      .inSingletonScope();
+
+    container.bind<JobQueueService>(DI_TOKENS.JobQueue)
+      .toDynamicValue(() => new JobQueueService({ bot }))
+      .inSingletonScope();
 
     // Notification service depends on TelegramClient and UserRepository and JobQueue
-    container.register(NotificationService, {
-      useFactory: (c) => new NotificationService(
-        c.resolve<ITelegramClient>(DI_TOKENS.TelegramClient),
-        c.resolve<IUserRepository>(DI_TOKENS.UserRepo),
-        c.resolve<JobQueueService>(DI_TOKENS.JobQueue),
-      ),
-    }, { lifecycle: Lifecycle.Singleton });
+    container.bind(NotificationService)
+      .toDynamicValue((c) => new NotificationService(
+        c.container.get<ITelegramClient>(DI_TOKENS.TelegramClient),
+        c.container.get<IUserRepository>(DI_TOKENS.UserRepo),
+        c.container.get<JobQueueService>(DI_TOKENS.JobQueue),
+      ))
+      .inSingletonScope();
   }
 
   // Register DEX adapters with the dex registry
   try {
-    const meteora = container.resolve(MeteoraAdapter);
-    const saros = container.resolve(SarosAdapter);
-    const reg = container.resolve(DI_TOKENS.DexRegistry) as typeof dexRegistry;
+    const meteora = container.get(MeteoraAdapter);
+    const saros = container.get(SarosAdapter);
+    const reg = container.get(DI_TOKENS.DexRegistry) as typeof dexRegistry;
 
     // Avoid duplicate registration in hot reload/dev
     for (const adapter of [meteora, saros]) {

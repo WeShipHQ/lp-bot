@@ -3,15 +3,15 @@ import { BotContext } from "@/types/bot.types";
 import { GetPortfolioUseCase } from "@/application/portfolio/get-portfolio.use-case";
 import { CalculateMetricsUseCase } from "@/application/portfolio/calculate-metrics.use-case";
 import { registerPortfolioCallbacks } from "../handlers/portfolio";
-import { container } from "tsyringe";
+import { container } from "@/infrastructure/di/container";
 
 export function portfolioCommand(bot: Telegraf<BotContext>) {
   bot.command("portfolio", async (ctx) => {
     const loading = await ctx.reply("Loading portfolio...");
     try {
-      const useCase = container.resolve(GetPortfolioUseCase);
+      const useCase = container.get(GetPortfolioUseCase);
       const portfolio = await useCase.execute(ctx.user.id, false);
-      const metrics = container.resolve(CalculateMetricsUseCase).execute(portfolio);
+      const metrics = container.get(CalculateMetricsUseCase).execute(portfolio);
 
       const lines: string[] = [];
       lines.push("📊 Portfolio Overview");

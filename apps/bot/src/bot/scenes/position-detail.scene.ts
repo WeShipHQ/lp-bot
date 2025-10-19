@@ -16,7 +16,7 @@ import { getTokenPriceService } from "@/services/token-price.service";
 import { formatNumber, formatPrice } from "../utils/formatters";
 import { getSolscanLink } from "@/utils/link";
 import { loading } from "../utils/text-formatters";
-import { container } from "tsyringe";
+import { container } from "@/infrastructure/di/container";
 import { ClosePositionUseCase } from "@/application/position/close-position.use-case";
 import { ClaimFeesUseCase } from "@/application/position/claim-fees.use-case";
 
@@ -150,7 +150,7 @@ positionDetailScene.action("pos_close_yes", async (ctx) => {
 
   try {
     // Use DI use case
-    const uc = container.resolve(ClosePositionUseCase);
+    const uc = container.get(ClosePositionUseCase);
     const res = await uc.execute({
       userId: ctx.user.id,
       positionId: position.id,
@@ -261,7 +261,7 @@ positionDetailScene.action(/^pos_claim_yes_(.+)$/, async (ctx) => {
       return;
     }
 
-    const uc = container.resolve(ClaimFeesUseCase);
+    const uc = container.get(ClaimFeesUseCase);
     const res = await uc.execute({
       userId: ctx.user.id,
       positionId: position.id,
