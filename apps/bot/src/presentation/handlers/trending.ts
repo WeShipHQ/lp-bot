@@ -8,7 +8,8 @@ import { PoolsFormatter } from "@/bot/utils/messages/pool.formatter";
 import { MessageManager } from "@/bot/utils/messages";
 import { TrendingPoolsSortCriteria } from "@/v2";
 import { getTrendingKeyboard } from "../keyboards/trending-menu";
-import { trendingV2Service } from "@/services/trending-v2.service";
+import { container } from "@/infrastructure/di/container";
+import { GetTrendingPoolsUseCase } from "@/application/trending/get-trending-pools.use-case";
 
 export async function trendingHandler(
   ctx: BotContext,
@@ -18,13 +19,12 @@ export async function trendingHandler(
     await ctx.reply(TRENDING_MESSAGES.FETCHING);
 
     const sortBy: TrendingPoolsSortCriteria = "apy";
-    const poolsResponse = await trendingV2Service.getTrendingPools({
+    const useCase = container.get(GetTrendingPoolsUseCase);
+    const poolsResponse = await useCase.execute({
+      dex: "meteora",
       page: 1,
       limit: TRENDING_CONSTANTS.PAGE_SIZE,
       sortBy,
-      sortOrder: "desc",
-      minTvl: 0,
-      verified: true,
     });
 
     const message = PoolsFormatter.formatTrendingPoolsMessage(
@@ -85,13 +85,12 @@ export async function handleTrendingCallback(
     else if (action === "next") nextPage = currentPage + 1;
     else if (action === "sort") nextPage = 1;
 
-    const poolsResponse = await trendingV2Service.getTrendingPools({
+    const useCase = container.get(GetTrendingPoolsUseCase);
+    const poolsResponse = await useCase.execute({
+      dex: "all",
       page: nextPage,
       limit: TRENDING_CONSTANTS.PAGE_SIZE,
       sortBy,
-      sortOrder: "desc",
-      minTvl: 0,
-      verified: true,
     });
 
     const message = PoolsFormatter.formatTrendingPoolsMessage(
