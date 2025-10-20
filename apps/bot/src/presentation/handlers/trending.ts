@@ -58,14 +58,23 @@ export async function handleTrendingCallback(
 ) {
   try {
     const raw = String(ctx.callbackQuery?.data ?? ctx.match?.input ?? "");
-    const match = /^trending:(prev|next|refresh|sort|noop):(\d+):(apy|tvl|volume24h|fee_tvl_ratio)$/.exec(raw);
+    const match =
+      /^trending:(prev|next|refresh|sort|noop):(\d+):(apy|tvl|volume24h|fee_tvl_ratio)$/.exec(
+        raw
+      );
 
     if (!match) {
       await ctx.answerCbQuery("❌ Invalid callback data.");
       return;
     }
 
-    const [, action, pageStr, sortByStr] = match as [string, string, string, TrendingPoolsSortCriteria];
+    // @ts-expect-error FIXME
+    const [, action, pageStr, sortByStr] = match as [
+      string,
+      string,
+      string,
+      TrendingPoolsSortCriteria,
+    ];
     const currentPage = Number(pageStr) || 1;
     const sortBy = sortByStr as TrendingPoolsSortCriteria;
 
@@ -79,14 +88,17 @@ export async function handleTrendingCallback(
     else if (action === "next") nextPage = currentPage + 1;
     else if (action === "sort") nextPage = 1;
 
-    const poolsResponse = await unifiedPoolService.getTrendingPools(SELECTED_DEX, {
-      page: nextPage,
-      limit: TRENDING_CONSTANTS.PAGE_SIZE,
-      sortBy,
-      sortOrder: "desc",
-      minTvl: 0,
-      verified: true,
-    });
+    const poolsResponse = await unifiedPoolService.getTrendingPools(
+      SELECTED_DEX,
+      {
+        page: nextPage,
+        limit: TRENDING_CONSTANTS.PAGE_SIZE,
+        sortBy,
+        sortOrder: "desc",
+        minTvl: 0,
+        verified: true,
+      }
+    );
 
     const message = PoolsFormatter.formatTrendingPoolsMessage(
       poolsResponse.pools,
