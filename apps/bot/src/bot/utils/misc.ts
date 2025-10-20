@@ -116,8 +116,6 @@ export function parseDeepLinkParam(startParam: string) {
     referralCode = referralPart;
   }
 
-  console.log("xx yyy xxxxx eee", referralCode, actionPart);
-
   if (actionPart.startsWith("ca_")) {
     // Token detail: ca_<token_address>
     const tokenAddress = actionPart.replace(/^ca_/, "");
