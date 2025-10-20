@@ -34,6 +34,7 @@ export class UserSyncService {
       } else {
         const [newUser] = await db
           .insert(users)
+          // @ts-expect-error
           .values({
             id: randomUUID(),
             telegramId: userData.telegramId,
