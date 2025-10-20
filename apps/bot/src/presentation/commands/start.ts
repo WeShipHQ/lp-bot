@@ -7,8 +7,8 @@ import { userSyncService } from "@/services/user-sync.service";
 import { solanaService } from "@/services/solana.service";
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
-import { MessageManager } from "../utils/messages";
-import { parseDeepLinkParam } from "../utils/misc";
+import { MessageManager } from "@/bot/utils/messages";
+import { parseDeepLinkParam } from "@/bot/utils/misc";
 
 export function startCommand(
   bot: Telegraf<BotContext>,

@@ -11,8 +11,8 @@ import {
 import { buildPoolDetailMarkdown } from "@/services/pool-detail.service";
 import { BotContext } from "@/types/bot.types";
 import { SELECTED_DEX } from "../config/constants";
-import { PoolsFormatter } from "../utils/messages/pool.formatter";
-import { MessageManager } from "../utils/messages";
+import { PoolsFormatter } from "@/bot/utils/messages/pool.formatter";
+import { MessageManager } from "@/bot/utils/messages";
 import { TrendingPoolsSortCriteria, unifiedPoolService } from "@/v2";
 
 export async function trendingHandler(

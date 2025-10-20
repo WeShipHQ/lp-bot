@@ -7,8 +7,8 @@ import { poolService } from "@/services/pool.service";
 import { jupiterService } from "@/services/jupiter.service";
 import { meteoraDlmmService } from "@/services/meteora/dlmm.service";
 import { SOL_MINT } from "@/config/constants";
-import { formatNumber, formatPercentage } from "../utils/formatters";
-import { divider, link } from "../utils/text-formatters";
+import { formatNumber, formatPercentage } from "@/bot/utils/formatters";
+import { divider, link } from "@/bot/utils/text-formatters";
 import { message } from "telegraf/filters";
 import {
   BUFFER_AMOUNT,

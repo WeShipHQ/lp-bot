@@ -2,7 +2,7 @@ import fp from "fastify-plugin";
 import { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { Telegraf } from "telegraf";
 import { CONFIG } from "../config";
-import { setupBotCommands } from "../bot";
+import { setupBotCommands } from "../presentation";
 import { BotContext } from "@/types/bot.types";
 import { initializeContainer } from "@/infrastructure/di/container";
 
