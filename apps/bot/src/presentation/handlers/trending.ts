@@ -4,11 +4,11 @@ import {
   TRENDING_MESSAGES,
 } from "../constants/trending.constants";
 import { BotContext } from "@/types/bot.types";
-import { SELECTED_DEX } from "@/bot/config/constants";
 import { PoolsFormatter } from "@/bot/utils/messages/pool.formatter";
 import { MessageManager } from "@/bot/utils/messages";
-import { TrendingPoolsSortCriteria, unifiedPoolService } from "@/v2";
+import { TrendingPoolsSortCriteria } from "@/v2";
 import { getTrendingKeyboard } from "../keyboards/trending-menu";
+import { trendingV2Service } from "@/services/trending-v2.service";
 
 export async function trendingHandler(
   ctx: BotContext,
@@ -18,17 +18,14 @@ export async function trendingHandler(
     await ctx.reply(TRENDING_MESSAGES.FETCHING);
 
     const sortBy: TrendingPoolsSortCriteria = "apy";
-    const poolsResponse = await unifiedPoolService.getTrendingPools(
-      SELECTED_DEX,
-      {
-        page: 1,
-        limit: TRENDING_CONSTANTS.PAGE_SIZE,
-        sortBy,
-        sortOrder: "desc",
-        minTvl: 0,
-        verified: true,
-      }
-    );
+    const poolsResponse = await trendingV2Service.getTrendingPools({
+      page: 1,
+      limit: TRENDING_CONSTANTS.PAGE_SIZE,
+      sortBy,
+      sortOrder: "desc",
+      minTvl: 0,
+      verified: true,
+    });
 
     const message = PoolsFormatter.formatTrendingPoolsMessage(
       poolsResponse.pools,
@@ -88,17 +85,14 @@ export async function handleTrendingCallback(
     else if (action === "next") nextPage = currentPage + 1;
     else if (action === "sort") nextPage = 1;
 
-    const poolsResponse = await unifiedPoolService.getTrendingPools(
-      SELECTED_DEX,
-      {
-        page: nextPage,
-        limit: TRENDING_CONSTANTS.PAGE_SIZE,
-        sortBy,
-        sortOrder: "desc",
-        minTvl: 0,
-        verified: true,
-      }
-    );
+    const poolsResponse = await trendingV2Service.getTrendingPools({
+      page: nextPage,
+      limit: TRENDING_CONSTANTS.PAGE_SIZE,
+      sortBy,
+      sortOrder: "desc",
+      minTvl: 0,
+      verified: true,
+    });
 
     const message = PoolsFormatter.formatTrendingPoolsMessage(
       poolsResponse.pools,
