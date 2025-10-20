@@ -3,10 +3,10 @@ import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
 import { MessageService } from "@/services/message.service";
 import { getPoolInfoKeyboard } from "../keyboards";
-import { code, loading } from "../utils/text-formatters";
+import { code, loading } from "@/bot/utils/text-formatters";
 import { DISABLE_LINK_PREVIEW } from "../handlers";
 import { Pool, PoolDex } from "@/types/pool.types";
-import { formatNumber, formatPercentage, formatAPR } from "../utils/formatters";
+import { formatNumber, formatPercentage, formatAPR } from "@/bot/utils/formatters";
 import { UnifiedPool, unifiedPoolService } from "@/v2";
 import { PoolFormatter } from "../formatters/pool.formatter";
 

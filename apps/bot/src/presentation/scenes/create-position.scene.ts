@@ -7,14 +7,9 @@ import { poolService } from "@/services/pool.service";
 import { jupiterService } from "@/services/jupiter.service";
 import { meteoraDlmmService } from "@/services/meteora/dlmm.service";
 import { SOL_MINT } from "@/config/constants";
-import { formatNumber, formatPercentage } from "../utils/formatters";
-import { divider, link } from "../utils/text-formatters";
+import { formatNumber, formatPercentage } from "@/bot/utils/formatters";
+import { divider, link } from "@/bot/utils/text-formatters";
 import { message } from "telegraf/filters";
-import {
-  BUFFER_AMOUNT,
-  OPEN_POSITION_FEE,
-  SLIPPAGE_SMALL,
-} from "../config/constants";
 import { solanaService } from "@/services/solana.service";
 import { positionService } from "@/services/position.service";
 import { Pool, PoolDex } from "@/types/pool.types";
@@ -28,6 +23,11 @@ import { dexRegistry } from "@/services/dex-registry.service";
 import { PrivyTransactionService } from "@/services/transaction.service";
 import { db } from "@/db";
 import { DexType } from "@/types/core.types";
+import {
+  BUFFER_AMOUNT,
+  OPEN_POSITION_FEE,
+  SLIPPAGE_SMALL,
+} from "@/bot/config/constants";
 
 type WizardState = {
   step?:
@@ -720,7 +720,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       const createUC = new CreatePositionUseCase(repo, dexRegistry, txService);
       const res = await createUC.execute({
         userId: ctx.user.id,
-        dex: (dex as DexType) || 'meteora',
+        dex: (dex as DexType) || "meteora",
         poolAddress: poolData.address,
         userAddress: ctx.user.walletAddress!,
         walletId: ctx.user.walletId,
@@ -728,12 +728,15 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         tokenBAmount: String(tokenBAmount),
         strategy,
         slippage: SLIPPAGE_SMALL,
-        metadata: { rangeInterval: ctx.user.balancedPositionBinRange, autoRebalancing: autoRebalancing === 'yes' }
+        metadata: {
+          rangeInterval: ctx.user.balancedPositionBinRange,
+          autoRebalancing: autoRebalancing === "yes",
+        },
       });
 
       if (!res.success || !res.signature) {
         await ctx.editMessageText(
-          `Failure: ❌ Failed: ${res.error || 'Unknown error'}`,
+          `Failure: ❌ Failed: ${res.error || "Unknown error"}`,
           { parse_mode: "Markdown" }
         );
         return ctx.scene.leave();
@@ -750,7 +753,9 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     } catch (error) {
       console.error("Error creating position via use case:", error);
       await ctx.editMessageText(
-        MessageService.getErrorMessage("Failed to create position. Please try again."),
+        MessageService.getErrorMessage(
+          "Failed to create position. Please try again."
+        ),
         { parse_mode: "Markdown" }
       );
     }

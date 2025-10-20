@@ -11,7 +11,7 @@ export const BUFFER_AMOUNT = 0.01;
 
 export const TOTAL_RANGE_INTERVAL = 20;
 
-export const SELECTED_DEX: PoolDex = "saros";
+export const SELECTED_DEX: PoolDex = "meteora";
 
 // trending
 export const TRENDING_CONSTANTS = {

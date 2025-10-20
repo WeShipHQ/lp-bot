@@ -24,7 +24,7 @@ export const DEX_CONFIGS: Record<DexType, DexConfig> = {
     },
   },
   saros: {
-    enabled: true,
+    enabled: false,
     apiUrl: "https://api.saros.xyz/api/dex-v3",
     timeout: 10000,
     retries: 3,
