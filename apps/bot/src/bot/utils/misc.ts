@@ -1,4 +1,4 @@
-import { OPEN_POSITION_FEE } from "../config/constants";
+import { OPEN_POSITION_FEE } from "@/bot/config/constants";
 
 export function calculateRecommendedAmount(positionAmount: number): number {
   const openPositionFee = positionAmount * (OPEN_POSITION_FEE / 100);

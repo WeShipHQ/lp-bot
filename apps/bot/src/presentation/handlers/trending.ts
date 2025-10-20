@@ -10,7 +10,7 @@ import {
 } from "../keyboards/trending-menu";
 import { buildPoolDetailMarkdown } from "@/services/pool-detail.service";
 import { BotContext } from "@/types/bot.types";
-import { SELECTED_DEX } from "../config/constants";
+import { SELECTED_DEX } from "@/bot/config/constants";
 import { PoolsFormatter } from "@/bot/utils/messages/pool.formatter";
 import { MessageManager } from "@/bot/utils/messages";
 import { TrendingPoolsSortCriteria, unifiedPoolService } from "@/v2";
