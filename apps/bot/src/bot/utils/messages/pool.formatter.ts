@@ -47,7 +47,7 @@ export class PoolsFormatter extends BaseFormatter {
         displayData = `APY: *${apy}* | Fee24h: *${fee24h}* | TVL: *${tvl}*`;
       }
 
-      return `${link(`/${displayIndex} ${pool.name.toUpperCase()}`, getPoolDeeplink("pandalpbot", "saros", pool.address))} \n ${displayData}`;
+      return `${link(`/${displayIndex} ${pool.name.toUpperCase()}`, getPoolDeeplink("pandalpbot", pool.dex as any, pool.address))} \n ${displayData}`;
     });
 
     const spacedLines: string[] = [];

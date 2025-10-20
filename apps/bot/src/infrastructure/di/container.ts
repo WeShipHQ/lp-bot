@@ -207,14 +207,17 @@ export function initializeContainer(bot?: Telegraf<BotContext>) {
       .inSingletonScope();
   }
 
-  // Register DEX adapters with the dex registry
+  // Register DEX adapters with the dex registry based on configuration
   try {
-    const meteora = container.get(MeteoraAdapter);
-    const saros = container.get(SarosAdapter);
     const reg = container.get(DI_TOKENS.DexRegistry) as typeof dexRegistry;
+    const { getEnabledDexTypes } = require("@/config/dex.config");
+    const enabled = getEnabledDexTypes();
 
-    // Avoid duplicate registration in hot reload/dev
-    for (const adapter of [meteora, saros]) {
+    const adapters: any[] = [];
+    if (enabled.includes("meteora")) adapters.push(container.get(MeteoraAdapter));
+    if (enabled.includes("saros")) adapters.push(container.get(SarosAdapter));
+
+    for (const adapter of adapters) {
       try { reg.register(adapter as any); } catch {}
     }
   } catch {}

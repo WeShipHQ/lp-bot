@@ -1,4 +1,4 @@
-import { PoolDex } from "@/types/pool.types";
+import { DexType } from "@/types/core.types";
 
 export const OPEN_POSITION_FEE = 1; // 1%
 export const REBALANCING_FEE = 0.15; // 0.15%
@@ -11,7 +11,12 @@ export const BUFFER_AMOUNT = 0.01;
 
 export const TOTAL_RANGE_INTERVAL = 20;
 
-export const SELECTED_DEX: PoolDex = "meteora";
+// Selected DEX for the bot runtime. Set via env BOT_DEX or DEX (meteora|saros|orca|raydium)
+const RAW_SELECTED_DEX = (process.env.BOT_DEX || process.env.DEX || "meteora").toLowerCase();
+const SUPPORTED_DEXES: DexType[] = ["meteora", "saros", "orca", "raydium"];
+export const SELECTED_DEX: DexType = (SUPPORTED_DEXES as string[]).includes(RAW_SELECTED_DEX)
+  ? (RAW_SELECTED_DEX as DexType)
+  : ("meteora" as DexType);
 
 // trending
 export const TRENDING_CONSTANTS = {
