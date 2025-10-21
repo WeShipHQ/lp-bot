@@ -1,7 +1,6 @@
-import { SOL_MINT } from "@/config/constants";
+import { OPEN_POSITION_FEE, SOL_MINT } from "@/config/constants";
 import { JupiterAdapter } from "@/adapters/external-api/jupiter.adapter";
 import { UnifiedPool } from "@/types/core.types";
-import { OPEN_POSITION_FEE } from "@/bot/config/constants";
 
 export interface CalculateBalancedDistributionInput {
   pool: UnifiedPool;

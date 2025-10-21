@@ -1,7 +1,10 @@
 import { Scenes } from "telegraf";
+import { Position } from "@/db";
+import { Pool } from "@/types/pool.types";
+import { TokenPrice } from "@/types/token.types";
+import { LbPair, LbPosition } from "@meteora-ag/dlmm";
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
-import { MessageService } from "@/services/message.service";
 import { positionService } from "@/services/position.service";
 import {
   getPositionDetailKeyboard,
@@ -13,19 +16,38 @@ import { DISABLE_LINK_PREVIEW } from "../handlers";
 import { db, Position as DbPosition } from "@/db";
 import { poolService } from "@/services/pool.service";
 import { getTokenPriceService } from "@/services/token-price.service";
-import { formatNumber, formatPrice } from "@/bot/utils/formatters";
 import { getSolscanLink } from "@/utils/link";
-import { loading } from "@/bot/utils/text-formatters";
 import { ClosePositionUseCase } from "@/application/position/close-position.use-case";
 import { ClaimFeesUseCase } from "@/application/position/claim-fees.use-case";
 import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
 import { dexRegistry } from "@/services/dex-registry.service";
 import { PrivyTransactionService } from "@/services/transaction.service";
+import { formatPrice } from "../formatters/base.formatter";
+import { loading } from "@/utils/misc";
 
 type SceneState = {
   positionAddress?: string;
   position?: DbPosition;
 };
+
+class MessageService {
+  static getErrorMessage(
+    message: string = "Something went wrong. Please try again later."
+  ): string {
+    return `❌ ${message}`;
+  }
+
+  static getPositionDetailMessageV1(
+    position: Position,
+    lbPosition: LbPosition,
+    lbPair: LbPair,
+    poolInfo: Pool,
+    tokenAPrice: TokenPrice,
+    tokenBPrice: TokenPrice
+  ): string {
+    return "Soon";
+  }
+}
 
 export const positionDetailScene = new Scenes.BaseScene<BotContext>(
   SCENE_IDS.POSITION_DETAIL_SCENE
@@ -286,7 +308,10 @@ positionDetailScene.action(/^pos_claim_yes_(.+)$/, async (ctx) => {
       return;
     }
 
-    const claimedStr = res.claimedFeesUsd != null ? formatPrice(Number(res.claimedFeesUsd), { maxDecimals: 2 }) : 'N/A';
+    const claimedStr =
+      res.claimedFeesUsd != null
+        ? formatPrice(Number(res.claimedFeesUsd), { maxDecimals: 2 })
+        : "N/A";
     const successMessage =
       `✅ *Fees Claimed Successfully*\n\n` +
       `Claimed Amount (est.): ${claimedStr}\n` +
@@ -365,7 +390,10 @@ positionDetailScene.action(/^pos_rebalance_yes_(.+)$/, async (ctx) => {
 
   try {
     // TODO: Implement actual rebalance logic here
-    const results = await positionService.rebalanceV1(ctx.user, positionAddress);
+    const results = await positionService.rebalanceV1(
+      ctx.user,
+      positionAddress
+    );
 
     // For now, just show a placeholder success message
     const successMessage =

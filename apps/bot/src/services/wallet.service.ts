@@ -1,7 +1,7 @@
 import { generateAuthorizationSignature } from "@privy-io/server-auth/wallet-api";
 import { CONFIG } from "../config";
-import { generateRecipientKeypair } from "../bot/utils/hpke-keygen";
-import { decryptHPKEMessage } from "../bot/utils/hpke-decrypt";
+import { generateRecipientKeypair } from "@/utils/hpke-keygen";
+import { decryptHPKEMessage } from "@/utils/hpke-decrypt";
 import { privy } from "./privy.service";
 import {
   Connection,
@@ -11,7 +11,6 @@ import {
   AddressLookupTableAccount,
   Transaction,
   VersionedTransaction,
-  SystemProgram,
 } from "@solana/web3.js";
 import { User } from "@/db";
 import { CreateSmartTransactionOptions } from "@/types/transaction.types";

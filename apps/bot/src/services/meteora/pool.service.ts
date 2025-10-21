@@ -3,7 +3,7 @@ import {
   DlmmClaimReward,
   DlmmDepositWithdraw,
 } from "@/types/portfolio.types";
-import { api } from "@/bot/utils/http-client.util";
+import { api } from "@/utils/http-client.util";
 import {
   MeteoraDlmmPoolResponse,
   MeteoraDammV1PoolResponse,

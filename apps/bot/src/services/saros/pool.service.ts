@@ -1,4 +1,4 @@
-import { api } from "@/bot/utils/http-client.util";
+import { api } from "@/utils/http-client.util";
 import {
   SarosBaseListResponse,
   SarosDlmmPool,

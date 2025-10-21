@@ -1,17 +1,9 @@
-import {
-  DlmmClaimFee,
-  DlmmClaimReward,
-  DlmmDepositWithdraw,
-} from "@/types/portfolio.types";
-import { api } from "@/bot/utils/http-client.util";
+import { api } from "@/utils/http-client.util";
 import {
   MeteoraDlmmPoolResponse,
   MeteoraDammV1PoolResponse,
   MeteoraDammV2PoolResponse,
-  MeteoraDlmmPoolsPaginationResponse,
-  DlmmPoolsPaginationParams,
 } from "@/types/meteora.types";
-import type { MeteoraPoolData, MeteoraPoolType } from "@/types/meteora.types";
 import { CircuitBreaker } from "@/infrastructure/resilience/circuit-breaker";
 import { getCacheService } from "@/infrastructure/cache/cache.service";
 import { CacheKeys } from "@/infrastructure/cache/cache-keys";
@@ -20,7 +12,12 @@ export class MeteoraApiService {
   private readonly dlmmApiUrl = "https://dlmm-api.meteora.ag";
   private readonly dammV1ApiUrl = "https://damm-api.meteora.ag";
   private readonly dammV2ApiUrl = "https://dammv2-api.meteora.ag";
-  private readonly breaker = new CircuitBreaker({ name: 'meteora', failureThreshold: 5, successThreshold: 2, timeoutMs: 15000 });
+  private readonly breaker = new CircuitBreaker({
+    name: "meteora",
+    failureThreshold: 5,
+    successThreshold: 2,
+    timeoutMs: 15000,
+  });
   private readonly cache = getCacheService();
 
   async getDlmmPool(poolAddress: string): Promise<MeteoraDlmmPoolResponse> {
@@ -28,16 +25,21 @@ export class MeteoraApiService {
       console.log(`[Meteora] Fetching DLMM pool: ${poolAddress}`);
 
       const data = await this.breaker.execute(
-        () => api.getWithRetry<MeteoraDlmmPoolResponse>(`${this.dlmmApiUrl}/pair/${poolAddress}`),
+        () =>
+          api.getWithRetry<MeteoraDlmmPoolResponse>(
+            `${this.dlmmApiUrl}/pair/${poolAddress}`
+          ),
         async () => {
-          const cached = await this.cache.get<MeteoraDlmmPoolResponse>(CacheKeys.poolKey('meteora', poolAddress));
-          if (!cached) throw new Error('Meteora DLMM API unavailable');
+          const cached = await this.cache.get<MeteoraDlmmPoolResponse>(
+            CacheKeys.poolKey("meteora", poolAddress)
+          );
+          if (!cached) throw new Error("Meteora DLMM API unavailable");
           return cached;
         }
       );
 
       // Cache fresh result
-      await this.cache.set(CacheKeys.poolKey('meteora', poolAddress), data, 60);
+      await this.cache.set(CacheKeys.poolKey("meteora", poolAddress), data, 60);
       return data;
     } catch (error) {
       console.error(
@@ -70,8 +72,11 @@ export class MeteoraApiService {
       console.log(`[Meteora] Fetching DAMM v2 pool: ${poolId}`);
 
       const data = await this.breaker.execute(
-        () => api.getWithRetry<MeteoraDammV2PoolResponse>(`${this.dammV2ApiUrl}/pools/${poolId}`),
-        async () => ({ } as any)
+        () =>
+          api.getWithRetry<MeteoraDammV2PoolResponse>(
+            `${this.dammV2ApiUrl}/pools/${poolId}`
+          ),
+        async () => ({}) as any
       );
 
       return data as any;

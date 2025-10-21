@@ -22,9 +22,9 @@ export function registerCommands(
   walletCommand(bot, server);
   trendingCommand(bot, server);
   twoFactorAuthCommand(bot, server);
-  generateImageCommand(bot, server);
   referralCommand(bot, server);
   settingsCommand(bot, server);
   // for dev
   devCommand(bot, server);
+  generateImageCommand(bot, server);
 }

@@ -21,13 +21,11 @@ import {
   positionSegments,
 } from "@/db";
 import { SOL_MINT } from "@/config/constants";
-import { meteoraPositionService } from "./meteora/position.service";
 import { MeteoraCreatePositionStrategy } from "@/types/meteora.types";
-import { OPEN_POSITION_FEE } from "@/bot/config/constants";
+import { OPEN_POSITION_FEE } from "@/config/constants";
 import { LbPosition, StrategyType } from "@meteora-ag/dlmm";
 import { poolService } from "./pool.service";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
-import { JobQueueService } from "./job-queue.service";
 import {
   createClaimHistory,
   createPosition,
@@ -209,7 +207,7 @@ export class PositionService {
       const amount = enteredAmount - feeAmount;
 
       // Get pool information
-      const poolInfo = await poolService.getPoolV2(poolAddress, 'saros');
+      const poolInfo = await poolService.getPoolV2(poolAddress, "saros");
       if (!poolInfo) {
         throw new Error("Pool not found");
       }

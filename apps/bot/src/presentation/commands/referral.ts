@@ -1,7 +1,6 @@
 import { Telegraf } from "telegraf";
 import { FastifyInstance } from "fastify";
 import { referralService } from "@/services/referral.service";
-import { MessageService } from "@/services/message.service";
 import { BotContext } from "@/types/bot.types";
 
 export function referralCommand(
@@ -12,7 +11,7 @@ export function referralCommand(
     try {
       if (!ctx.user) {
         await ctx.reply(
-          MessageService.getErrorMessage("Authentication failed")
+          "Authentication failed"
         );
         return;
       }
@@ -20,7 +19,7 @@ export function referralCommand(
       await showReferralInfo(ctx);
     } catch (error) {
       console.error("Error in referral command:", error);
-      await ctx.reply(MessageService.getErrorMessage());
+      await ctx.reply("Something went wrong. Please try again later.");
     }
   });
 
