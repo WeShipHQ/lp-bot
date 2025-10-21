@@ -1,6 +1,8 @@
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
-import { unifiedInputDetectionService } from "@/v2";
+import { ParseFreeTextMessageUseCase } from "@/application/message/parse-free-text.use-case";
+import { RouteFreeTextMessageUseCase } from "@/application/message/route-free-text.use-case";
+import { container } from "@/infrastructure/di/container";
 
 export async function messageHandler(
   ctx: BotContext,
@@ -9,27 +11,28 @@ export async function messageHandler(
   const messageText =
     ctx.message && "text" in ctx.message ? ctx.message.text : "";
 
-  if (!messageText) {
+  if (!messageText || !messageText.trim()) {
     return await next();
   }
 
-  const detection = unifiedInputDetectionService.detectInput(messageText);
+  const parsed = container
+    .get(ParseFreeTextMessageUseCase)
+    .execute({ text: messageText });
+  console.log("parsed", parsed);
+  const decision = container.get(RouteFreeTextMessageUseCase).execute(parsed);
+  console.log("decision", decision);
 
-  if (!detection) {
-    return await next();
-  }
-
-  if (detection.type === "token") {
-    console.warn("implement token detail scene");
-    return ctx.reply("Coming soon...");
-  } else if (detection.type === "pool") {
-    const { dex, poolType, poolId } = detection;
-
+  if (decision.type === "enter_pool_detail") {
+    const { poolAddress, dex, poolType } = decision.state;
     return ctx.scene.enter(SCENE_IDS.POOL_DETAIL_SCENE, {
-      poolAddress: poolId,
+      poolAddress,
       dex,
       poolType,
     });
+  }
+
+  if (decision.type === "reply") {
+    return ctx.reply(decision.message);
   }
 
   return await next();

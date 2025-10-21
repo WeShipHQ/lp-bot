@@ -37,6 +37,9 @@ import { SendTokensUseCase } from "@/application/wallet/send-tokens.use-case";
 import { GetTrendingPoolsUseCase } from "@/application/trending/get-trending-pools.use-case";
 import { SearchPoolsUseCase } from "@/application/trending/search-pools.use-case";
 
+import { ParseFreeTextMessageUseCase } from "@/application/message/parse-free-text.use-case";
+import { RouteFreeTextMessageUseCase } from "@/application/message/route-free-text.use-case";
+
 // Adapters
 import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
 import { JupiterAdapter } from "@/adapters/external-api/jupiter.adapter";
@@ -242,6 +245,13 @@ function registerBase() {
   container
     .bind(SearchPoolsUseCase)
     .toDynamicValue(() => new SearchPoolsUseCase());
+
+  container
+    .bind(ParseFreeTextMessageUseCase)
+    .toDynamicValue(() => new ParseFreeTextMessageUseCase());
+  container
+    .bind(RouteFreeTextMessageUseCase)
+    .toDynamicValue(() => new RouteFreeTextMessageUseCase());
 }
 
 let runtimeRegistered = false;
