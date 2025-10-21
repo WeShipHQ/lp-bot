@@ -31,12 +31,16 @@ import { SyncPortfolioUseCase } from "@/application/portfolio/sync-portfolio.use
 import { CalculateMetricsUseCase } from "@/application/portfolio/calculate-metrics.use-case";
 
 import { GetBalanceUseCase } from "@/application/wallet/get-balance.use-case";
+import { GetTokenBalanceUseCase } from "@/application/wallet/get-token-balance.use-case";
+import { GetPoolTokenBalancesUseCase } from "@/application/wallet/get-pool-token-balances.use-case";
 import { ConnectWalletUseCase } from "@/application/wallet/connect-wallet.use-case";
 import { SendTokensUseCase } from "@/application/wallet/send-tokens.use-case";
 
 import { GetTrendingPoolsUseCase } from "@/application/trending/get-trending-pools.use-case";
 import { SearchPoolsUseCase } from "@/application/trending/search-pools.use-case";
 import { GetPoolDetailsUseCase } from "@/application/trending/get-pool-details.use-case";
+import { CalculateBalancedDistributionUseCase } from "@/application/position/calculate-balanced-distribution.use-case";
+import { GetPriceRangeUseCase } from "@/application/position/get-price-range.use-case";
 
 import { ParseFreeTextMessageUseCase } from "@/application/message/parse-free-text.use-case";
 import { RouteFreeTextMessageUseCase } from "@/application/message/route-free-text.use-case";
@@ -193,6 +197,14 @@ function registerBase() {
     );
 
   container
+    .bind(CalculateBalancedDistributionUseCase)
+    .toDynamicValue(() => new CalculateBalancedDistributionUseCase());
+
+  container
+    .bind(GetPriceRangeUseCase)
+    .toDynamicValue(() => new GetPriceRangeUseCase());
+
+  container
     .bind(GetPortfolioUseCase)
     .toDynamicValue(
       (c) =>
@@ -221,6 +233,15 @@ function registerBase() {
   container
     .bind(GetBalanceUseCase)
     .toDynamicValue(() => new GetBalanceUseCase());
+
+  container
+    .bind(GetTokenBalanceUseCase)
+    .toDynamicValue(() => new GetTokenBalanceUseCase());
+
+  // Convenience aggregator use-case
+  container
+    .bind(GetPoolTokenBalancesUseCase)
+    .toDynamicValue(() => new GetPoolTokenBalancesUseCase());
 
   container
     .bind(ConnectWalletUseCase)
