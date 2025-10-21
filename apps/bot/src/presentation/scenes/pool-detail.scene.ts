@@ -3,83 +3,20 @@ import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
 import { MessageService } from "@/services/message.service";
 import { getPoolInfoKeyboard } from "../keyboards";
-import { code, loading } from "@/bot/utils/text-formatters";
+import { loading } from "@/bot/utils/text-formatters";
 import { DISABLE_LINK_PREVIEW } from "../handlers";
-import { Pool, PoolDex } from "@/types/pool.types";
-import { formatNumber, formatPercentage, formatAPR } from "@/bot/utils/formatters";
-import { UnifiedPool, unifiedPoolService } from "@/v2";
+import { DexType, UnifiedPool } from "@/types/core.types";
 import { PoolFormatter } from "../formatters/pool.formatter";
+import { container } from "@/infrastructure/di/container";
+import { GetPoolDetailsUseCase } from "@/application/trending/get-pool-details.use-case";
 
-function formatPoolDetails(pool: UnifiedPool): string {
-  const tokenASymbol = pool.tokenA?.symbol || "Unknown";
-  const tokenBSymbol = pool.tokenB?.symbol || "Unknown";
-  const tokenPair = `${tokenASymbol.toUpperCase()}/${tokenBSymbol.toUpperCase()}`;
-
-  const poolAddress = pool.address || "Unknown";
-  let shortPoolAddress = "Unknown";
-  let poolSolscanLink = "#";
-
-  if (poolAddress && poolAddress !== "Unknown") {
-    shortPoolAddress = `${poolAddress.substring(0, 4)}…${poolAddress.substring(poolAddress.length - 4)}`;
-    poolSolscanLink = `https://solscan.io/account/${poolAddress}`;
-  }
-
-  const tokenAMint = pool.tokenA?.address || "Unknown";
-  let shortTokenAMint = "Unknown";
-  let tokenASolscanLink = "#";
-
-  if (tokenAMint && tokenAMint !== "Unknown") {
-    shortTokenAMint = `${tokenAMint.substring(0, 4)}…${tokenAMint.substring(tokenAMint.length - 4)}`;
-    tokenASolscanLink = `https://solscan.io/token/${tokenAMint}`;
-  }
-
-  const tokenBMint = pool.tokenB?.address || "Unknown";
-  let shortTokenBMint = "Unknown";
-  let tokenBSolscanLink = "#";
-
-  if (tokenBMint && tokenBMint !== "Unknown") {
-    shortTokenBMint = `${tokenBMint.substring(0, 4)}…${tokenBMint.substring(tokenBMint.length - 4)}`;
-    tokenBSolscanLink = `https://solscan.io/token/${tokenBMint}`;
-  }
-
-  const tvl =
-    "$" + formatNumber(parseFloat(pool.tvl || "0"), { useSuffixes: true });
-  const apy = formatAPR(pool.apy, { cap: 10000 });
-
-  const fee24h =
-    "$" + formatNumber(pool.fees?.hour24 || 0, { useSuffixes: true });
-
-  const feeTvlRatio = pool.feeTvlRatio24h
-    ? formatPercentage(pool.feeTvlRatio24h * 100, { decimals: 2 })
-    : "N/A";
-
-  const volume24h =
-    "$" + formatNumber(pool.volume?.hour24 || 0, { useSuffixes: true });
-
-  const explorerLink = `[Explorer](${poolSolscanLink})`;
-  const dexscreenerLink =
-    poolAddress !== "Unknown"
-      ? `[Dexscreener](https://dexscreener.com/solana/${poolAddress})`
-      : "[Dexscreener](#)";
-
-  return (
-    `*${tokenPair}*` +
-    `\n${code(poolAddress)}` +
-    `\n${explorerLink} | ${dexscreenerLink}` +
-    `\n\n*TVL:* ${tvl}` +
-    `\n*APY (24h):* ${apy}` +
-    `\n*Fee (24h):* ${fee24h}` +
-    `\n*Fee/TVL (24h):* ${feeTvlRatio}` +
-    `\n*Volume*` +
-    `24h: ${volume24h}`
-  );
-}
-
-type SceneState = {
+// Scene state is presentation-only; keep it minimal and typed
+interface SceneState {
   poolAddress?: string;
-  dex?: PoolDex;
-  pool?: Pool;
-};
+  dex?: DexType;
+  pool?: UnifiedPool;
+  poolType?: string;
+}
 
 export const poolDetailScene = new Scenes.BaseScene<BotContext>(
   SCENE_IDS.POOL_DETAIL_SCENE
@@ -89,7 +26,8 @@ poolDetailScene.enter(async (ctx) => {
   try {
     const state = ctx.scene.state as SceneState;
     const poolAddress = state.poolAddress;
-    const dex = state.dex || "meteora";
+    const dex = (state.dex ?? "meteora") as DexType;
+
     if (!poolAddress) {
       await ctx.reply(MessageService.getErrorMessage("Pool address not found"));
       return ctx.scene.leave();
@@ -99,7 +37,8 @@ poolDetailScene.enter(async (ctx) => {
       parse_mode: "Markdown",
     });
 
-    const poolData = await unifiedPoolService.getPool(poolAddress, dex);
+    const useCase = container.get(GetPoolDetailsUseCase);
+    const poolData = await useCase.execute({ poolAddress, dex });
 
     ctx.scene.state = {
       pool: poolData,
@@ -117,7 +56,7 @@ poolDetailScene.enter(async (ctx) => {
       return ctx.scene.leave();
     }
 
-    const message = PoolFormatter.formatPoolDetails(poolData);
+    const message = PoolFormatter.formatPoolDetails(poolData as any);
     const keyboard = getPoolInfoKeyboard(poolData.address);
 
     await ctx.telegram.editMessageText(
@@ -141,8 +80,7 @@ poolDetailScene.enter(async (ctx) => {
 
 poolDetailScene.action("open_position", async (ctx) => {
   await ctx.answerCbQuery();
-  const poolAddress = (ctx.scene.state as SceneState).poolAddress;
-  const dex = (ctx.scene.state as SceneState).dex || "meteora";
+  const { poolAddress, dex } = (ctx.scene.state as SceneState);
 
   if (!poolAddress) {
     await ctx.reply(MessageService.getErrorMessage("Pool address not found"));
@@ -151,7 +89,7 @@ poolDetailScene.action("open_position", async (ctx) => {
 
   return ctx.scene.enter(SCENE_IDS.CREATE_POSITION_SCENE, {
     poolAddress,
-    dex,
+    dex: dex ?? "meteora",
   });
 });
 
@@ -160,7 +98,7 @@ poolDetailScene.action("refresh_pool_detail", async (ctx) => {
 
   const state = ctx.scene.state as SceneState;
   const poolAddress = state.poolAddress;
-  const dex = state.dex || "meteora";
+  const dex = (state.dex ?? "meteora") as DexType;
 
   if (!poolAddress || !dex) {
     await ctx.reply(
@@ -169,7 +107,8 @@ poolDetailScene.action("refresh_pool_detail", async (ctx) => {
     return ctx.scene.leave();
   }
 
-  const poolData = await unifiedPoolService.getPool(poolAddress, dex);
+  const useCase = container.get(GetPoolDetailsUseCase);
+  const poolData = await useCase.execute({ poolAddress, dex });
   ctx.scene.state = {
     pool: poolData,
     ...ctx.scene.state,
@@ -194,7 +133,7 @@ poolDetailScene.action("refresh_pool_detail", async (ctx) => {
     return ctx.scene.leave();
   }
 
-  const message = PoolFormatter.formatPoolDetails(poolData);
+  const message = PoolFormatter.formatPoolDetails(poolData as any);
   const keyboard = getPoolInfoKeyboard(poolData.address);
 
   if (ctx.callbackQuery.message) {

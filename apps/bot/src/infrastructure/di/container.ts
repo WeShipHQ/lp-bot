@@ -36,6 +36,7 @@ import { SendTokensUseCase } from "@/application/wallet/send-tokens.use-case";
 
 import { GetTrendingPoolsUseCase } from "@/application/trending/get-trending-pools.use-case";
 import { SearchPoolsUseCase } from "@/application/trending/search-pools.use-case";
+import { GetPoolDetailsUseCase } from "@/application/trending/get-pool-details.use-case";
 
 import { ParseFreeTextMessageUseCase } from "@/application/message/parse-free-text.use-case";
 import { RouteFreeTextMessageUseCase } from "@/application/message/route-free-text.use-case";
@@ -245,6 +246,9 @@ function registerBase() {
   container
     .bind(SearchPoolsUseCase)
     .toDynamicValue(() => new SearchPoolsUseCase());
+  container
+    .bind(GetPoolDetailsUseCase)
+    .toDynamicValue(() => new GetPoolDetailsUseCase());
 
   container
     .bind(ParseFreeTextMessageUseCase)
