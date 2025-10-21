@@ -32,6 +32,7 @@ import { CalculateMetricsUseCase } from "@/application/portfolio/calculate-metri
 
 import { GetBalanceUseCase } from "@/application/wallet/get-balance.use-case";
 import { GetTokenBalanceUseCase } from "@/application/wallet/get-token-balance.use-case";
+import { GetPoolTokenBalancesUseCase } from "@/application/wallet/get-pool-token-balances.use-case";
 import { ConnectWalletUseCase } from "@/application/wallet/connect-wallet.use-case";
 import { SendTokensUseCase } from "@/application/wallet/send-tokens.use-case";
 
@@ -236,6 +237,11 @@ function registerBase() {
   container
     .bind(GetTokenBalanceUseCase)
     .toDynamicValue(() => new GetTokenBalanceUseCase());
+
+  // Convenience aggregator use-case
+  container
+    .bind(GetPoolTokenBalancesUseCase)
+    .toDynamicValue(() => new GetPoolTokenBalancesUseCase());
 
   container
     .bind(ConnectWalletUseCase)

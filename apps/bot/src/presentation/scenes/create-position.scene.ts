@@ -17,6 +17,8 @@ import { GetTokenBalanceUseCase } from "@/application/wallet/get-token-balance.u
 import { CalculateBalancedDistributionUseCase } from "@/application/position/calculate-balanced-distribution.use-case";
 import { GetPriceRangeUseCase } from "@/application/position/get-price-range.use-case";
 import { DexType, UnifiedPool } from "@/types/core.types";
+import { generateProgressMessage, generatePositionSummary } from "../formatters/position.formatter";
+import { GetPoolTokenBalancesUseCase } from "@/application/wallet/get-pool-token-balances.use-case";
 import {
   BUFFER_AMOUNT,
   SLIPPAGE_SMALL,
@@ -51,161 +53,7 @@ type WizardState = {
   messageId?: number;
 };
 
-function generateProgressMessage(
-  poolData: UnifiedPool,
-  state: WizardState,
-  currentStep: string,
-  guide?: string
-): string {
-  const verifiedEmoji = poolData.isVerified ? "✅" : "⚠️";
 
-  let message =
-    `*${poolData.name}* ${verifiedEmoji}\n` +
-    `Pool Price: *${formatNumber(poolData.currentPrice)} ${poolData.tokenA.symbol}/${poolData.tokenB.symbol}*\n` +
-    `TVL: *${formatNumber(Number(poolData.tvl), { maxDecimals: 2 })}*\n` +
-    `Fee/TVL: *${formatPercentage((poolData.feeTvlRatio24h || 0) * 100, { decimals: 2 })}*\n`;
-
-  const hasSelected =
-    state.strategy ||
-    state.depositMethod ||
-    state.selectedToken ||
-    state.amount;
-
-  if (hasSelected) {
-    message += `${divider()}\n`;
-    message += `*Your Selections:*\n`;
-
-    // Strategy
-    if (state.strategy) {
-      message += `Strategy: *${state.strategy.toUpperCase()}*\n`;
-    } else {
-      message += `Strategy: *Not selected*\n`;
-    }
-
-    // Deposit Method
-    if (state.depositMethod) {
-      const methodName =
-        state.depositMethod === "sol_auto_convert"
-          ? "SOL Auto-convert"
-          : "Single-sided Token";
-      message += `Deposit Method: *${methodName}*\n`;
-    }
-
-    // Selected Token (for single-sided)
-    if (state.depositMethod === "single_sided" && state.selectedToken) {
-      const tokenName =
-        state.selectedToken.address === poolData.tokenA.address
-          ? poolData.tokenA.symbol
-          : poolData.tokenB.symbol;
-      message += `Token: *${tokenName}*\n`;
-    }
-
-    // Deposit Source (for single-sided)
-    if (state.depositSource) {
-      const sourceName =
-        state.depositSource === "sol_convert"
-          ? "Convert from SOL"
-          : "From Token Balance";
-      message += `Source: *${sourceName}*\n`;
-    }
-
-    // Amount or Percentage
-    if (state.amount) {
-      message += `Amount: *${state.amount} SOL*\n`;
-    } else if (state.percentage) {
-      message += `Percentage: *${state.percentage}%*\n`;
-    }
-
-    // Price Change Coverage (for single-sided)
-    if (state.depositMethod === "single_sided" && state.priceChangePercentage) {
-      message += `Price Change Coverage: *${state.priceChangePercentage}%*\n`;
-    }
-
-    // Auto-rebalancing
-    if (state.autoRebalancing) {
-      message += `Auto-rebalancing: ${state.autoRebalancing === "yes" ? "✅" : "❌"}\n`;
-    }
-  }
-
-  message += divider();
-  message += `\n`;
-
-  // Current step guide
-  message += `*${currentStep}*\n\n`;
-  if (guide) {
-    message += `${guide}\n\n`;
-  }
-
-  return message;
-}
-
-function generatePositionSummary(
-  state: WizardState,
-  preview: {
-    rangeMin: string;
-    rangeMax: string;
-    tokenAAmount: number;
-    tokenBAmount: number;
-  }
-): string {
-  const {
-    strategy,
-    depositMethod,
-    selectedToken,
-    amount,
-    percentage,
-    poolData,
-    autoRebalancing,
-  } = state;
-
-  const verifiedEmoji = poolData?.isVerified ? "✅" : "⚠️";
-
-  let message =
-    `*Position Summary*\n\n` + `Pool: *${poolData?.name}* ${verifiedEmoji}\n`;
-
-  message += `Strategy: *${strategy!.toUpperCase()}*\n`;
-
-  if (depositMethod === "single_sided") {
-    const tokenName =
-      selectedToken?.address === poolData!.tokenA.address
-        ? poolData!.tokenA.symbol
-        : poolData!.tokenB.symbol;
-    message += `Deposit Method: *Single-sided (${tokenName})*\n`;
-    if (percentage) {
-      message += `Amount: *${percentage}% of token balance*\n`;
-    } else {
-      message += `Amount: *${amount} SOL (converted)*\n`;
-    }
-  } else {
-    message += `Deposit Method: *SOL Auto-convert*\n`;
-    message += `Amount: *${amount} SOL*\n`;
-  }
-
-  message += `Position Range: *${formatNumber(preview.rangeMin, { maxDecimals: 6 })} - ${formatNumber(preview.rangeMax, { maxDecimals: 6 })} ${poolData?.tokenB.symbol} / ${poolData?.tokenA.symbol}*\n`;
-  message += `Tokens: *${formatNumber(preview.tokenAAmount, { maxDecimals: 6 })} ${poolData?.tokenA.symbol} / ${formatNumber(preview.tokenBAmount, { maxDecimals: 6 })} ${poolData?.tokenB.symbol}*\n`;
-
-  if (depositMethod === "sol_auto_convert") {
-    message += `Auto-rebalancing: *${autoRebalancing === "yes" ? "Enabled" : "Disabled"}*\n\n`;
-  }
-
-  message += "*Create position by confirming on the button below*";
-
-  return message;
-}
-
-async function getPoolTokenBalances(
-  walletAddress: string,
-  poolData: UnifiedPool
-): Promise<{ tokenABalance: number; tokenBBalance: number }> {
-  const getTokenBalance = container.get(GetTokenBalanceUseCase);
-
-  const [a, b] = await Promise.all([
-    getTokenBalance.execute({ walletAddress, tokenMint: poolData.tokenA.address }),
-    getTokenBalance.execute({ walletAddress, tokenMint: poolData.tokenB.address }),
-  ]);
-
-  return { tokenABalance: a.balance, tokenBBalance: b.balance };
-}
 
 export const createPositionScene = new Scenes.WizardScene<BotContext>(
   SCENE_IDS.CREATE_POSITION_SCENE,
@@ -310,10 +158,11 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       }
     }
 
-    const { tokenABalance, tokenBBalance } = await getPoolTokenBalances(
-      ctx.user.walletAddress!,
-      poolData
-    );
+    const poolBalancesUc = container.get(GetPoolTokenBalancesUseCase);
+    const { tokenABalance, tokenBBalance } = await poolBalancesUc.execute({
+      walletAddress: ctx.user.walletAddress!,
+      pool: poolData,
+    });
 
     const message = generateProgressMessage(
       poolData!,
@@ -634,12 +483,16 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         rangeInterval: user.balancedPositionBinRange,
       });
 
-      const summary = generatePositionSummary(ctx.scene.state, {
-        rangeMin: prices.fromPrice,
-        rangeMax: prices.toPrice,
-        tokenAAmount,
-        tokenBAmount,
-      });
+      const summary = generatePositionSummary(
+        poolData,
+        ctx.scene.state as WizardState,
+        {
+          rangeMin: prices.fromPrice,
+          rangeMax: prices.toPrice,
+          tokenAAmount,
+          tokenBAmount,
+        }
+      );
 
       return ctx.editMessageText(summary, {
         parse_mode: "Markdown",
