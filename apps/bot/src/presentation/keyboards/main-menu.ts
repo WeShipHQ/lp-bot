@@ -1,18 +1,19 @@
-import { InlineKeyboardMarkup } from "@telegraf/types";
+import { MessageInlineKeyboard } from "@/domain/message";
 
-export function getMainKeyboard(): InlineKeyboardMarkup {
+export function getMainKeyboard(): MessageInlineKeyboard {
   return {
-    inline_keyboard: [
-      [{ text: "🚀 Open Position", callback_data: "open_position" }],
+    type: "inline",
+    rows: [
+      [{ text: "🚀 Open Position", callbackData: "open_position" }],
       [
-        { text: "💼 Portfolio", callback_data: "/portfolio" },
-        { text: "💰 Wallet", callback_data: "/wallet" },
+        { text: "💼 Portfolio", callbackData: "/portfolio" },
+        { text: "💰 Wallet", callbackData: "/wallet" },
       ],
       [
-        { text: "🧧 Referral", callback_data: "/referral" },
-        { text: "⚙️ Settings", callback_data: "/settings" },
+        { text: "🧧 Referral", callbackData: "/referral" },
+        { text: "⚙️ Settings", callbackData: "/settings" },
       ],
-      [{ text: "❓ Help", callback_data: "/help" }],
+      [{ text: "❓ Help", callbackData: "/help" }],
     ],
   };
 }

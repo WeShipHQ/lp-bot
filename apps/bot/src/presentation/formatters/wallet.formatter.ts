@@ -1,4 +1,7 @@
+import { MessagePayload } from "@/domain/message";
+import { getWalletKeyboard } from "@/presentation/keyboards/wallet-menu";
 import { formatCurrency, formatNumber } from "./base.formatter";
+import { createTextMessage } from "./message-builder";
 
 export interface TopTokenBalance {
   mint: string;
@@ -34,5 +37,25 @@ export class WalletFormatter {
     }
 
     return message;
+  }
+
+  static createWalletSummaryPayload(
+    walletAddress: string,
+    solBalance: number,
+    usdValue: number,
+    topTokens?: TopTokenBalance[]
+  ): MessagePayload {
+    const text = this.formatWalletSummary(
+      walletAddress,
+      solBalance,
+      usdValue,
+      topTokens
+    );
+
+    return createTextMessage("wallet.summary", text, {
+      parseMode: "markdown",
+      disableLinkPreview: true,
+      keyboard: getWalletKeyboard(walletAddress),
+    });
   }
 }

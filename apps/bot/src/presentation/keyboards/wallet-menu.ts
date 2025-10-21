@@ -1,19 +1,20 @@
-import { InlineKeyboardMarkup } from "@telegraf/types";
+import { MessageInlineKeyboard } from "@/domain/message";
 import { getSolscanLink } from "@/utils/link";
 import { WALLET_CALLBACKS } from "../constants/wallet.callbacks";
 
-export function getWalletKeyboard(walletAddress: string): InlineKeyboardMarkup {
+export function getWalletKeyboard(walletAddress: string): MessageInlineKeyboard {
   return {
-    inline_keyboard: [
+    type: "inline",
+    rows: [
       [
-        { text: "Transfer all SOL", callback_data: WALLET_CALLBACKS.transfer.solAll },
-        { text: "Transfer X SOL", callback_data: WALLET_CALLBACKS.transfer.solAmount },
+        { text: "Transfer all SOL", callbackData: WALLET_CALLBACKS.transfer.solAll },
+        { text: "Transfer X SOL", callbackData: WALLET_CALLBACKS.transfer.solAmount },
       ],
       [
-        { text: "Transfer all tokens", callback_data: WALLET_CALLBACKS.transfer.tokenAll },
-        { text: "Transfer X tokens", callback_data: WALLET_CALLBACKS.transfer.tokenAmount },
+        { text: "Transfer all tokens", callbackData: WALLET_CALLBACKS.transfer.tokenAll },
+        { text: "Transfer X tokens", callbackData: WALLET_CALLBACKS.transfer.tokenAmount },
       ],
-      [{ text: "Export private key", callback_data: WALLET_CALLBACKS.export.privateKey }],
+      [{ text: "Export private key", callbackData: WALLET_CALLBACKS.export.privateKey }],
       [
         {
           text: "View on Solscan",
@@ -21,8 +22,8 @@ export function getWalletKeyboard(walletAddress: string): InlineKeyboardMarkup {
         },
       ],
       [
-        { text: "Close", callback_data: WALLET_CALLBACKS.ui.close },
-        { text: "Refresh", callback_data: WALLET_CALLBACKS.ui.refresh },
+        { text: "Close", callbackData: WALLET_CALLBACKS.ui.close },
+        { text: "Refresh", callbackData: WALLET_CALLBACKS.ui.refresh },
       ],
     ],
   };
@@ -31,12 +32,13 @@ export function getWalletKeyboard(walletAddress: string): InlineKeyboardMarkup {
 /**
  * Get keyboard for transfer confirmation
  */
-export function getTransferConfirmKeyboard(): InlineKeyboardMarkup {
+export function getTransferConfirmKeyboard(): MessageInlineKeyboard {
   return {
-    inline_keyboard: [
+    type: "inline",
+    rows: [
       [
-        { text: "✅ Confirm Transfer", callback_data: WALLET_CALLBACKS.transfer.confirm },
-        { text: "❌ Cancel", callback_data: WALLET_CALLBACKS.transfer.cancel },
+        { text: "✅ Confirm Transfer", callbackData: WALLET_CALLBACKS.transfer.confirm },
+        { text: "❌ Cancel", callbackData: WALLET_CALLBACKS.transfer.cancel },
       ],
     ],
   };

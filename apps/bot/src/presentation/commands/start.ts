@@ -1,11 +1,12 @@
 import { Telegraf } from "telegraf";
 import { FastifyInstance } from "fastify";
-import { getMainKeyboard } from "../keyboards/main-menu";
 import { BotContext } from "@/types/bot.types";
 import { StartFormatter } from "../formatters/start.formatter";
 import { UserCreationError } from "@/domain/start";
 import { createStartCommandDependencies } from "@/infrastructure/di/start.container";
 import { solanaService } from "@/services/solana.service";
+import { container, DI_TOKENS } from "@/infrastructure/di/container";
+import { MessageService } from "@/application/message/message.service";
 
 export function startCommand(
   bot: Telegraf<BotContext>,
@@ -16,17 +17,21 @@ export function startCommand(
 
   bot.start(async (ctx: BotContext) => {
     try {
+      const chatId = ctx.chat?.id;
+      if (!chatId) {
+        return;
+      }
+
+      const messageService = container.get<MessageService>(
+        DI_TOKENS.MessageService
+      );
+
       // @ts-expect-error
       const messageText = ctx.message?.text || "";
       const startParam = messageText.split(" ")[1];
 
-      // Initialize use cases
-      // const parseDeepLinkUseCase = dependencies.parseDeepLinkUseCase;
-      // const getWelcomeDataUseCase = dependencies.getWelcomeDataUseCase;
-      // const routeDeepLinkUseCase = dependencies.routeDeepLinkUseCase;
       const handleStartCommandUseCase = dependencies.handleStartCommandUseCase;
 
-      // Execute the start command use case
       const result = await handleStartCommandUseCase.execute({
         userId: ctx.user.id,
         telegramId: ctx.user.telegramId,
@@ -34,35 +39,33 @@ export function startCommand(
         walletAddress: ctx.user.walletAddress,
         walletId: ctx.user.walletId,
         startParam,
-        // TODO: Add referral link logic
         referralLink: undefined,
       });
 
-      // Handle scene navigation
       if (result.shouldEnterScene && result.sceneId && result.sceneState) {
         await ctx.scene.enter(result.sceneId, result.sceneState);
         return;
       }
 
-      // Handle unsupported messages
       if (result.shouldShowUnsupportedMessage && result.unsupportedMessage) {
-        await ctx.reply(
-          StartFormatter.formatUnsupportedMessage(result.unsupportedMessage)
+        const unsupportedPayload = StartFormatter.unsupported(
+          result.unsupportedMessage
         );
+        await messageService.send({
+          context: { chatId },
+          payload: unsupportedPayload,
+        });
 
-        // If we shouldn't continue to welcome, return early
         if (!result.welcomeData) {
           return;
         }
       }
 
-      // Handle welcome message
       if (result.welcomeData) {
         let solBalance = 0;
         let solPrice = 0;
         let referralMessage = "";
 
-        // Get fresh balance data for display
         if (ctx.user.walletAddress) {
           try {
             [solBalance, solPrice] = await Promise.all([
@@ -76,30 +79,38 @@ export function startCommand(
 
         const usdValue = solBalance * solPrice;
 
-        const welcomeMessage =
-          StartFormatter.formatWelcomeMessageWithBalanceInfo(
-            result.welcomeData,
-            solBalance,
-            usdValue,
-            referralMessage
-          );
+        const welcomePayload = StartFormatter.welcomeWithBalance(
+          result.welcomeData,
+          solBalance,
+          usdValue,
+          referralMessage
+        );
 
-        await ctx.reply(welcomeMessage, {
-          parse_mode: "Markdown",
-          reply_markup: getMainKeyboard(),
+        await messageService.send({
+          context: { chatId },
+          payload: welcomePayload,
         });
       }
     } catch (error) {
       console.error("Error in start command:", error);
 
-      let errorMessage: string;
-      if (error instanceof UserCreationError) {
-        errorMessage = StartFormatter.formatErrorMessage("user_creation");
-      } else {
-        errorMessage = StartFormatter.formatErrorMessage("general");
+      const chatId = ctx.chat?.id;
+      if (!chatId) {
+        return;
       }
 
-      await ctx.reply(errorMessage);
+      const messageService = container.get<MessageService>(
+        DI_TOKENS.MessageService
+      );
+
+      const errorPayload = error instanceof UserCreationError
+        ? StartFormatter.error("user_creation")
+        : StartFormatter.error("general");
+
+      await messageService.send({
+        context: { chatId },
+        payload: errorPayload,
+      });
     }
   });
 }
