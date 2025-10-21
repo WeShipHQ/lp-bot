@@ -1,14 +1,11 @@
 import { FastifyBaseLogger } from "fastify";
 import { Composer, Telegraf } from "telegraf";
 import { BotContext } from "@/types/bot.types";
-import { PortfolioData } from "@/types/portfolio.types";
-import {
-  getOverviewKeyboard,
-  getPositionDetailKeyboard,
-} from "../keyboards/portfolio-menu";
-import { MessageService } from "@/services/message.service";
-import { portfolioService } from "@/services/portfolio.service";
-import { unifiedPositionService } from "@/v2";
+import { getOverviewKeyboard } from "../keyboards/portfolio-menu";
+import { PF_PATTERNS } from "../constants/portfolio.callbacks";
+import { PortfolioFormatter } from "../formatters/portfolio.formatter";
+import { container, DI_TOKENS } from "@/infrastructure/di/container";
+import { GetPortfolioUseCase } from "@/application/portfolio/get-portfolio.use-case";
 
 interface TelegramError {
   response?: {
@@ -17,45 +14,12 @@ interface TelegramError {
   };
 }
 
-const portfolioSessions = new Map<number, PortfolioData>();
-
 export const DISABLE_LINK_PREVIEW = {
   link_preview_options: { is_disabled: true as const },
 } as const;
 
-const PORTFOLIO_CALLBACK = {
-  portfolio: { back: "portfolio:back", refresh: "portfolio:refresh" },
-  position: {
-    claim: (i: number) => `pos:claim:${i}`,
-    rebalance: (i: number) => `pos:rebalance:${i}`,
-  },
-  ui: { close: "ui:close" },
-} as const;
-
-// Unified regex for all position actions
-const POSITION_ACTION_REGEX = /^pos:(claim|rebalance|refresh):(\d+)$/;
-
-// -------- Session helpers --------
-
-function tryGetChatId(context: BotContext): number | undefined {
-  return context.chat ? context.chat.id : undefined;
-}
-
-function getPortfolio(context: BotContext): PortfolioData | undefined {
-  const chatId = tryGetChatId(context);
-  if (chatId === undefined) return undefined;
-  return portfolioSessions.get(chatId);
-}
-
-function setPortfolio(context: BotContext, portfolio: PortfolioData): void {
-  const chatId = tryGetChatId(context);
-  if (chatId === undefined) return;
-  portfolioSessions.set(chatId, portfolio);
-}
-
 // -------- Error helpers --------
 
-// Classify Telegram errors that are safe to ignore for delete/edit/answer operations.
 function isIgnorableTelegramError(err: unknown): boolean {
   const errorLike = err as {
     status?: number;
@@ -76,36 +40,6 @@ function isIgnorableTelegramError(err: unknown): boolean {
   );
 }
 
-// Delete message but never let it break the flow.
-async function deleteMessageSafely(
-  context: BotContext,
-  logger?: FastifyBaseLogger
-): Promise<void> {
-  try {
-    await context.deleteMessage();
-  } catch (err) {
-    if (!isIgnorableTelegramError(err)) {
-      logger?.warn({ err }, "deleteMessage failed");
-    }
-  }
-}
-
-// Delete message by id but never let it break the flow.
-async function deleteMessageByIdSafely(
-  context: BotContext,
-  messageId: number,
-  logger?: FastifyBaseLogger
-): Promise<void> {
-  try {
-    await context.deleteMessage(messageId);
-  } catch (err) {
-    if (!isIgnorableTelegramError(err)) {
-      logger?.warn({ err }, "deleteMessage by id failed");
-    }
-  }
-}
-
-// Always try to answer callback to stop the spinner; ignore benign errors.
 export async function answerCallbackSafely(
   context: BotContext,
   text?: string,
@@ -121,9 +55,6 @@ export async function answerCallbackSafely(
   }
 }
 
-/** Safe edit wrapper that ignores "not modified" and other benign Telegram errors.
- * @returns true if the message was edited, false if it was unchanged
- */
 async function safeEditMessage(
   context: BotContext,
   text: string,
@@ -148,230 +79,81 @@ async function safeEditMessage(
   }
 }
 
-// -------- Render helpers --------
+// Build the latest portfolio overview text using use-cases and adapter data
+async function buildPortfolioOverviewText(context: BotContext, forceRefresh = false): Promise<string> {
+  const userId = context.user?.id;
+  const botName = context.botInfo?.username;
+  const walletAddress = context.user?.walletAddress;
 
-async function renderPortfolioOverview(
-  context: BotContext,
-  portfolio: PortfolioData,
-  mode: "edit" | "reply" = "edit"
-): Promise<boolean> {
-  const text = MessageService.getPortfolioOverviewMessage(
-    portfolio,
-    context.botInfo?.username
-  );
-  const extra = {
-    parse_mode: "Markdown" as const,
-    ...DISABLE_LINK_PREVIEW,
-    reply_markup: getOverviewKeyboard(),
-  };
-  if (mode === "edit") {
-    return await safeEditMessage(context, text, extra);
-  } else {
-    await context.reply(text, extra);
-    return true;
+  const getPortfolioUc = container.get(GetPortfolioUseCase);
+  const portfolio = await getPortfolioUc.execute(userId, forceRefresh);
+
+  // Build a map of unclaimed fees by position address using adapters via dexRegistry
+  const feesByAddress: Record<string, number> = {};
+  if (walletAddress) {
+    try {
+      const registry = container.get<typeof import("@/services/dex-registry.service").dexRegistry>(DI_TOKENS.DexRegistry);
+      const active = portfolio.getActivePositions();
+      const dexes = Array.from(new Set(active.map((p) => p.dex)));
+      for (const dex of dexes) {
+        try {
+          const adapter = registry.get(dex as any);
+          const unified = await adapter.getUserPositions(walletAddress);
+          for (const up of unified) {
+            feesByAddress[up.address] = (feesByAddress[up.address] || 0) + (up.unclaimedFeesUsd || 0);
+          }
+        } catch (e) {
+          // Ignore individual dex failures; keep partial data
+          // console.warn("Failed to fetch positions for dex", dex, e);
+        }
+      }
+    } catch {}
   }
-}
 
-async function renderPortfolioPosition(
-  context: BotContext,
-  portfolio: PortfolioData,
-  positionIndex: number,
-  mode: "edit" | "reply" = "edit"
-) {
-  const position = portfolio.positions[positionIndex];
-  if (!position) {
-    return mode === "edit"
-      ? context.answerCbQuery?.("Position not found.")
-      : context.reply("Position not found.");
-  }
-  const text = MessageService.getPositionDetailMessage(
-    position,
-    portfolio.walletAddress
-  );
-  const extra = {
-    parse_mode: "Markdown" as const,
-    ...DISABLE_LINK_PREVIEW,
-    reply_markup: getPositionDetailKeyboard(positionIndex),
-  };
-  return mode === "edit"
-    ? safeEditMessage(context, text, extra)
-    : context.reply(text, extra);
-}
-
-export async function portfolioHandler(ctx: BotContext) {
-  const loadingMessage = await ctx.reply("Loading Portfolio...", {
-    parse_mode: "Markdown",
+  return PortfolioFormatter.formatDomainOverview(portfolio, {
+    botName,
+    unclaimedFeesByAddress: feesByAddress,
   });
-
-  const loadingMessageId = (loadingMessage as { message_id: number })
-    .message_id;
-
-  // const portfolioResponse = await portfolioService.getUserPortfolio(
-  //   ctx.user.walletAddress!
-  // );
-
-  const portfolio = await unifiedPositionService.getUserPortfolio(
-    ctx.user.walletAddress!
-  );
-
-  // if (!portfolioResponse.success || !portfolioResponse.data) {
-  //   await deleteMessageByIdSafely(ctx, loadingMessageId);
-  //   await ctx.reply(`❌ ${portfolioResponse.message}`);
-  //   return;
-  // }
-
-  // const portfolioData = portfolioResponse.data;
-  // setPortfolio(ctx, portfolioData);
-
-  await deleteMessageByIdSafely(ctx, loadingMessageId);
-  await ctx.reply(
-    MessageService.getUnifiedPortfolioOverviewMessage(
-      portfolio,
-      ctx.botInfo?.username
-    ),
-    {
-      parse_mode: "Markdown",
-      ...DISABLE_LINK_PREVIEW,
-      reply_markup: getOverviewKeyboard(),
-    }
-  );
 }
 
 export function registerPortfolioCallbacks(bot: Telegraf<BotContext>) {
   const router = new Composer<BotContext>();
-  // User types /1, /2 -> open position detail
-  router.hears(/^\/(\d+)\b$/, async (ctx) => {
-    const portfolio = getPortfolio(ctx);
-    if (!portfolio) return;
 
-    const idx = Number(ctx.match[1]) - 1; // convert 1-based -> 0-based
-    await renderPortfolioPosition(ctx, portfolio, idx, "reply");
-  });
-
-  // Back to overview
-  router.action(PORTFOLIO_CALLBACK.portfolio.back, async (ctx) => {
-    const portfolio = getPortfolio(ctx);
-    if (!portfolio) return;
-
-    await ctx.answerCbQuery("Back to overview");
-    await renderPortfolioOverview(ctx, portfolio, "edit");
-  });
-
-  // Refresh portfolio
-  router.action(PORTFOLIO_CALLBACK.portfolio.refresh, async (ctx) => {
+  // Refresh portfolio (standardized callback)
+  router.action(PF_PATTERNS.overview.refresh, async (ctx) => {
     try {
-      const walletAddress = ctx.user?.walletAddress;
-      if (!walletAddress) {
-        await ctx.answerCbQuery("No wallet connected");
-        return;
-      }
-
-      const portfolioResponse =
-        await portfolioService.getUserPortfolio(walletAddress);
-
-      if (!portfolioResponse.success || !portfolioResponse.data) {
-        await answerCallbackSafely(
-          ctx,
-          portfolioResponse.message || "Refresh failed"
-        );
-        return;
-      }
-
-      const portfolioData = portfolioResponse.data;
-      setPortfolio(ctx, portfolioData);
-
-      const edited = await renderPortfolioOverview(ctx, portfolioData, "edit");
+      const text = await buildPortfolioOverviewText(ctx, true);
+      const edited = await safeEditMessage(
+        ctx,
+        text,
+        { parse_mode: "Markdown", ...DISABLE_LINK_PREVIEW, reply_markup: getOverviewKeyboard() }
+      );
       await answerCallbackSafely(
         ctx,
-        edited
-          ? "Portfolio refreshed successfully"
-          : "Portfolio is already up to date"
+        edited ? "Portfolio refreshed" : "Already up to date"
       );
     } catch (error: unknown) {
       const tgErr = error as TelegramError;
       const desc = tgErr?.response?.description ?? "";
       if (desc.includes("message is not modified")) {
-        await answerCallbackSafely(ctx, "Portfolio is already up to date");
+        await answerCallbackSafely(ctx, "Already up to date");
         return;
       }
-      console.error("Portfolio refresh error:", error);
-      await answerCallbackSafely(
-        ctx,
-        "Failed to refresh portfolio. Please try again."
-      );
+      await answerCallbackSafely(ctx, "Failed to refresh portfolio");
     }
   });
 
-  // Handle all position actions (claim/toggle_ar/rebalance/refresh)
-  router.action(POSITION_ACTION_REGEX, async (context) => {
-    const portfolio = getPortfolio(context);
-    if (!portfolio) return;
-
-    const [, action, indexStr] = context.match as RegExpMatchArray;
-    const positionIndex = Number(indexStr);
-    const position = portfolio.positions[positionIndex];
-    if (!position) return context.answerCbQuery("Position not found");
-
-    switch (action) {
-      case "claim":
-        return context.answerCbQuery("Claim flow not implemented.");
-
-      case "rebalance":
-        return context.answerCbQuery("Rebalance not implemented.");
-
-      case "refresh": {
-        try {
-          const refreshed = await portfolioService.getPositionByAddress(
-            position.position_address,
-            position.pool_address
-          );
-
-          if (!refreshed.success) {
-            await answerCallbackSafely(
-              context,
-              refreshed.message || "Refresh failed"
-            );
-            return;
-          }
-
-          const updatedPortfolio = { ...portfolio };
-          updatedPortfolio.positions = [...updatedPortfolio.positions];
-          updatedPortfolio.positions[positionIndex] = refreshed.data;
-          setPortfolio(context, updatedPortfolio);
-
-          const edited = await renderPortfolioPosition(
-            context,
-            updatedPortfolio,
-            positionIndex,
-            "edit"
-          );
-
-          await answerCallbackSafely(
-            context,
-            edited ? "Position refreshed" : "Already up to date"
-          );
-        } catch (error: unknown) {
-          const tgErr = error as TelegramError;
-          const desc = tgErr?.response?.description ?? "";
-          if (desc.includes("message is not modified")) {
-            await answerCallbackSafely(context, "Already up to date");
-            return;
-          }
-          await answerCallbackSafely(
-            context,
-            "Failed to refresh position. Please try again."
-          );
-        }
+  // Close portfolio message
+  router.action(PF_PATTERNS.overview.close, async (context) => {
+    try {
+      await context.deleteMessage();
+    } catch (err) {
+      if (!isIgnorableTelegramError(err)) {
+        await answerCallbackSafely(context, "Unable to close");
         return;
       }
     }
-  });
-
-  router.action(PORTFOLIO_CALLBACK.ui.close, async (context) => {
-    await Promise.allSettled([
-      deleteMessageSafely(context),
-      answerCallbackSafely(context, "Closed"),
-    ]);
+    await answerCallbackSafely(context, "Closed");
   });
 
   bot.use(router);

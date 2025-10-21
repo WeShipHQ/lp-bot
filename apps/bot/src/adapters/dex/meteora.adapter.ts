@@ -192,6 +192,19 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
           const upper = Number(pd.upperBinId);
           const inRange = activeId >= lower && activeId <= upper;
 
+          // Compute fees (unclaimed and claimed) in USD where possible
+          const feeXRaw = (pd.feeXExcludeTransferFee ?? pd.feeX) as any;
+          const feeYRaw = (pd.feeYExcludeTransferFee ?? pd.feeY) as any;
+          const feeX = this.fromRawAmount(feeXRaw, xDecimals);
+          const feeY = this.fromRawAmount(feeYRaw, yDecimals);
+          const unclaimedFeesUsd = feeX * xPrice + feeY * yPrice;
+
+          const claimedFeeXRaw = (pd.totalClaimedFeeXAmount ?? 0) as any;
+          const claimedFeeYRaw = (pd.totalClaimedFeeYAmount ?? 0) as any;
+          const claimedFeesUsd =
+            this.fromRawAmount(claimedFeeXRaw, xDecimals) * xPrice +
+            this.fromRawAmount(claimedFeeYRaw, yDecimals) * yPrice;
+
           unified.push({
             id: `${poolAddress}-${address}`,
             address,
@@ -204,8 +217,8 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
             tokenBAmount,
             currentValueUsd,
             initialValueUsd: currentValueUsd, // Unknown here; set equal for now
-            unclaimedFeesUsd: 0,
-            claimedFeesUsd: 0,
+            unclaimedFeesUsd,
+            claimedFeesUsd,
             unclaimedRewardsUsd: 0,
             claimedRewardsUsd: 0,
             pnlUsd: 0,
