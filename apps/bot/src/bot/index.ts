@@ -13,6 +13,7 @@ import { createPositionScene } from "./scenes";
 import { registerGlobalCallbacks } from "./handlers/global-callbacks";
 import { dexRegistry } from "@/services/dex-registry.service";
 import { SarosAdapter } from "@/services/saros/saros.adapter";
+import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
 
 Decimal.set({
   precision: 28, // High precision for financial calculations
@@ -24,7 +25,7 @@ Decimal.set({
 export function initializeV2Architecture(): void {
   console.log("Initializing v2 multi-DEX architecture...");
 
-  // dexRegistry.register(new MeteoraAdapter());
+  dexRegistry.register(new MeteoraAdapter());
   dexRegistry.register(new SarosAdapter());
 
   console.log(
