@@ -44,6 +44,8 @@ import { GetPriceRangeUseCase } from "@/application/position/get-price-range.use
 
 import { ParseFreeTextMessageUseCase } from "@/application/message/parse-free-text.use-case";
 import { RouteFreeTextMessageUseCase } from "@/application/message/route-free-text.use-case";
+import { GetUserSettingsUseCase } from "@/application/settings/get-user-settings.use-case";
+import { UpdateUserSettingUseCase } from "@/application/settings/update-user-setting.use-case";
 
 // Adapters
 import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
@@ -277,6 +279,14 @@ function registerBase() {
   container
     .bind(RouteFreeTextMessageUseCase)
     .toDynamicValue(() => new RouteFreeTextMessageUseCase());
+
+  // Settings use-cases
+  container
+    .bind(GetUserSettingsUseCase)
+    .toDynamicValue(() => new GetUserSettingsUseCase());
+  container
+    .bind(UpdateUserSettingUseCase)
+    .toDynamicValue(() => new UpdateUserSettingUseCase());
 }
 
 let runtimeRegistered = false;
