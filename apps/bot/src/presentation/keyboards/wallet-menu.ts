@@ -1,18 +1,19 @@
 import { InlineKeyboardMarkup } from "@telegraf/types";
 import { getSolscanLink } from "@/utils/link";
+import { WALLET_CALLBACKS } from "../constants/wallet.callbacks";
 
 export function getWalletKeyboard(walletAddress: string): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [
-        { text: "Transfer all SOL", callback_data: "transfer_all_sol" },
-        { text: "Transfer X SOL", callback_data: "transfer_x_sol" },
+        { text: "Transfer all SOL", callback_data: WALLET_CALLBACKS.transfer.solAll },
+        { text: "Transfer X SOL", callback_data: WALLET_CALLBACKS.transfer.solAmount },
       ],
       [
-        { text: "Transfer all tokens", callback_data: "transfer_all_tokens" },
-        { text: "Transfer X tokens", callback_data: "transfer_x_tokens" },
+        { text: "Transfer all tokens", callback_data: WALLET_CALLBACKS.transfer.tokenAll },
+        { text: "Transfer X tokens", callback_data: WALLET_CALLBACKS.transfer.tokenAmount },
       ],
-      [{ text: "Export private key", callback_data: "export_private_key" }],
+      [{ text: "Export private key", callback_data: WALLET_CALLBACKS.export.privateKey }],
       [
         {
           text: "View on Solscan",
@@ -20,8 +21,8 @@ export function getWalletKeyboard(walletAddress: string): InlineKeyboardMarkup {
         },
       ],
       [
-        { text: "Close", callback_data: "close_wallet" },
-        { text: "Refresh", callback_data: "refresh_wallet" },
+        { text: "Close", callback_data: WALLET_CALLBACKS.ui.close },
+        { text: "Refresh", callback_data: WALLET_CALLBACKS.ui.refresh },
       ],
     ],
   };
@@ -34,8 +35,8 @@ export function getTransferConfirmKeyboard(): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [
-        { text: "✅ Confirm Transfer", callback_data: "confirm_transfer" },
-        { text: "❌ Cancel", callback_data: "cancel_transfer" },
+        { text: "✅ Confirm Transfer", callback_data: WALLET_CALLBACKS.transfer.confirm },
+        { text: "❌ Cancel", callback_data: WALLET_CALLBACKS.transfer.cancel },
       ],
     ],
   };
