@@ -1,7 +1,7 @@
 import { Telegraf } from "telegraf";
 import { FastifyInstance } from "fastify";
 import { BotContext } from "@/types/bot.types";
-import { portfolioHandler } from "./portfolio";
+import { registerPortfolioCallbacks } from "./portfolio";
 import { walletHandler } from "./wallet";
 import { helpHandler } from "./help";
 import { settingsHandler } from "./settings";
@@ -17,8 +17,8 @@ export function registerGlobalCallbacks(
     await ctx.answerCbQuery();
 
     switch (command) {
-      case "portfolio":
-        return portfolioHandler(ctx);
+      // case "portfolio":
+      //   return registerPortfolioCallbacks(ctx);
       case "wallet":
         return walletHandler(ctx, server);
 

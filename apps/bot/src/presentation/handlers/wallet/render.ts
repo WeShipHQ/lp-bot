@@ -6,7 +6,7 @@ import { GetTopTokenBalancesUseCase } from "@/application/wallet/get-top-token-b
 import { solanaService } from "@/services/solana.service";
 import { WalletFormatter } from "@/presentation/formatters/wallet.formatter";
 import { getWalletKeyboard } from "@/presentation/keyboards/wallet-menu";
-import { MessageService } from "@/services/message.service";
+// import { MessageService } from "@/services/message.service";
 
 export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
   try {
@@ -21,11 +21,7 @@ export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
           }
         );
       } catch (error) {
-        await ctx.reply(
-          MessageService.getErrorMessage(
-            "No wallet found. Please contact support."
-          )
-        );
+        await ctx.reply("No wallet found. Please contact support.");
       }
 
       return;
@@ -33,7 +29,13 @@ export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
 
     let solBalance = 0;
     let solPrice = 0;
-    let topTokens: { mint: string; symbol: string; name?: string; balance: number; decimals?: number }[] = [];
+    let topTokens: {
+      mint: string;
+      symbol: string;
+      name?: string;
+      balance: number;
+      decimals?: number;
+    }[] = [];
 
     try {
       const balanceUc = container.get(GetBalanceUseCase);
@@ -69,11 +71,7 @@ export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
       },
     });
   } catch (error) {
-    await ctx.reply(
-      MessageService.getErrorMessage(
-        "Error loading wallet information. Please try again."
-      )
-    );
+    await ctx.reply("Error loading wallet information. Please try again.");
   }
 }
 
@@ -87,7 +85,13 @@ export async function refreshWalletMessage(ctx: BotContext) {
   const { sol: solBalance } = await balanceUc.execute(wallet);
   const solPrice = await solanaService.getSolPrice();
 
-  let topTokens: { mint: string; symbol: string; name?: string; balance: number; decimals?: number }[] = [];
+  let topTokens: {
+    mint: string;
+    symbol: string;
+    name?: string;
+    balance: number;
+    decimals?: number;
+  }[] = [];
   try {
     const topTokensUc = container.get(GetTopTokenBalancesUseCase);
     topTokens = await topTokensUc.execute(wallet);

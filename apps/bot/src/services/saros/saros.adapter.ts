@@ -17,7 +17,7 @@ import {
   UrlParseResult,
 } from "@/types/core.types";
 import { SarosPoolService } from "./pool.service";
-import { TRENDING_CONSTANTS } from "@/bot/config/constants";
+import { TRENDING_CONSTANTS } from "@/config/constants";
 import { SarosDlmmService } from "./dlmm.service";
 import { BaseDexAdapter } from "@/adapters/base-dex.adapter";
 

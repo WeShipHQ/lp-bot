@@ -1,9 +1,7 @@
 import { Scenes, Markup } from "telegraf";
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
-import { MessageService } from "@/services/message.service";
 import { MeteoraCreatePositionStrategy } from "@/types/meteora.types";
-import { formatNumber, formatPercentage } from "@/bot/utils/formatters";
 import { divider, link } from "@/bot/utils/text-formatters";
 import { message } from "telegraf/filters";
 import { DISABLE_LINK_PREVIEW } from "../handlers";
@@ -17,12 +15,13 @@ import { GetTokenBalanceUseCase } from "@/application/wallet/get-token-balance.u
 import { CalculateBalancedDistributionUseCase } from "@/application/position/calculate-balanced-distribution.use-case";
 import { GetPriceRangeUseCase } from "@/application/position/get-price-range.use-case";
 import { DexType, UnifiedPool } from "@/types/core.types";
-import { generateProgressMessage, generatePositionSummary } from "../formatters/position.formatter";
-import { GetPoolTokenBalancesUseCase } from "@/application/wallet/get-pool-token-balances.use-case";
 import {
-  BUFFER_AMOUNT,
-  SLIPPAGE_SMALL,
-} from "@/bot/config/constants";
+  generateProgressMessage,
+  generatePositionSummary,
+} from "../formatters/position.formatter";
+import { GetPoolTokenBalancesUseCase } from "@/application/wallet/get-pool-token-balances.use-case";
+import { BUFFER_AMOUNT, SLIPPAGE_SMALL } from "@/config/constants";
+import { formatNumber } from "../formatters/base.formatter";
 
 type WizardState = {
   step?:
@@ -53,8 +52,6 @@ type WizardState = {
   messageId?: number;
 };
 
-
-
 export const createPositionScene = new Scenes.WizardScene<BotContext>(
   SCENE_IDS.CREATE_POSITION_SCENE,
 
@@ -64,16 +61,17 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       const { poolAddress, dex } = ctx.wizard.state as WizardState;
 
       if (!poolAddress || !dex) {
-        await ctx.reply(
-          MessageService.getErrorMessage("Pool address not found")
-        );
+        await ctx.reply("Pool address not found");
         return ctx.scene.leave();
       }
 
       const poolUseCase = container.get(GetPoolDetailsUseCase);
-      const poolData = await poolUseCase.execute({ poolAddress, dex: dex as DexType });
+      const poolData = await poolUseCase.execute({
+        poolAddress,
+        dex: dex as DexType,
+      });
       if (!poolData) {
-        await ctx.reply(MessageService.getErrorMessage("Pool not found"));
+        await ctx.reply("Pool not found");
         return ctx.scene.leave();
       }
 
@@ -105,9 +103,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       (ctx.scene.state as WizardState).messageId = msg.message_id;
     } catch (error) {
       console.error("Error in create position scene:", error);
-      await ctx.reply(
-        MessageService.getErrorMessage("Failed to load strategy options")
-      );
+      await ctx.reply("Failed to load strategy options");
       return ctx.scene.leave();
     }
   },
@@ -148,7 +144,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     const { depositMethod, poolData } = state;
 
     if (!poolData || !depositMethod) {
-      await ctx.reply(MessageService.getErrorMessage("Unknown error"));
+      await ctx.reply("Unknown error");
       return ctx.scene.leave();
     }
     if (depositMethod !== "single_sided") {
@@ -203,7 +199,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     const { depositMethod, selectedToken, poolData } = state;
 
     if (!poolData) {
-      await ctx.reply(MessageService.getErrorMessage("Unknown error"));
+      await ctx.reply("Unknown error");
       return ctx.scene.leave();
     }
 
@@ -257,7 +253,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       const { depositMethod, depositSource, selectedToken, poolData } = state;
 
       if (!poolData) {
-        await ctx.reply(MessageService.getErrorMessage("Unknown error"));
+        await ctx.reply("Unknown error");
         return ctx.scene.leave();
       }
 
@@ -268,7 +264,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         depositSource === "token_balance"
       ) {
         if (!selectedToken) {
-          await ctx.reply(MessageService.getErrorMessage("Unknown error"));
+          await ctx.reply("Unknown error");
           return ctx.scene.leave();
         }
 
@@ -465,7 +461,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
 
     try {
       if (!strategy || (!amount && !percentage) || !poolData || !dex) {
-        await ctx.reply(MessageService.getErrorMessage("Unknown error"));
+        await ctx.reply("Unknown error");
         return ctx.scene.leave();
       }
 
@@ -523,7 +519,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     const { strategy, amount, poolData, autoRebalancing, dex } = ctx.scene
       .state as WizardState;
     if (!poolData || !strategy || !amount || amount <= 0) {
-      await ctx.reply(MessageService.getErrorMessage("Unknown error"));
+      await ctx.reply("Unknown error");
       return ctx.scene.leave();
     }
 
@@ -571,9 +567,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     } catch (error) {
       console.error("Error creating position via use case:", error);
       await ctx.editMessageText(
-        MessageService.getErrorMessage(
-          "Failed to create position. Please try again."
-        ),
+        "Failed to create position. Please try again.",
         { parse_mode: "Markdown" }
       );
     }
@@ -644,7 +638,7 @@ createPositionScene.action(/token:(.+)/, async (ctx, next) => {
       : state.poolData!.tokenB;
 
   if (!state.selectedToken) {
-    return ctx.reply(MessageService.getErrorMessage("Unknown error"));
+    return ctx.reply("Unknown error");
   }
 
   const message = generateProgressMessage(

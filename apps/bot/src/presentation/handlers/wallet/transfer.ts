@@ -1,12 +1,13 @@
 import { FastifyInstance } from "fastify";
 import { BotContext } from "@/types/bot.types";
-import { MessageService } from "@/services/message.service";
+// import { MessageService } from "@/services/message.service";
 import { solanaService } from "@/services/solana.service";
 import { jupiterService } from "@/services/jupiter.service";
 import { getTransferConfirmKeyboard } from "@/presentation/keyboards/wallet-menu";
 import { GetBalanceUseCase } from "@/application/wallet/get-balance.use-case";
 import { SendTokensUseCase } from "@/application/wallet/send-tokens.use-case";
 import { container } from "@/infrastructure/di/container";
+import { formatPrice } from "@/presentation/formatters/base.formatter";
 
 export async function handleTransferInput(
   ctx: BotContext,
@@ -23,9 +24,7 @@ export async function handleTransferInput(
 
     if (!messageText) {
       await ctx.reply(
-        MessageService.getErrorMessage(
-          "Invalid input. Please try again or type /cancel to cancel."
-        )
+        "Invalid input. Please try again or type /cancel to cancel."
       );
       return true;
     }
@@ -42,9 +41,7 @@ export async function handleTransferInput(
       if (transferState.type === "all_tokens") {
         if (parts.length !== 2) {
           await ctx.reply(
-            MessageService.getErrorMessage(
-              "Please enter the token address and recipient address in the format: tokenAddress recipientAddress"
-            )
+            "Please enter the token address and recipient address in the format: tokenAddress recipientAddress"
           );
           return true;
         }
@@ -52,19 +49,13 @@ export async function handleTransferInput(
         const [tokenAddress, recipientAddress] = parts;
 
         if (!solanaService.validateAddress(tokenAddress)) {
-          await ctx.reply(
-            MessageService.getErrorMessage(
-              "Invalid token address. Please check and try again."
-            )
-          );
+          await ctx.reply("Invalid token address. Please check and try again.");
           return true;
         }
 
         if (!solanaService.validateAddress(recipientAddress)) {
           await ctx.reply(
-            MessageService.getErrorMessage(
-              "Invalid recipient address. Please check and try again."
-            )
+            "Invalid recipient address. Please check and try again."
           );
           return true;
         }
@@ -79,9 +70,7 @@ export async function handleTransferInput(
       } else {
         if (parts.length !== 3) {
           await ctx.reply(
-            MessageService.getErrorMessage(
-              "Please enter the token address, recipient address, and amount in the format: tokenAddress recipientAddress amount"
-            )
+            "Please enter the token address, recipient address, and amount in the format: tokenAddress recipientAddress amount"
           );
           return true;
         }
@@ -90,29 +79,19 @@ export async function handleTransferInput(
         const amount = parseFloat(amountStr);
 
         if (!solanaService.validateAddress(tokenAddress)) {
-          await ctx.reply(
-            MessageService.getErrorMessage(
-              "Invalid token address. Please check and try again."
-            )
-          );
+          await ctx.reply("Invalid token address. Please check and try again.");
           return true;
         }
 
         if (!solanaService.validateAddress(recipientAddress)) {
           await ctx.reply(
-            MessageService.getErrorMessage(
-              "Invalid recipient address. Please check and try again."
-            )
+            "Invalid recipient address. Please check and try again."
           );
           return true;
         }
 
         if (isNaN(amount) || amount <= 0) {
-          await ctx.reply(
-            MessageService.getErrorMessage(
-              "Please enter a valid amount greater than 0."
-            )
-          );
+          await ctx.reply("Please enter a valid amount greater than 0.");
           return true;
         }
 
@@ -142,9 +121,7 @@ export async function handleTransferInput(
           balance < (transferState.amount as number)
         ) {
           await ctx.reply(
-            MessageService.getErrorMessage(
-              `Insufficient token balance. You have ${balance} tokens available.`
-            )
+            `Insufficient token balance. You have ${balance} tokens available.`
           );
           return true;
         }
@@ -160,9 +137,7 @@ export async function handleTransferInput(
         if (transferState.type === "all_tokens") {
           if (balance <= 0) {
             await ctx.reply(
-              MessageService.getErrorMessage(
-                `You don't have any ${tokenInfo.symbol} tokens to transfer.`
-              )
+              `You don't have any ${tokenInfo.symbol} tokens to transfer.`
             );
             return true;
           }
@@ -196,12 +171,10 @@ export async function handleTransferInput(
           };
 
           await ctx.reply(
-            MessageService.getTransferTokenConfirmationMessage(
-              tokenInfo.symbol,
-              tokenInfo.name,
-              transferState.recipientAddress as string,
-              transferState.amount as number
-            ),
+            `🔍 *Confirm Token Transfer*\n\n` +
+              `You are about to send *${transferState.amount} ${tokenInfo.symbol}* (${tokenInfo.name}) to:\n` +
+              `\`${transferState.recipientAddress}\`\n\n` +
+              `Please confirm this transaction by clicking the button below.`,
             {
               parse_mode: "Markdown",
               reply_markup: getTransferConfirmKeyboard(),
@@ -210,9 +183,7 @@ export async function handleTransferInput(
         }
       } catch (error) {
         await ctx.reply(
-          MessageService.getErrorMessage(
-            `Failed to get token information: ${error instanceof Error ? error.message : "Unknown error"}`
-          )
+          `Failed to get token information: ${error instanceof Error ? error.message : "Unknown error"}`
         );
         delete ctx.session.transferState;
       }
@@ -225,9 +196,7 @@ export async function handleTransferInput(
       if (transferState.type === "all_sol") {
         if (parts.length !== 1) {
           await ctx.reply(
-            MessageService.getErrorMessage(
-              "Please enter only the recipient address for transferring all SOL."
-            )
+            "Please enter only the recipient address for transferring all SOL."
           );
           return true;
         }
@@ -236,9 +205,7 @@ export async function handleTransferInput(
       } else {
         if (parts.length !== 2) {
           await ctx.reply(
-            MessageService.getErrorMessage(
-              "Please enter both recipient address and amount in the format: address amount"
-            )
+            "Please enter both recipient address and amount in the format: address amount"
           );
           return true;
         }
@@ -246,21 +213,13 @@ export async function handleTransferInput(
         amount = parseFloat(parts[1]);
 
         if (isNaN(amount) || amount <= 0) {
-          await ctx.reply(
-            MessageService.getErrorMessage(
-              "Please enter a valid amount greater than 0."
-            )
-          );
+          await ctx.reply("Please enter a valid amount greater than 0.");
           return true;
         }
       }
 
       if (!solanaService.validateAddress(recipientAddress)) {
-        await ctx.reply(
-          MessageService.getErrorMessage(
-            "Invalid Solana address. Please check and try again."
-          )
-        );
+        await ctx.reply("Invalid Solana address. Please check and try again.");
         return true;
       }
 
@@ -275,11 +234,10 @@ export async function handleTransferInput(
       };
 
       await ctx.reply(
-        MessageService.getTransferConfirmationMessage(
-          recipientAddress,
-          amount as number,
-          usdValue
-        ),
+        `🔍 *Confirm Transfer*\n\n` +
+          `You are about to send *${amount} SOL* (${formatPrice(usdValue)}) to:\n` +
+          `\`${recipientAddress}\`\n\n` +
+          `Please confirm this transaction by clicking the button below.`,
         {
           parse_mode: "Markdown",
           reply_markup: getTransferConfirmKeyboard(),
@@ -291,20 +249,14 @@ export async function handleTransferInput(
 
     return false;
   } catch (error) {
-    await ctx.reply(
-      MessageService.getErrorMessage(
-        "Error processing transfer. Please try again."
-      )
-    );
+    await ctx.reply("Error processing transfer. Please try again.");
     return true;
   }
 }
 
 export async function prepareTransferAllSol(ctx: BotContext) {
   if (!ctx.user?.walletAddress) {
-    await ctx.reply(
-      MessageService.getErrorMessage("No wallet found. Please try again.")
-    );
+    await ctx.reply("No wallet found. Please try again.");
     return;
   }
   const balanceUc = container.get(GetBalanceUseCase);
@@ -319,10 +271,13 @@ export async function prepareTransferAllSol(ctx: BotContext) {
     },
   };
 
-  await ctx.reply(MessageService.getTransferAllSolRequestMessage(), {
-    parse_mode: "Markdown",
-    reply_markup: { force_reply: true },
-  });
+  await ctx.reply(
+    "💸 *Transfer ALL SOL*\n\nPlease enter the recipient's wallet address:\n\n`address`\n\nExample: `GgS64xkW9JqR3VkBn4fpPi7sMqcnAzqRWTUXbBZhHpLT`\n\nThis will transfer your entire SOL balance (minus transaction fees).\n\nOr type /cancel to cancel the transfer.",
+    {
+      parse_mode: "Markdown",
+      reply_markup: { force_reply: true },
+    }
+  );
 }
 
 export async function prepareTransferSolAmount(ctx: BotContext) {
@@ -334,10 +289,13 @@ export async function prepareTransferSolAmount(ctx: BotContext) {
     },
   };
 
-  await ctx.reply(MessageService.getTransferSolRequestMessage(), {
-    parse_mode: "Markdown",
-    reply_markup: { force_reply: true },
-  });
+  await ctx.reply(
+    "💸 *Transfer SOL*\n\nPlease enter the recipient's wallet address and the amount to transfer in the format:\n\n`address amount`\n\nExample: `GgS64xkW9JqR3VkBn4fpPi7sMqcnAzqRWTUXbBZhHpLT 0.1`\n\nOr type /cancel to cancel the transfer.",
+    {
+      parse_mode: "Markdown",
+      reply_markup: { force_reply: true },
+    }
+  );
 }
 
 export async function prepareTransferAllTokens(ctx: BotContext) {
@@ -349,10 +307,13 @@ export async function prepareTransferAllTokens(ctx: BotContext) {
     },
   };
 
-  await ctx.reply(MessageService.getTransferAllTokensRequestMessage(), {
-    parse_mode: "Markdown",
-    reply_markup: { force_reply: true },
-  });
+  await ctx.reply(
+    "💸 *Transfer All of a Token*\n\nPlease enter the token address and recipient address in the format:\n\n`tokenAddress recipientAddress`\n\nExample: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v GgS64xkW9JqR3VkBn4fpPi7sMqcnAzqRWTUXbBZhHpLT`\n\nThis will transfer your entire balance of the specified token.\n\nNote: The recipient must have already interacted with this token before. They need to have a token account for this specific token.\n\nOr type /cancel to cancel the transfer.",
+    {
+      parse_mode: "Markdown",
+      reply_markup: { force_reply: true },
+    }
+  );
 }
 
 export async function prepareTransferTokensAmount(ctx: BotContext) {
@@ -364,29 +325,35 @@ export async function prepareTransferTokensAmount(ctx: BotContext) {
     },
   };
 
-  await ctx.reply(MessageService.getTransferTokenRequestMessage(), {
-    parse_mode: "Markdown",
-    reply_markup: { force_reply: true },
-  });
+  await ctx.reply(
+    "💸 *Transfer SPL Token*\n\nPlease enter the token address, recipient address, and amount to transfer in the format:\n\n`tokenAddress recipientAddress amount`\n\nExample: `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v GgS64xkW9JqR3VkBn4fpPi7sMqcnAzqRWTUXbBZhHpLT 10`\n\nNote: The recipient must have already interacted with this token before. They need to have a token account for this specific token.\n\nOr type /cancel to cancel the transfer.",
+    {
+      parse_mode: "Markdown",
+      reply_markup: { force_reply: true },
+    }
+  );
 }
 
 export async function confirmTransfer(ctx: BotContext) {
   let processingMessage: any;
   if (!ctx.session) ctx.session = {} as any;
+  // @ts-expect-error
   const transferState = ctx.session.transferState;
-  if (!transferState || !transferState.recipientAddress || !transferState.amount) {
-    await ctx.reply(
-      MessageService.getErrorMessage("Transfer details not found. Please try again.")
-    );
+  if (
+    !transferState ||
+    !transferState.recipientAddress ||
+    !transferState.amount
+  ) {
+    await ctx.reply("Transfer details not found. Please try again.");
     return;
   }
   if (!ctx.user?.walletId) {
-    await ctx.reply(MessageService.getErrorMessage("Wallet ID not found. Please try again."));
+    await ctx.reply("Wallet ID not found. Please try again.");
     return;
   }
 
   processingMessage = await ctx.reply(
-    MessageService.getProcessingTransactionMessage(),
+    "⏳ *Processing Transaction*\n\nYour transaction is being processed. Please wait a moment...\n\n_Please do not click the confirm button again to avoid duplicate transactions._",
     { parse_mode: "Markdown" }
   );
 
@@ -404,15 +371,19 @@ export async function confirmTransfer(ctx: BotContext) {
         tokenAddress: transferState.tokenAddress,
       });
 
-      const message = MessageService.getTransferTokenSuccessMessage(
-        transferState.tokenSymbol || "Unknown",
-        transferState.recipientAddress,
-        transferState.amount,
-        signature
-      );
+      const message =
+        `*Token Transfer Successful*\n\n` +
+        `Successfully sent *${transferState.amount} ${transferState.tokenSymbol || "Unknown"}* to:\n` +
+        `\`${transferState.recipientAddress}\`\n\n` +
+        `Transaction signature:\n` +
+        `\`${signature}\`\n\n` +
+        `View on Solscan: https://solscan.io/tx/${signature}`;
 
       try {
-        await ctx.telegram.deleteMessage(ctx.chat?.id as number, processingMessage.message_id);
+        await ctx.telegram.deleteMessage(
+          ctx.chat?.id as number,
+          processingMessage.message_id
+        );
       } catch {}
 
       await ctx.reply(message, { parse_mode: "Markdown" });
@@ -426,37 +397,50 @@ export async function confirmTransfer(ctx: BotContext) {
       });
 
       let message;
-      if (actualAmount !== undefined && Math.abs(actualAmount - requestedAmount) > 0.00001) {
-        message = MessageService.getTransferSuccessWithAdjustmentMessage(
-          transferState.recipientAddress,
-          requestedAmount,
-          actualAmount,
-          signature
-        );
+      if (
+        actualAmount !== undefined &&
+        Math.abs(actualAmount - requestedAmount) > 0.00001
+      ) {
+        message =
+          `✅ *Transfer Successful*\n\n` +
+          `You requested to send *${requestedAmount} SOL*, but the amount was adjusted to *${actualAmount} SOL* to account for transaction fees.\n\n` +
+          `Successfully sent to:\n` +
+          `\`${transferState.recipientAddress}\`\n\n` +
+          `Transaction signature:\n` +
+          `\`${signature}\`\n\n` +
+          `View on Solscan: https://solscan.io/tx/${signature}`;
       } else {
-        message = MessageService.getTransferSuccessMessage(
-          transferState.recipientAddress,
-          requestedAmount,
-          signature
-        );
+        message =
+          `✅ *Transfer Successful*\n\n` +
+          `Successfully sent *${actualAmount} SOL* to:\n` +
+          `\`${transferState.recipientAddress}\`\n\n` +
+          `Transaction signature:\n` +
+          `\`${signature}\`\n\n` +
+          `View on Solscan: https://solscan.io/tx/${signature}`;
       }
 
       try {
-        await ctx.telegram.deleteMessage(ctx.chat?.id as number, processingMessage.message_id);
+        await ctx.telegram.deleteMessage(
+          ctx.chat?.id as number,
+          processingMessage.message_id
+        );
       } catch {}
 
       await ctx.reply(message, { parse_mode: "Markdown" });
     }
 
-    delete ctx.session.transferState;
+    delete ctx.session?.transferState;
   } catch (error) {
     if (processingMessage) {
-      try { await ctx.telegram.deleteMessage(ctx.chat?.id as number, processingMessage.message_id); } catch {}
+      try {
+        await ctx.telegram.deleteMessage(
+          ctx.chat?.id as number,
+          processingMessage.message_id
+        );
+      } catch {}
     }
     await ctx.reply(
-      MessageService.getTransferErrorMessage(
-        error instanceof Error ? error.message : "Unknown error occurred"
-      ),
+      error instanceof Error ? error.message : "Unknown error occurred",
       { parse_mode: "Markdown" }
     );
   }

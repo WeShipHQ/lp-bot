@@ -1,7 +1,7 @@
 import { Scenes } from "telegraf";
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
-import { MessageService } from "@/services/message.service";
+// import { MessageService } from "@/services/message.service";
 import { getPoolInfoKeyboard } from "../keyboards";
 import { loading } from "@/bot/utils/text-formatters";
 import { DISABLE_LINK_PREVIEW } from "../handlers";
@@ -28,7 +28,7 @@ poolDetailScene.enter(async (ctx) => {
     const dex = (state.dex ?? "meteora") as DexType;
 
     if (!poolAddress) {
-      await ctx.reply(MessageService.getErrorMessage("Pool address not found"));
+      await ctx.reply("Pool address not found");
       return ctx.scene.leave();
     }
 
@@ -49,7 +49,7 @@ poolDetailScene.enter(async (ctx) => {
         ctx.chat?.id,
         loadingMsg.message_id,
         undefined,
-        MessageService.getErrorMessage("Pool not found or failed to load"),
+        "Pool not found or failed to load",
         { parse_mode: "Markdown" }
       );
       return ctx.scene.leave();
@@ -71,9 +71,7 @@ poolDetailScene.enter(async (ctx) => {
     );
   } catch (error) {
     console.error(error);
-    await ctx.reply(
-      MessageService.getErrorMessage("Failed to load position details")
-    );
+    await ctx.reply("Failed to load position details");
   }
 });
 
@@ -82,7 +80,7 @@ poolDetailScene.action("open_position", async (ctx) => {
   const { poolAddress, dex } = ctx.scene.state as SceneState;
 
   if (!poolAddress) {
-    await ctx.reply(MessageService.getErrorMessage("Pool address not found"));
+    await ctx.reply("Pool address not found");
     return ctx.scene.leave();
   }
 
@@ -100,9 +98,7 @@ poolDetailScene.action("refresh_pool_detail", async (ctx) => {
   const dex = (state.dex ?? "meteora") as DexType;
 
   if (!poolAddress || !dex) {
-    await ctx.reply(
-      MessageService.getErrorMessage("Pool address or DEX not found")
-    );
+    await ctx.reply("Pool address or DEX not found");
     return ctx.scene.leave();
   }
 
@@ -119,14 +115,13 @@ poolDetailScene.action("refresh_pool_detail", async (ctx) => {
         ctx.chat?.id,
         ctx.callbackQuery.message.message_id,
         undefined,
-        MessageService.getErrorMessage("Pool not found or failed to load"),
+        "Pool not found or failed to load",
         { parse_mode: "Markdown" }
       );
     } else {
-      await ctx.reply(
-        MessageService.getErrorMessage("Pool not found or failed to load"),
-        { parse_mode: "Markdown" }
-      );
+      await ctx.reply("Pool not found or failed to load", {
+        parse_mode: "Markdown",
+      });
     }
 
     return ctx.scene.leave();

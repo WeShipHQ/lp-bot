@@ -4,12 +4,13 @@ import {
   TRENDING_MESSAGES,
 } from "../constants/trending.constants";
 import { BotContext } from "@/types/bot.types";
-import { PoolsFormatter } from "@/bot/utils/messages/pool.formatter";
-import { MessageManager } from "@/bot/utils/messages";
+// import { PoolsFormatter } from "@/bot/utils/messages/pool.formatter";
+// import { MessageManager } from "@/bot/utils/messages";
 import { TrendingPoolsSortCriteria } from "@/v2";
 import { getTrendingKeyboard } from "../keyboards/trending-menu";
 import { container } from "@/infrastructure/di/container";
 import { GetTrendingPoolsUseCase } from "@/application/trending/get-trending-pools.use-case";
+import { PoolFormatter } from "../formatters/pool.formatter";
 
 export async function trendingHandler(
   ctx: BotContext,
@@ -27,7 +28,7 @@ export async function trendingHandler(
       sortBy,
     });
 
-    const message = PoolsFormatter.formatTrendingPoolsMessage(
+    const message = PoolFormatter.formatTrendingPoolsMessage(
       poolsResponse.pools,
       poolsResponse.sortBy,
       poolsResponse.currentPage,
@@ -93,7 +94,7 @@ export async function handleTrendingCallback(
       sortBy,
     });
 
-    const message = PoolsFormatter.formatTrendingPoolsMessage(
+    const message = PoolFormatter.formatTrendingPoolsMessage(
       poolsResponse.pools,
       poolsResponse.sortBy,
       poolsResponse.currentPage,
@@ -152,8 +153,8 @@ export async function handleTrendingCallback(
     } else {
       await ctx.answerCbQuery();
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("[Trending] Error:", error);
-    await ctx.answerCbQuery(MessageManager.getErrorMessage());
+    await ctx.answerCbQuery(error?.message || "❌ Error");
   }
 }

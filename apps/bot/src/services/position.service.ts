@@ -23,7 +23,7 @@ import {
 import { SOL_MINT } from "@/config/constants";
 import { meteoraPositionService } from "./meteora/position.service";
 import { MeteoraCreatePositionStrategy } from "@/types/meteora.types";
-import { OPEN_POSITION_FEE } from "@/bot/config/constants";
+import { OPEN_POSITION_FEE } from "@/config/constants";
 import { LbPosition, StrategyType } from "@meteora-ag/dlmm";
 import { poolService } from "./pool.service";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
