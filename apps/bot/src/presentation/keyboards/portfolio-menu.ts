@@ -1,11 +1,12 @@
 import { InlineKeyboardMarkup } from "@telegraf/types";
+import { PF_CALLBACKS } from "../constants/portfolio.callbacks";
 
 export function getOverviewKeyboard(): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [
-        { text: "Close", callback_data: "ui:close" },
-        { text: "Refresh", callback_data: "portfolio:refresh" },
+        { text: "Close", callback_data: PF_CALLBACKS.overview.close },
+        { text: "Refresh", callback_data: PF_CALLBACKS.overview.refresh },
       ],
     ],
   };
@@ -15,21 +16,19 @@ export function getPositionDetailKeyboard(index: number): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [
-        { text: "Close position", callback_data: `pos:close:${index}` },
-        { text: "Claim fees", callback_data: `pos:claim:${index}` },
+        { text: "Close position", callback_data: PF_CALLBACKS.position.close(index) },
+        { text: "Claim fees", callback_data: PF_CALLBACKS.position.claim(index) },
       ],
       [
-        { text: "Rebalance now", callback_data: `pos:rebalance:${index}` },
+        { text: "Rebalance now", callback_data: PF_CALLBACKS.position.rebalance(index) },
         {
           text: "Rebalancing settings",
-          callback_data: `pos:rebalance_settings:${index}`,
+          callback_data: PF_CALLBACKS.position.settings(index),
         },
       ],
       [
-        { text: "Take Profit", callback_data: `pos:take_profit:${index}` },
-        { text: "Stop Loss", callback_data: `pos:stop_loss:${index}` },
+        { text: "Refresh", callback_data: PF_CALLBACKS.position.refresh(index) },
       ],
-      [{ text: "Refresh", callback_data: `pos:refresh:${index}` }],
     ],
   };
 }

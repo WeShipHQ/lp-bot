@@ -1,9 +1,10 @@
 import { Telegraf } from "telegraf";
 import { BotContext } from "@/types/bot.types";
 import { GetPortfolioUseCase } from "@/application/portfolio/get-portfolio.use-case";
-import { CalculateMetricsUseCase } from "@/application/portfolio/calculate-metrics.use-case";
 import { registerPortfolioCallbacks } from "../handlers/portfolio";
-import { container } from "@/infrastructure/di/container";
+import { container, DI_TOKENS } from "@/infrastructure/di/container";
+import { PortfolioFormatter } from "../formatters/portfolio.formatter";
+import { getOverviewKeyboard } from "../keyboards/portfolio-menu";
 
 export function portfolioCommand(bot: Telegraf<BotContext>) {
   bot.command("portfolio", async (ctx) => {
@@ -11,32 +12,54 @@ export function portfolioCommand(bot: Telegraf<BotContext>) {
     try {
       const useCase = container.get(GetPortfolioUseCase);
       const portfolio = await useCase.execute(ctx.user.id, false);
-      const metrics = container.get(CalculateMetricsUseCase).execute(portfolio);
 
-      const lines: string[] = [];
-      lines.push("📊 Portfolio Overview");
-      lines.push("");
-      lines.push(`Positions: ${metrics.activePositions}/${metrics.totalPositions}`);
-      lines.push(`Total Value: ${metrics.totalValueUsd.toLocaleString()}`);
-      lines.push(`PnL: ${metrics.totalPnLUsd.toLocaleString()} (${metrics.totalPnLPercentage.toFixed(2)}%)`);
-      lines.push(`Fees Earned: ${metrics.totalFeesUsd.toLocaleString()}`);
-      if (metrics.dexBreakdown.length > 0) {
-        lines.push("");
-        lines.push("By DEX:");
-        for (const d of metrics.dexBreakdown) {
-          lines.push(`• ${d.dex.toUpperCase()}: ${d.positions} pos, ${d.valueUsd.toLocaleString()} value`);
-        }
+      // Build unclaimed fees map (per position address) via adapters
+      const walletAddress = ctx.user.walletAddress;
+      const feesByAddress: Record<string, number> = {};
+      if (walletAddress) {
+        try {
+          const registry = container.get<typeof import("@/services/dex-registry.service").dexRegistry>(DI_TOKENS.DexRegistry);
+          const active = portfolio.getActivePositions();
+          const dexes = Array.from(new Set(active.map((p) => p.dex)));
+          for (const dex of dexes) {
+            try {
+              const adapter = registry.get(dex as any);
+              const unified = await adapter.getUserPositions(walletAddress);
+              for (const up of unified) {
+                feesByAddress[up.address] = (feesByAddress[up.address] || 0) + (up.unclaimedFeesUsd || 0);
+              }
+            } catch {}
+          }
+        } catch {}
       }
 
-      await ctx.telegram.editMessageText(ctx.chat!.id, (loading as any).message_id, undefined, lines.join("\n"), {
-        parse_mode: "Markdown",
-        link_preview_options: { is_disabled: true },
+      const text = PortfolioFormatter.formatDomainOverview(portfolio, {
+        botName: ctx.botInfo?.username,
+        unclaimedFeesByAddress: feesByAddress,
       });
+
+      await ctx.telegram.editMessageText(
+        ctx.chat!.id,
+        (loading as any).message_id,
+        undefined,
+        text,
+        {
+          parse_mode: "Markdown",
+          link_preview_options: { is_disabled: true },
+          reply_markup: getOverviewKeyboard(),
+        }
+      );
     } catch (error) {
-      await ctx.telegram.editMessageText(ctx.chat!.id, (loading as any).message_id, undefined, "❌ Failed to load portfolio. Please try again.", { parse_mode: "Markdown" });
+      await ctx.telegram.editMessageText(
+        ctx.chat!.id,
+        (loading as any).message_id,
+        undefined,
+        "❌ Failed to load portfolio. Please try again.",
+        { parse_mode: "Markdown" }
+      );
     }
   });
 
-  // Keep callbacks registration for other flows
+  // Register callbacks for refresh/close actions
   registerPortfolioCallbacks(bot);
 }
