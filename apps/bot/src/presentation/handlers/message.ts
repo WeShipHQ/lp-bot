@@ -18,9 +18,8 @@ export async function messageHandler(
   const parsed = container
     .get(ParseFreeTextMessageUseCase)
     .execute({ text: messageText });
-  console.log("parsed", parsed);
+
   const decision = container.get(RouteFreeTextMessageUseCase).execute(parsed);
-  console.log("decision", decision);
 
   if (decision.type === "enter_pool_detail") {
     const { poolAddress, dex, poolType } = decision.state;

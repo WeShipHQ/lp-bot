@@ -10,7 +10,6 @@ import { PoolFormatter } from "../formatters/pool.formatter";
 import { container } from "@/infrastructure/di/container";
 import { GetPoolDetailsUseCase } from "@/application/trending/get-pool-details.use-case";
 
-// Scene state is presentation-only; keep it minimal and typed
 interface SceneState {
   poolAddress?: string;
   dex?: DexType;
@@ -56,7 +55,7 @@ poolDetailScene.enter(async (ctx) => {
       return ctx.scene.leave();
     }
 
-    const message = PoolFormatter.formatPoolDetails(poolData as any);
+    const message = PoolFormatter.formatPoolDetails(poolData);
     const keyboard = getPoolInfoKeyboard(poolData.address);
 
     await ctx.telegram.editMessageText(
@@ -80,7 +79,7 @@ poolDetailScene.enter(async (ctx) => {
 
 poolDetailScene.action("open_position", async (ctx) => {
   await ctx.answerCbQuery();
-  const { poolAddress, dex } = (ctx.scene.state as SceneState);
+  const { poolAddress, dex } = ctx.scene.state as SceneState;
 
   if (!poolAddress) {
     await ctx.reply(MessageService.getErrorMessage("Pool address not found"));
@@ -133,7 +132,7 @@ poolDetailScene.action("refresh_pool_detail", async (ctx) => {
     return ctx.scene.leave();
   }
 
-  const message = PoolFormatter.formatPoolDetails(poolData as any);
+  const message = PoolFormatter.formatPoolDetails(poolData);
   const keyboard = getPoolInfoKeyboard(poolData.address);
 
   if (ctx.callbackQuery.message) {
