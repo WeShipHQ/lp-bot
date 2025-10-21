@@ -1,94 +1,94 @@
 import { InlineKeyboardMarkup } from "@telegraf/types";
+import { PositionDetailCallbacks } from "./position-detail.actions";
 
-export function getPositionDetailKeyboard(
-  positionAddress: string
-): InlineKeyboardMarkup {
+export function getPositionDetailKeyboard(positionId: string): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [
         {
           text: "Close position",
-          callback_data: "pos_close_confirmation",
+          callback_data: PositionDetailCallbacks.CLOSE_CONFIRM,
         },
-        { text: "Claim fees", callback_data: "pos_claim_confirmation" },
+        {
+          text: "Claim fees",
+          callback_data: PositionDetailCallbacks.CLAIM_CONFIRM,
+        },
       ],
       [
         {
           text: "Rebalance now",
-          callback_data: "pos_rebalance_confirmation",
+          callback_data: PositionDetailCallbacks.REBALANCE_CONFIRM,
         },
         {
           text: "Rebalancing settings",
-          callback_data: `pos_settings_${positionAddress}`,
+          callback_data: PositionDetailCallbacks.SETTINGS(positionId),
         },
       ],
       [
         {
           text: "Take Profit",
-          callback_data: `pos_take_profit_${positionAddress}`,
+          callback_data: PositionDetailCallbacks.TAKE_PROFIT(positionId),
         },
         {
           text: "Stop Loss",
-          callback_data: `pos_stop_loss_${positionAddress}`,
+          callback_data: PositionDetailCallbacks.STOP_LOSS(positionId),
         },
       ],
-      [{ text: "Refresh", callback_data: `pos_refresh_${positionAddress}` }],
+      [
+        {
+          text: "Refresh",
+          callback_data: PositionDetailCallbacks.REFRESH(positionId),
+        },
+      ],
     ],
   };
 }
 
-export function getPositionCloseConfirmKeyboard(
-  positionAddress: string
-): InlineKeyboardMarkup {
+export function getPositionCloseConfirmKeyboard(): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [
-        { text: "✅ Yes, Close Position", callback_data: `pos_close_yes` },
+        {
+          text: "✅ Yes, Close Position",
+          callback_data: PositionDetailCallbacks.CLOSE_APPROVE,
+        },
         {
           text: "❌ No, Cancel",
-          // callback_data: `1pos_close_cancel_${positionAddress}`,
-          callback_data: `pos_close_no`,
+          callback_data: PositionDetailCallbacks.CLOSE_DECLINE,
         },
       ],
     ],
   };
 }
 
-export function getClaimFeesConfirmKeyboard(
-  positionAddress: string
-): InlineKeyboardMarkup {
+export function getClaimFeesConfirmKeyboard(positionId: string): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [
         {
           text: "✅ Yes, Claim Fees",
-          callback_data: `pos_claim_yes_${positionAddress}`,
+          callback_data: PositionDetailCallbacks.CLAIM_APPROVE(positionId),
         },
         {
           text: "❌ No, Cancel",
-          callback_data: `pos_claim_no`,
+          callback_data: PositionDetailCallbacks.CLAIM_DECLINE,
         },
       ],
     ],
   };
 }
 
-/**
- * Get keyboard for rebalance confirmation
- */
-export function getRebalanceConfirmKeyboard(
-  positionAddress: string
-): InlineKeyboardMarkup {
+export function getRebalanceConfirmKeyboard(positionId: string): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [
         {
           text: "✅ Yes, Rebalance Now",
-          callback_data: `pos_rebalance_yes_${positionAddress}`,
+          callback_data: PositionDetailCallbacks.REBALANCE_APPROVE(positionId),
         },
         {
           text: "❌ No, Cancel",
-          callback_data: `pos_rebalance_no`,
+          callback_data: PositionDetailCallbacks.REBALANCE_DECLINE,
         },
       ],
     ],

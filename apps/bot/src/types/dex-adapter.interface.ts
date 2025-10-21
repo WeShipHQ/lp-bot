@@ -11,6 +11,11 @@ import {
   UrlParseResult,
 } from "./core.types";
 
+export interface PositionContext {
+  poolAddress?: string;
+  userAddress?: string;
+}
+
 export interface IDexAdapter {
   readonly dexType: DexType;
   readonly name: string;
@@ -23,7 +28,7 @@ export interface IDexAdapter {
 
   // Position operations
   getUserPositions(userAddress: string): Promise<UnifiedPosition[]>;
-  getPosition(positionAddress: string): Promise<UnifiedPosition>;
+  getPosition(positionAddress: string, context?: PositionContext): Promise<UnifiedPosition>;
   createPosition(params: CreatePositionParams): Promise<TransactionResult>;
   closePosition(positionAddress: string): Promise<TransactionResult>;
   claimFees(positionAddress: string): Promise<TransactionResult>;

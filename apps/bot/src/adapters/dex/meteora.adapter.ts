@@ -1,5 +1,5 @@
 import { BaseDexAdapter } from "@/adapters/base-dex.adapter";
-import { IDexAdapter } from "@/types/dex-adapter.interface";
+import { IDexAdapter, PositionContext } from "@/types/dex-adapter.interface";
 import {
   CreatePositionParams,
   DexType,
@@ -243,8 +243,137 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     }
   }
 
-  async getPosition(positionAddress: string): Promise<UnifiedPosition> {
-    throw new Error("Method not implemented.");
+  async getPosition(positionAddress: string, context?: PositionContext): Promise<UnifiedPosition> {
+    try {
+      this.validateAddress(positionAddress);
+      const userAddress = context?.userAddress;
+
+      if (!userAddress) {
+        throw new Error("userAddress is required to fetch Meteora position details");
+      }
+
+      const positionsByPool = await this.dlmm.getAllLbPairPositionsByUser(userAddress);
+
+      for (const [poolAddress, info] of Array.from(positionsByPool.entries())) {
+        const positionsData = ((info as any).lbPairPositionsData ?? []) as Array<{
+          publicKey: PublicKey;
+          positionData: any;
+        }>;
+
+        const matched = positionsData.find(
+          (pos) => pos.publicKey.toString() === positionAddress
+        );
+
+        if (!matched) {
+          continue;
+        }
+
+        const xMint = info.lbPair.tokenXMint.toString();
+        const yMint = info.lbPair.tokenYMint.toString();
+
+        const xDecimals = Number(
+          (info as any).tokenX?.mint?.decimals ?? (info as any).tokenX?.decimals ?? 6
+        );
+        const yDecimals = Number(
+          (info as any).tokenY?.mint?.decimals ?? (info as any).tokenY?.decimals ?? 6
+        );
+
+        const prices = await this.prices.getPrices([xMint, yMint]);
+        const xPrice = prices[xMint]?.price ?? 0;
+        const yPrice = prices[yMint]?.price ?? 0;
+
+        const tokenA: Token = {
+          address: xMint,
+          symbol:
+            (info as any).tokenX?.mint?.symbol ??
+            (info as any).tokenX?.symbol ??
+            xMint.slice(0, 4),
+          name:
+            (info as any).tokenX?.mint?.name ??
+            (info as any).tokenX?.name ??
+            xMint,
+          decimals: xDecimals,
+        };
+        const tokenB: Token = {
+          address: yMint,
+          symbol:
+            (info as any).tokenY?.mint?.symbol ??
+            (info as any).tokenY?.symbol ??
+            yMint.slice(0, 4),
+          name:
+            (info as any).tokenY?.mint?.name ??
+            (info as any).tokenY?.name ??
+            yMint,
+          decimals: yDecimals,
+        };
+
+        const positionData = matched.positionData ?? {};
+        const totalXRaw = (positionData.totalXAmountExcludeTransferFee ?? positionData.totalXAmount ?? 0) as any;
+        const totalYRaw = (positionData.totalYAmountExcludeTransferFee ?? positionData.totalYAmount ?? 0) as any;
+
+        const tokenAAmountNum = this.fromRawAmount(totalXRaw, xDecimals);
+        const tokenBAmountNum = this.fromRawAmount(totalYRaw, yDecimals);
+
+        const currentValueUsd = tokenAAmountNum * xPrice + tokenBAmountNum * yPrice;
+
+        const feeXRaw = (positionData.feeXExcludeTransferFee ?? positionData.feeX ?? 0) as any;
+        const feeYRaw = (positionData.feeYExcludeTransferFee ?? positionData.feeY ?? 0) as any;
+        const unclaimedFeesUsd =
+          this.fromRawAmount(feeXRaw, xDecimals) * xPrice +
+          this.fromRawAmount(feeYRaw, yDecimals) * yPrice;
+
+        const claimedFeeXRaw = (positionData.totalClaimedFeeXAmount ?? 0) as any;
+        const claimedFeeYRaw = (positionData.totalClaimedFeeYAmount ?? 0) as any;
+        const claimedFeesUsd =
+          this.fromRawAmount(claimedFeeXRaw, xDecimals) * xPrice +
+          this.fromRawAmount(claimedFeeYRaw, yDecimals) * yPrice;
+
+        const lowerBinId = Number(positionData.lowerBinId ?? positionData.binLower ?? 0);
+        const upperBinId = Number(positionData.upperBinId ?? positionData.binUpper ?? 0);
+        const activeId = Number(info.lbPair.activeId ?? 0);
+        const binStepBps = Number(info.lbPair.binStep ?? 0);
+        const inRange = activeId >= lowerBinId && activeId <= upperBinId;
+
+        const timestamp = positionData.lastUpdatedAt
+          ? new Date(positionData.lastUpdatedAt)
+          : new Date();
+
+        return {
+          id: `${poolAddress}-${positionAddress}`,
+          address: positionAddress,
+          poolAddress,
+          dex: this.dexType,
+          type: "DLMM",
+          tokenA,
+          tokenB,
+          tokenAAmount: tokenAAmountNum.toString(),
+          tokenBAmount: tokenBAmountNum.toString(),
+          currentValueUsd,
+          initialValueUsd: currentValueUsd,
+          unclaimedFeesUsd,
+          claimedFeesUsd,
+          unclaimedRewardsUsd: 0,
+          claimedRewardsUsd: 0,
+          pnlUsd: 0,
+          pnlPercentage: 0,
+          inRange,
+          isActive: true,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+          metadata: {
+            binStepBps,
+            activeId,
+            lowerBinId,
+            upperBinId,
+            userAddress,
+          },
+        };
+      }
+
+      throw new Error("Position not found for provided user");
+    } catch (error) {
+      return this.handleError(error, "getPosition");
+    }
   }
 
   async createPosition(params: CreatePositionParams): Promise<TransactionResult> {

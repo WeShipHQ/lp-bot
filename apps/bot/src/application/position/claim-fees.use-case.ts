@@ -63,7 +63,10 @@ export class ClaimFeesUseCase {
       // Try to fetch unclaimed fees before claiming to update domain optimistically
       let estimatedUnclaimedFeesUsd = 0;
       try {
-        const onchain = await adapter.getPosition(positionAddress);
+        const onchain = await adapter.getPosition(positionAddress, {
+          userAddress: command.userAddress,
+          poolAddress: position.poolAddress,
+        });
         estimatedUnclaimedFeesUsd = Number(onchain.unclaimedFeesUsd || 0);
       } catch (e) {
         // Non-fatal; proceed without pre-estimate
