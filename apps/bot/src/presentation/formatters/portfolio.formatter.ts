@@ -1,12 +1,13 @@
 import { UnifiedPortfolio, UnifiedPosition } from "@/types/core.types";
 import { Portfolio } from "@/domain/portfolio/portfolio.entity";
-import { bold, link } from "@/bot/utils/text-formatters";
+// import { bold, link } from "@/bot/utils/text-formatters";
 import {
   formatCurrency,
   formatNumber,
   formatPercentage,
 } from "./base.formatter";
-import { getPositionDeeplink } from "@/bot/utils/misc";
+import { bold, getPositionDeeplink, link } from "@/utils/misc";
+// import { getPositionDeeplink } from "@/bot/utils/misc";
 
 export class PortfolioFormatter {
   static formatOverview(portfolio: UnifiedPortfolio): string {

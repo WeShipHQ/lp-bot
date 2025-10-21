@@ -3,10 +3,8 @@ import { Position } from "@/db";
 import { Pool } from "@/types/pool.types";
 import { TokenPrice } from "@/types/token.types";
 import { LbPair, LbPosition } from "@meteora-ag/dlmm";
-import Decimal from "decimal.js";
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
-// import { MessageService } from "@/services/message.service";
 import { positionService } from "@/services/position.service";
 import {
   getPositionDetailKeyboard,
@@ -18,15 +16,14 @@ import { DISABLE_LINK_PREVIEW } from "../handlers";
 import { db, Position as DbPosition } from "@/db";
 import { poolService } from "@/services/pool.service";
 import { getTokenPriceService } from "@/services/token-price.service";
-// import { formatNumber, formatPrice } from "@/bot/utils/formatters";
 import { getSolscanLink } from "@/utils/link";
-import { loading } from "@/bot/utils/text-formatters";
 import { ClosePositionUseCase } from "@/application/position/close-position.use-case";
 import { ClaimFeesUseCase } from "@/application/position/claim-fees.use-case";
 import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
 import { dexRegistry } from "@/services/dex-registry.service";
 import { PrivyTransactionService } from "@/services/transaction.service";
 import { formatPrice } from "../formatters/base.formatter";
+import { loading } from "@/utils/misc";
 
 type SceneState = {
   positionAddress?: string;
@@ -48,9 +45,7 @@ class MessageService {
     tokenAPrice: TokenPrice,
     tokenBPrice: TokenPrice
   ): string {
-    
-
-    return 'Soon';
+    return "Soon";
   }
 }
 

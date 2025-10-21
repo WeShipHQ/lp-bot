@@ -2,7 +2,6 @@ import { Scenes, Markup } from "telegraf";
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
 import { MeteoraCreatePositionStrategy } from "@/types/meteora.types";
-import { divider, link } from "@/bot/utils/text-formatters";
 import { message } from "telegraf/filters";
 import { DISABLE_LINK_PREVIEW } from "../handlers";
 import { Token } from "@/types/token.types";
@@ -22,6 +21,7 @@ import {
 import { GetPoolTokenBalancesUseCase } from "@/application/wallet/get-pool-token-balances.use-case";
 import { BUFFER_AMOUNT, SLIPPAGE_SMALL } from "@/config/constants";
 import { formatNumber } from "../formatters/base.formatter";
+import { link } from "@/utils/misc";
 
 type WizardState = {
   step?:

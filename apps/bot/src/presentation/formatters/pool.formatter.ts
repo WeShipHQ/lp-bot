@@ -1,7 +1,7 @@
 import { UnifiedPool } from "@/shared/types/pool.types";
 import { TrendingPoolsSortCriteria } from "@/types/trending.types";
-import { link } from "@/bot/utils/text-formatters";
-import { getPoolDeeplink } from "@/bot/utils/misc";
+// import { link } from "@/bot/utils/text-formatters";
+import { getPoolDeeplink, link } from "@/utils/misc";
 import { formatAPR, formatCurrency, formatPercentage } from "./base.formatter";
 
 export class PoolFormatter {
@@ -25,10 +25,7 @@ export class PoolFormatter {
 
   static formatPoolDetails(pool: UnifiedPool): string {
     const tokenPair = `${pool.tokenA.symbol.toUpperCase()}/${pool.tokenB.symbol.toUpperCase()}`;
-    const poolLink = link(
-      "Open",
-      getPoolDeeplink("pandalpbot", pool.dex, pool.address)
-    );
+    const poolLink = `[Open](${getPoolDeeplink("pandalpbot", pool.dex, pool.address)})`
     const tvl = formatCurrency(Number(pool.tvl), { maxDecimals: 3 });
     const apy = `${(pool.apy * 100).toFixed(2)}%`;
     const fee24h = formatCurrency(pool.fees24h || 0, { maxDecimals: 3 });

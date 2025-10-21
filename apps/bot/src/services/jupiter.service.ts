@@ -10,17 +10,22 @@ import {
   JupiterExecuteResponse,
 } from "../types/jupiter.types";
 import { VersionedTransaction } from "@solana/web3.js";
-import { api } from "@/bot/utils/http-client.util";
-import { getCacheService } from '@/infrastructure/cache/cache.service';
-import { CacheKeys } from '@/infrastructure/cache/cache-keys';
-import { CircuitBreaker } from '@/infrastructure/resilience/circuit-breaker';
-import { retry } from '@/infrastructure/resilience/retry';
+import { api } from "@/utils/http-client.util";
+import { getCacheService } from "@/infrastructure/cache/cache.service";
+import { CacheKeys } from "@/infrastructure/cache/cache-keys";
+import { CircuitBreaker } from "@/infrastructure/resilience/circuit-breaker";
+import { retry } from "@/infrastructure/resilience/retry";
 
 export class JupiterService {
   private readonly baseUrl = "https://lite-api.jup.ag";
   private readonly tokenBaseUrl = "https://lite-api.jup.ag/tokens/v2";
   private readonly cache = getCacheService();
-  private readonly breaker = new CircuitBreaker({ name: 'jupiter', failureThreshold: 5, successThreshold: 2, timeoutMs: 15000 });
+  private readonly breaker = new CircuitBreaker({
+    name: "jupiter",
+    failureThreshold: 5,
+    successThreshold: 2,
+    timeoutMs: 15000,
+  });
 
   private mapJupiterTokenToTokenInfo(
     jupiterToken: JupiterToken
@@ -48,13 +53,29 @@ export class JupiterService {
       console.log(`[Jupiter] Fetching token info for: ${mintAddress}`);
 
       const response = await this.breaker.execute(
-        () => api.getWithRetry<JupiterTokenSearchResponse>(`${this.tokenBaseUrl}/search?query=${mintAddress}`),
+        () =>
+          api.getWithRetry<JupiterTokenSearchResponse>(
+            `${this.tokenBaseUrl}/search?query=${mintAddress}`
+          ),
         async () => {
           // fallback: try cached price if available and return minimal info
-          const price = await this.cache.get<number>(CacheKeys.tokenPriceKey(mintAddress));
+          const price = await this.cache.get<number>(
+            CacheKeys.tokenPriceKey(mintAddress)
+          );
           if (price != null) {
             return [
-              { id: mintAddress, name: mintAddress, symbol: 'TOKEN', icon: '', decimals: 9, usdPrice: price, stats24h: undefined, mcap: 0, liquidity: 0, isVerified: false } as any,
+              {
+                id: mintAddress,
+                name: mintAddress,
+                symbol: "TOKEN",
+                icon: "",
+                decimals: 9,
+                usdPrice: price,
+                stats24h: undefined,
+                mcap: 0,
+                liquidity: 0,
+                isVerified: false,
+              } as any,
             ];
           }
           return [] as any;
@@ -91,7 +112,10 @@ export class JupiterService {
       );
 
       const response = await this.breaker.execute(
-        () => api.getWithRetry<JupiterTokenSearchResponse>(`${this.tokenBaseUrl}/search?query=${tokenXAddress},${tokenYAddress}`),
+        () =>
+          api.getWithRetry<JupiterTokenSearchResponse>(
+            `${this.tokenBaseUrl}/search?query=${tokenXAddress},${tokenYAddress}`
+          ),
         async () => [] as any
       );
 
@@ -140,7 +164,7 @@ export class JupiterService {
     try {
       const key = CacheKeys.tokenPriceKey(tokenAddress);
       const cached = await this.cache.get<number>(key);
-      if (typeof cached === 'number') return cached;
+      if (typeof cached === "number") return cached;
 
       const tokenInfo = await this.getTokenInfo(tokenAddress);
       const price = tokenInfo?.price || null;
@@ -171,7 +195,7 @@ export class JupiterService {
     for (const address of tokenAddresses) {
       const key = CacheKeys.tokenPriceKey(address);
       const cached = await this.cache.get<number>(key);
-      if (typeof cached === 'number') {
+      if (typeof cached === "number") {
         prices[address] = cached;
       } else {
         misses.push(address);
@@ -260,10 +284,14 @@ export class JupiterService {
       });
 
       const response = await this.breaker.execute(
-        () => retry(() => fetch(`${this.baseUrl}/ultra/v1/order?${queryParams}`)),
+        () =>
+          retry(() => fetch(`${this.baseUrl}/ultra/v1/order?${queryParams}`)),
         async () => {
           // No viable fallback for order creation
-          return new Response(null, { status: 503, statusText: 'Service Unavailable' });
+          return new Response(null, {
+            status: 503,
+            statusText: "Service Unavailable",
+          });
         }
       );
 
@@ -271,7 +299,9 @@ export class JupiterService {
         throw new Error(`HTTP error! status: ${(response as any).status}`);
       }
 
-      const orderResponse: JupiterOrderResponse = await (response as any).json();
+      const orderResponse: JupiterOrderResponse = await (
+        response as any
+      ).json();
       console.log(
         `[Jupiter] Order created successfully with requestId: ${orderResponse.requestId}`
       );
@@ -294,19 +324,28 @@ export class JupiterService {
       );
 
       const response = await this.breaker.execute(
-        () => retry(() => fetch(`${this.baseUrl}/ultra/v1/execute`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(executeRequest),
-        })),
-        async () => new Response(JSON.stringify({ status: 'Error', error: 'Service Unavailable' }), { status: 503 })
+        () =>
+          retry(() =>
+            fetch(`${this.baseUrl}/ultra/v1/execute`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(executeRequest),
+            })
+          ),
+        async () =>
+          new Response(
+            JSON.stringify({ status: "Error", error: "Service Unavailable" }),
+            { status: 503 }
+          )
       );
 
       if (!(response as any).ok) {
         throw new Error(`HTTP error! status: ${(response as any).status}`);
       }
 
-      const executeResponse: JupiterExecuteResponse = await (response as any).json();
+      const executeResponse: JupiterExecuteResponse = await (
+        response as any
+      ).json();
 
       if (executeResponse.status === "Success") {
         console.log(

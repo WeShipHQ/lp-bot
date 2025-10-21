@@ -1,9 +1,7 @@
 import { Scenes } from "telegraf";
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
-// import { MessageService } from "@/services/message.service";
 import { getPoolInfoKeyboard } from "../keyboards";
-import { loading } from "@/bot/utils/text-formatters";
 import { DISABLE_LINK_PREVIEW } from "../handlers";
 import { DexType, UnifiedPool } from "@/types/core.types";
 import { PoolFormatter } from "../formatters/pool.formatter";
@@ -32,7 +30,7 @@ poolDetailScene.enter(async (ctx) => {
       return ctx.scene.leave();
     }
 
-    const loadingMsg = await ctx.reply(`${loading("Loading pool details..")}`, {
+    const loadingMsg = await ctx.reply("Loading pool details..", {
       parse_mode: "Markdown",
     });
 

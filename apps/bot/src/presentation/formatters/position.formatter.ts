@@ -1,7 +1,7 @@
 import { UnifiedPool } from "@/types/core.types";
 import { Token } from "@/types/token.types";
-import { divider } from "@/bot/utils/text-formatters";
 import { formatNumber, formatPercentage } from "./base.formatter";
+import { divider } from "@/utils/misc";
 
 export interface CreatePositionStateView {
   strategy?: string;
