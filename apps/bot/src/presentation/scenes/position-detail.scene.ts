@@ -1,8 +1,4 @@
 import { Scenes } from "telegraf";
-import { Position } from "@/db";
-import { Pool } from "@/types/pool.types";
-import { TokenPrice } from "@/types/token.types";
-import { LbPair, LbPosition } from "@meteora-ag/dlmm";
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
 import { positionService } from "@/services/position.service";
@@ -13,41 +9,29 @@ import {
   getRebalanceConfirmKeyboard,
 } from "../keyboards/position-detail-menu";
 import { DISABLE_LINK_PREVIEW } from "../handlers";
-import { db, Position as DbPosition } from "@/db";
+import { db, Position as DbPosition, Position } from "@/db";
 import { poolService } from "@/services/pool.service";
 import { getTokenPriceService } from "@/services/token-price.service";
 import { getSolscanLink } from "@/utils/link";
+import { container } from "@/infrastructure/di/container";
 import { ClosePositionUseCase } from "@/application/position/close-position.use-case";
 import { ClaimFeesUseCase } from "@/application/position/claim-fees.use-case";
-import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
-import { dexRegistry } from "@/services/dex-registry.service";
-import { PrivyTransactionService } from "@/services/transaction.service";
-import { formatPrice } from "../formatters/base.formatter";
-import { loading } from "@/utils/misc";
+import { link, loading } from "@/utils/misc";
+import {
+  formatNumber,
+  formatPercentage,
+  formatPrice,
+} from "../formatters/base.formatter";
+import Decimal from "decimal.js";
+import { LbPair, LbPosition } from "@meteora-ag/dlmm";
+import { Pool } from "@/types/pool.types";
+import { TokenPrice } from "@/types/token.types";
+import { PositionPnlResult } from "@/types/position.types";
 
 type SceneState = {
   positionAddress?: string;
   position?: DbPosition;
 };
-
-class MessageService {
-  static getErrorMessage(
-    message: string = "Something went wrong. Please try again later."
-  ): string {
-    return `❌ ${message}`;
-  }
-
-  static getPositionDetailMessageV1(
-    position: Position,
-    lbPosition: LbPosition,
-    lbPair: LbPair,
-    poolInfo: Pool,
-    tokenAPrice: TokenPrice,
-    tokenBPrice: TokenPrice
-  ): string {
-    return "Soon";
-  }
-}
 
 export const positionDetailScene = new Scenes.BaseScene<BotContext>(
   SCENE_IDS.POSITION_DETAIL_SCENE
@@ -58,9 +42,7 @@ positionDetailScene.enter(async (ctx) => {
     const state = ctx.scene.state as SceneState;
     const positionAddress = state.positionAddress;
     if (!positionAddress) {
-      await ctx.reply(
-        MessageService.getErrorMessage("Position address not found")
-      );
+      await ctx.reply("Position address not found");
       return ctx.scene.leave();
     }
 
@@ -81,7 +63,7 @@ positionDetailScene.enter(async (ctx) => {
         ctx.chat?.id,
         loadingMsg.message_id,
         undefined,
-        MessageService.getErrorMessage("Position not found or failed to load"),
+        "Position not found or failed to load",
         { parse_mode: "Markdown" }
       );
       return ctx.scene.leave();
@@ -97,7 +79,7 @@ positionDetailScene.enter(async (ctx) => {
       poolInfo.tokenB.address,
     ]);
 
-    const message = MessageService.getPositionDetailMessageV1(
+    const message = getPositionDetailMessageV1(
       dbPosition,
       lbPosition,
       lbPair,
@@ -120,9 +102,7 @@ positionDetailScene.enter(async (ctx) => {
     );
   } catch (error) {
     console.error(error);
-    await ctx.reply(
-      MessageService.getErrorMessage("Failed to load position details")
-    );
+    await ctx.reply("Failed to load position details");
     return ctx.scene.leave();
   }
 });
@@ -131,9 +111,7 @@ positionDetailScene.action("pos_close_confirmation", async (ctx) => {
   await ctx.answerCbQuery();
   const position = (ctx.scene.state as SceneState).position;
   if (!position) {
-    await ctx.reply(
-      MessageService.getErrorMessage("Position not found or failed to load")
-    );
+    await ctx.reply("Position not found or failed to load");
     return ctx.scene.leave();
   }
 
@@ -143,7 +121,7 @@ positionDetailScene.action("pos_close_confirmation", async (ctx) => {
     `Position: \`${position.positionAddress}\`\n\n` +
     `This action cannot be undone.`;
 
-  const keyboard = getPositionCloseConfirmKeyboard(position.positionAddress);
+  const keyboard = getPositionCloseConfirmKeyboard();
 
   await ctx.reply(confirmationMessage, {
     parse_mode: "Markdown",
@@ -156,9 +134,7 @@ positionDetailScene.action("pos_close_yes", async (ctx) => {
   const position = (ctx.scene.state as SceneState).position;
 
   if (!position) {
-    await ctx.reply(
-      MessageService.getErrorMessage("Position not found or failed to load")
-    );
+    await ctx.reply("Position not found or failed to load");
     return ctx.scene.leave();
   }
 
@@ -173,23 +149,21 @@ positionDetailScene.action("pos_close_yes", async (ctx) => {
   });
 
   try {
-    const repo = new PositionRepository(db as any);
-    const txService = new PrivyTransactionService();
-    const closeUC = new ClosePositionUseCase(repo, dexRegistry, txService);
-
-    const res = await closeUC.execute({
+    // Use DI use case
+    const uc = container.get(ClosePositionUseCase);
+    const res = await uc.execute({
       userId: ctx.user.id,
       positionId: position.id,
-      userAddress: ctx.user.walletAddress!,
-      walletId: ctx.user.walletId,
+      userAddress: ctx.user.walletAddress as string,
+      walletId: ctx.user.walletId as string | undefined,
     });
 
-    if (!res.success || !res.signature) {
+    if (!res.success) {
       await ctx.telegram.editMessageText(
         ctx.chat?.id,
         loadingMsg.message_id,
         undefined,
-        MessageService.getErrorMessage(res.error || "Failed to close position"),
+        res.error || "Failed to close position",
         { parse_mode: "Markdown" }
       );
       return;
@@ -197,7 +171,7 @@ positionDetailScene.action("pos_close_yes", async (ctx) => {
 
     const successMessage =
       `✅ **Position Closed**\n\n` +
-      `Transaction: [View on Solscan](${getSolscanLink("tx", res.signature)})`;
+      `Transaction: [View on Solscan](https://solscan.io/tx/${res.signature})`;
 
     await ctx.telegram.editMessageText(
       ctx.chat?.id,
@@ -215,7 +189,7 @@ positionDetailScene.action("pos_close_yes", async (ctx) => {
       ctx.chat?.id,
       loadingMsg.message_id,
       undefined,
-      MessageService.getErrorMessage("Failed to close position"),
+      "Failed to close position",
       { parse_mode: "Markdown" }
     );
   }
@@ -236,9 +210,7 @@ positionDetailScene.action("pos_claim_confirmation", async (ctx) => {
   const position = (ctx.scene.state as SceneState).position;
 
   if (!position) {
-    await ctx.reply(
-      MessageService.getErrorMessage("Position not found or failed to load")
-    );
+    await ctx.reply("Position not found or failed to load");
     return ctx.scene.leave();
   }
 
@@ -281,41 +253,38 @@ positionDetailScene.action(/^pos_claim_yes_(.+)$/, async (ctx) => {
         ctx.chat?.id,
         loadingMsg.message_id,
         undefined,
-        MessageService.getErrorMessage("Position not found"),
+        "Position not found",
         { parse_mode: "Markdown" }
       );
       return;
     }
 
-    const repo = new PositionRepository(db as any);
-    const txService = new PrivyTransactionService();
-    const claimUC = new ClaimFeesUseCase(repo, dexRegistry, txService);
-    const res = await claimUC.execute({
+    const uc = container.get(ClaimFeesUseCase);
+    const res = await uc.execute({
       userId: ctx.user.id,
       positionId: position.id,
-      userAddress: ctx.user.walletAddress!,
-      walletId: ctx.user.walletId,
+      userAddress: ctx.user.walletAddress as string,
+      walletId: ctx.user.walletId as string | undefined,
     });
 
-    if (!res.success || !res.signature) {
+    if (!res.success) {
       await ctx.telegram.editMessageText(
         ctx.chat?.id,
         loadingMsg.message_id,
         undefined,
-        MessageService.getErrorMessage(res.error || "Failed to claim fees"),
+        res.error || "Failed to claim fees",
         { parse_mode: "Markdown" }
       );
       return;
     }
 
-    const claimedStr =
-      res.claimedFeesUsd != null
-        ? formatPrice(Number(res.claimedFeesUsd), { maxDecimals: 2 })
-        : "N/A";
     const successMessage =
       `✅ *Fees Claimed Successfully*\n\n` +
-      `Claimed Amount (est.): ${claimedStr}\n` +
-      `Transaction: [View on Solscan](${getSolscanLink("tx", res.signature)})`;
+      `All available LP fees have been claimed.\n\n` +
+      (typeof res.claimedFeesUsd === "number"
+        ? `• Claimed Fees (est): ${formatPrice(res.claimedFeesUsd, { maxDecimals: 2 })}\n`
+        : ``) +
+      `• Transaction: [View on Solscan](${getSolscanLink("tx", res.signature || "")})\n`;
 
     await ctx.telegram.editMessageText(
       ctx.chat?.id,
@@ -333,7 +302,7 @@ positionDetailScene.action(/^pos_claim_yes_(.+)$/, async (ctx) => {
       ctx.chat?.id,
       loadingMsg.message_id,
       undefined,
-      MessageService.getErrorMessage("Failed to claim fees"),
+      "Failed to claim fees",
       { parse_mode: "Markdown" }
     );
   }
@@ -354,9 +323,7 @@ positionDetailScene.action("pos_rebalance_confirmation", async (ctx) => {
   const position = (ctx.scene.state as SceneState).position;
 
   if (!position) {
-    await ctx.reply(
-      MessageService.getErrorMessage("Position not found or failed to load")
-    );
+    await ctx.reply("Position not found or failed to load");
     return ctx.scene.leave();
   }
 
@@ -417,7 +384,7 @@ positionDetailScene.action(/^pos_rebalance_yes_(.+)$/, async (ctx) => {
       ctx.chat?.id,
       loadingMsg.message_id,
       undefined,
-      MessageService.getErrorMessage("Failed to rebalance position"),
+      "Failed to rebalance position",
       { parse_mode: "Markdown" }
     );
   }
@@ -467,10 +434,9 @@ positionDetailScene.action(/^pos_refresh_(.+)$/, async (ctx) => {
     const poolInfo = await poolService.getPoolV2(dbPosition.poolAddress);
 
     if (!dbPosition || !poolInfo) {
-      await ctx.replyWithMarkdown(
-        MessageService.getErrorMessage("Position not found or failed to load"),
-        { parse_mode: "Markdown" }
-      );
+      await ctx.replyWithMarkdown("Position not found or failed to load", {
+        parse_mode: "Markdown",
+      });
       return ctx.scene.leave();
     }
 
@@ -484,7 +450,7 @@ positionDetailScene.action(/^pos_refresh_(.+)$/, async (ctx) => {
       poolInfo.tokenB.address,
     ]);
 
-    const message = MessageService.getPositionDetailMessageV1(
+    const message = getPositionDetailMessageV1(
       dbPosition,
       lbPosition,
       lbPair,
@@ -502,9 +468,7 @@ positionDetailScene.action(/^pos_refresh_(.+)$/, async (ctx) => {
     });
   } catch (error) {
     console.error(error);
-    await ctx.replyWithMarkdown(
-      MessageService.getErrorMessage("Failed to refresh position details")
-    );
+    await ctx.replyWithMarkdown("Failed to refresh position details");
   }
 });
 
@@ -512,3 +476,184 @@ positionDetailScene.action("open_position", async (ctx) => {
   await ctx.answerCbQuery();
   return ctx.scene.enter(SCENE_IDS.STRATEGY_SELECTION, ctx.scene.state);
 });
+
+function getPositionDetailMessageV1(
+  position: Position,
+  lbPosition: LbPosition,
+  lbPair: LbPair,
+  poolInfo: Pool,
+  tokenAPrice: TokenPrice,
+  tokenBPrice: TokenPrice
+): string {
+  const meteoraUrl = link(
+    "Meteora",
+    `https://www.meteora.ag/dlmm/${poolInfo.address}`
+  );
+
+  let message = `*${poolInfo.name}* | ${meteoraUrl} \n\n`;
+
+  const positionData = lbPosition.positionData;
+
+  const { pnlUsd, pnlPercentage } = calculatePositionPnl(
+    position,
+    lbPosition,
+    tokenAPrice,
+    tokenBPrice
+  );
+
+  const totalXAmount = new Decimal(lbPosition.positionData.totalXAmount).div(
+    new Decimal(10).pow(new Decimal(poolInfo.tokenA.decimals))
+  );
+  const totalYAmount = new Decimal(lbPosition.positionData.totalYAmount).div(
+    new Decimal(10).pow(new Decimal(poolInfo.tokenB.decimals))
+  );
+
+  const tokenXUSD = totalXAmount.mul(tokenAPrice.price);
+  const tokenYUSD = totalYAmount.mul(tokenBPrice.price);
+  const totalUSD = tokenXUSD.add(tokenYUSD);
+
+  const positionBinData = lbPosition.positionData.positionBinData;
+  const startBin = positionBinData[0];
+  const lastBin = positionBinData.slice(-1)[0];
+
+  const startPrice = startBin.pricePerToken;
+  const endPrice = lastBin.pricePerToken;
+  const poolPrice = poolInfo.currentPrice;
+
+  const claimedFeesX = new Decimal(
+    positionData.totalClaimedFeeXAmount.toString()
+  ).div(new Decimal(10).pow(new Decimal(poolInfo.tokenA.decimals)));
+  const claimedFeesY = new Decimal(
+    positionData.totalClaimedFeeYAmount.toString()
+  ).div(new Decimal(10).pow(new Decimal(poolInfo.tokenB.decimals)));
+  const claimedFeesUSD = claimedFeesX
+    .mul(tokenAPrice.price)
+    .add(claimedFeesY.mul(tokenBPrice.price));
+
+  const unclaimedFeesX = new Decimal(positionData.feeX.toString()).div(
+    new Decimal(10).pow(new Decimal(poolInfo.tokenA.decimals))
+  );
+  const unclaimedFeesY = new Decimal(positionData.feeY.toString()).div(
+    new Decimal(10).pow(new Decimal(poolInfo.tokenB.decimals))
+  );
+  const unclaimedFeesXUSD = unclaimedFeesX.mul(tokenAPrice.price);
+  const unclaimedFeesYUSD = unclaimedFeesY.mul(tokenBPrice.price);
+  const totalUnclaimedFeesUSD = unclaimedFeesXUSD.add(unclaimedFeesYUSD);
+
+  const activeId = Number(lbPair.activeId);
+  const inRange =
+    activeId >= positionData.lowerBinId && activeId <= positionData.upperBinId;
+
+  const netProfitFormatted = `Net Profit: *${formatPrice(Number(pnlUsd), { maxDecimals: 2 })} (${formatPercentage(Number(pnlPercentage))})*`;
+  const positionBalanceFormatted = `Position Balance: *${formatNumber(totalXAmount.toString(), { maxDecimals: 6 })} ${poolInfo.tokenA.symbol} / ${formatNumber(totalYAmount.toString(), { maxDecimals: 6 })} ${poolInfo.tokenB.symbol} (${formatPrice(Number(totalUSD), { maxDecimals: 2 })})*`;
+  const positionRangeFormatted = `Position Range: *${formatNumber(startPrice, { maxDecimals: 6 })} - ${formatNumber(endPrice, { maxDecimals: 6 })} ${poolInfo.tokenA.symbol}/${poolInfo.tokenB.symbol}*`;
+  const poolPriceFormatted = `Pool Price: *${formatNumber(poolPrice, { maxDecimals: 6 })} ${poolInfo.tokenA.symbol}/${poolInfo.tokenB.symbol}*`;
+
+  const claimedFeeFormatted = `Claimed Fees: *${formatNumber(claimedFeesX.toString(), { maxDecimals: 6 })} ${poolInfo.tokenA.symbol} / ${formatNumber(claimedFeesY.toString(), { maxDecimals: 6 })} ${poolInfo.tokenB.symbol} (${formatPrice(Number(claimedFeesUSD), { maxDecimals: 2 })})*`;
+  const unclaimedFeeFormatted = `Unclaimed Fees: *${formatNumber(unclaimedFeesX.toString(), { maxDecimals: 6 })} ${poolInfo.tokenA.symbol} / ${formatNumber(unclaimedFeesY.toString(), { maxDecimals: 6 })} ${poolInfo.tokenB.symbol} (${formatPrice(Number(totalUnclaimedFeesUSD), { maxDecimals: 2 })})*`;
+
+  const inRangeFormatted = `In Range: ${inRange ? "🟢" : "🔴"}`;
+
+  message += `${netProfitFormatted}\n`;
+  message += `${positionBalanceFormatted}\n`;
+  message += `${positionRangeFormatted}\n`;
+  message += `${poolPriceFormatted}\n\n`;
+  message += `${claimedFeeFormatted}\n`;
+  message += `${unclaimedFeeFormatted}\n`;
+  message += `${inRangeFormatted}\n`;
+
+  return message;
+}
+
+function calculatePositionPnl(
+  position: Position,
+  lbPosition?: LbPosition,
+  priceX?: TokenPrice,
+  priceY?: TokenPrice
+): PositionPnlResult {
+  const initialValueUsd = new Decimal(position.initialValueUSD || "0");
+  const cumulativeAbsolutePnlUsd = new Decimal(
+    position.totalRealizedPnlUSD || "0"
+  );
+  const currentSegmentInitialUsd = new Decimal(
+    position.currentSegmentInitialUSD || initialValueUsd.toString()
+  );
+
+  // For closed positions, use final values
+  if (position.status === "CLOSED") {
+    const finalValueUsd = new Decimal(position.finalValueUSD || "0");
+    const realizedPnlUsd = cumulativeAbsolutePnlUsd.toNumber();
+    const realizedPnlPercentage = finalValueUsd
+      .div(initialValueUsd)
+      .minus(1)
+      .times(100)
+      .toNumber();
+
+    return {
+      pnlUsd: realizedPnlUsd,
+      pnlPercentage: realizedPnlPercentage,
+      unrealizedPnlUsd: 0,
+      unrealizedPnlPercentage: 0,
+    };
+  }
+
+  // For active positions, calculate unrealized PNL
+  if (!lbPosition || !priceX || !priceY) {
+    throw new Error("Current position data required for active positions");
+  }
+
+  const totalXAmount = new Decimal(lbPosition.positionData.totalXAmount).div(
+    new Decimal(10).pow(new Decimal(priceX.decimals))
+  );
+  const totalYAmount = new Decimal(lbPosition.positionData.totalYAmount).div(
+    new Decimal(10).pow(new Decimal(priceY.decimals))
+  );
+
+  const tokenXUSD = totalXAmount.mul(priceX.price);
+  const tokenYUSD = totalYAmount.mul(priceY.price);
+  const totalUSD = tokenXUSD.add(tokenYUSD);
+
+  const unclaimedFeesX = new Decimal(
+    lbPosition.positionData.feeX.toString()
+  ).div(new Decimal(10).pow(new Decimal(priceX.decimals)));
+  const unclaimedFeesY = new Decimal(
+    lbPosition.positionData.feeY.toString()
+  ).div(new Decimal(10).pow(new Decimal(priceY.decimals)));
+  const unclaimedFeesXUSD = unclaimedFeesX.mul(priceX.price);
+  const unclaimedFeesYUSD = unclaimedFeesY.mul(priceY.price);
+  const totalUnclaimedFeesUSD = unclaimedFeesXUSD.add(unclaimedFeesYUSD);
+
+  const currentValueUsd = totalUSD.add(totalUnclaimedFeesUSD);
+
+  // Calculate unrealized PNL based on rebalancing status
+  let unrealizedPnlUsd: Decimal;
+  let unrealizedPnlPercentage: Decimal;
+
+  if (position.isRebalancingEnabled) {
+    // With rebalancing: Calculate segment unrealized + cumulative
+    const segmentUnrealizedUsd = currentValueUsd.minus(
+      currentSegmentInitialUsd
+    );
+    unrealizedPnlUsd = cumulativeAbsolutePnlUsd.plus(segmentUnrealizedUsd);
+    unrealizedPnlPercentage = unrealizedPnlUsd
+      .div(initialValueUsd)
+      .minus(1)
+      .times(100);
+  } else {
+    // Without rebalancing: Simple calculation
+    const positionUnrealizedUsd = currentValueUsd.minus(initialValueUsd);
+    unrealizedPnlUsd = positionUnrealizedUsd.plus(cumulativeAbsolutePnlUsd);
+    unrealizedPnlPercentage = currentValueUsd
+      .plus(cumulativeAbsolutePnlUsd)
+      .div(initialValueUsd)
+      .minus(1)
+      .times(100);
+  }
+
+  return {
+    pnlUsd: unrealizedPnlUsd.toNumber(),
+    pnlPercentage: unrealizedPnlPercentage.toNumber(),
+    unrealizedPnlUsd: unrealizedPnlUsd.toNumber(),
+    unrealizedPnlPercentage: unrealizedPnlPercentage.toNumber(),
+  };
+}

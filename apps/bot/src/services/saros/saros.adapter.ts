@@ -16,6 +16,7 @@ import {
   UnifiedPosition,
   UrlParseResult,
 } from "@/types/core.types";
+import type { PositionContext } from "@/types/dex-adapter.interface";
 import { SarosPoolService } from "./pool.service";
 import { TRENDING_CONSTANTS } from "@/config/constants";
 import { SarosDlmmService } from "./dlmm.service";
@@ -99,7 +100,7 @@ export class SarosAdapter extends BaseDexAdapter {
     return unifiedPositions;
   }
 
-  async getPosition(positionAddress: string): Promise<UnifiedPosition> {
+  async getPosition(positionAddress: string, _context?: PositionContext): Promise<UnifiedPosition> {
     // TODO: Implement single position retrieval
     throw new Error("Method not implemented.");
   }

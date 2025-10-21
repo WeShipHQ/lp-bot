@@ -23,7 +23,7 @@ export interface GetPositionResult {
   position?: Position;
   onchain?: UnifiedPosition;
   pool?: UnifiedPool;
-  prices?: Record<string, TokenPrice>;
+  prices?: Record<string, TokenPrice | undefined>;
   userAddress?: string;
   error?: string;
 }
@@ -67,33 +67,35 @@ export class GetPositionUseCase {
       const adapter: IDexAdapter = this.dexRegistry.get(position.dex as DexType);
 
       let onchain: UnifiedPosition | undefined;
-      if (userAddress) {
-        try {
-          onchain = await adapter.getPosition(position.positionAddress, {
-            userAddress,
-            poolAddress: position.poolAddress,
-          });
+      const adapterContext = {
+        userAddress,
+        poolAddress: position.poolAddress,
+      } as const;
 
-          if (onchain) {
-            position.updateCurrentValue(Money.usd(onchain.currentValueUsd));
+      try {
+        onchain = await adapter.getPosition(position.positionAddress, adapterContext);
 
-            const tokenXAmount = TokenAmount.fromUi(
-              position.tokenX.symbol,
-              parseFloat(onchain.tokenAAmount),
-              position.tokenX.decimals
-            );
-            const tokenYAmount = TokenAmount.fromUi(
-              position.tokenY.symbol,
-              parseFloat(onchain.tokenBAmount),
-              position.tokenY.decimals
-            );
-            position.updateTokenAmounts(tokenXAmount, tokenYAmount);
-          }
-        } catch (err) {
-          logger.warn('Failed to enrich position with on-chain data', { err, positionId: position.id });
+        if (onchain) {
+          position.updateCurrentValue(Money.usd(onchain.currentValueUsd));
+
+          const tokenXAmount = TokenAmount.fromUi(
+            position.tokenX.symbol,
+            parseFloat(onchain.tokenAAmount),
+            position.tokenX.decimals
+          );
+          const tokenYAmount = TokenAmount.fromUi(
+            position.tokenY.symbol,
+            parseFloat(onchain.tokenBAmount),
+            position.tokenY.decimals
+          );
+          position.updateTokenAmounts(tokenXAmount, tokenYAmount);
         }
-      } else {
-        logger.debug({ positionId: position.id }, 'Skipping on-chain enrichment: missing user address');
+      } catch (err) {
+        logger.warn('Failed to enrich position with on-chain data', { err, positionId: position.id });
+      }
+
+      if (!userAddress) {
+        logger.debug({ positionId: position.id }, 'On-chain enrichment executed without a resolved user address');
       }
 
       let pool: UnifiedPool | undefined;
@@ -105,7 +107,7 @@ export class GetPositionUseCase {
         }
       }
 
-      let prices: Record<string, TokenPrice> | undefined;
+      let prices: Record<string, TokenPrice | undefined> | undefined;
       if (command.includePrices) {
         try {
           const priceService = getTokenPriceService();

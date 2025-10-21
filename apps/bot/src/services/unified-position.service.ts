@@ -8,6 +8,7 @@ import {
   RebalanceParams,
   DexAdapterError,
 } from "../types/core.types";
+import type { PositionContext } from "@/types/dex-adapter.interface";
 
 export class UnifiedPositionService {
   async getUserPositions(
@@ -68,11 +69,12 @@ export class UnifiedPositionService {
 
   async getPosition(
     positionAddress: string,
-    dexType: DexType
+    dexType: DexType,
+    context?: PositionContext
   ): Promise<UnifiedPosition> {
     try {
       const adapter = dexRegistry.get(dexType);
-      return await adapter.getPosition(positionAddress);
+      return await adapter.getPosition(positionAddress, context);
     } catch (error) {
       throw new DexAdapterError(
         `Failed to get position ${positionAddress} from ${dexType}`,
