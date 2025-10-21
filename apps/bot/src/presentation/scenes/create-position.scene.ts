@@ -3,29 +3,22 @@ import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
 import { MessageService } from "@/services/message.service";
 import { MeteoraCreatePositionStrategy } from "@/types/meteora.types";
-import { poolService } from "@/services/pool.service";
-import { jupiterService } from "@/services/jupiter.service";
-import { meteoraDlmmService } from "@/services/meteora/dlmm.service";
-import { SOL_MINT } from "@/config/constants";
 import { formatNumber, formatPercentage } from "@/bot/utils/formatters";
 import { divider, link } from "@/bot/utils/text-formatters";
 import { message } from "telegraf/filters";
-import { solanaService } from "@/services/solana.service";
-import { positionService } from "@/services/position.service";
-import { Pool, PoolDex } from "@/types/pool.types";
 import { DISABLE_LINK_PREVIEW } from "../handlers";
 import { Token } from "@/types/token.types";
 import { getSolscanLink } from "@/utils/link";
-import { SarosDlmmService } from "@/services/saros/dlmm.service";
 import { CreatePositionUseCase } from "@/application/position/create-position.use-case";
-import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
-import { dexRegistry } from "@/services/dex-registry.service";
-import { PrivyTransactionService } from "@/services/transaction.service";
-import { db } from "@/db";
-import { DexType } from "@/types/core.types";
+import { container } from "@/infrastructure/di/container";
+import { GetPoolDetailsUseCase } from "@/application/trending/get-pool-details.use-case";
+import { GetBalanceUseCase } from "@/application/wallet/get-balance.use-case";
+import { GetTokenBalanceUseCase } from "@/application/wallet/get-token-balance.use-case";
+import { CalculateBalancedDistributionUseCase } from "@/application/position/calculate-balanced-distribution.use-case";
+import { GetPriceRangeUseCase } from "@/application/position/get-price-range.use-case";
+import { DexType, UnifiedPool } from "@/types/core.types";
 import {
   BUFFER_AMOUNT,
-  OPEN_POSITION_FEE,
   SLIPPAGE_SMALL,
 } from "@/bot/config/constants";
 
@@ -42,8 +35,8 @@ type WizardState = {
     | "price_change_selection"
     | "confirm";
   poolAddress?: string;
-  dex?: PoolDex;
-  poolData?: Pool;
+  dex?: DexType;
+  poolData?: UnifiedPool;
   strategy?: MeteoraCreatePositionStrategy;
   depositMethod?: "sol_auto_convert" | "single_sided";
   selectedToken?: Token;
@@ -59,7 +52,7 @@ type WizardState = {
 };
 
 function generateProgressMessage(
-  poolData: Pool,
+  poolData: UnifiedPool,
   state: WizardState,
   currentStep: string,
   guide?: string
@@ -69,8 +62,8 @@ function generateProgressMessage(
   let message =
     `*${poolData.name}* ${verifiedEmoji}\n` +
     `Pool Price: *${formatNumber(poolData.currentPrice)} ${poolData.tokenA.symbol}/${poolData.tokenB.symbol}*\n` +
-    `TVL: *$${formatNumber(poolData.liquidity)}*\n` +
-    `Fee/TVL: *${formatPercentage(poolData.feeTvlRatio.hour24)}*\n`;
+    `TVL: *${formatNumber(Number(poolData.tvl), { maxDecimals: 2 })}*\n` +
+    `Fee/TVL: *${formatPercentage((poolData.feeTvlRatio24h || 0) * 100, { decimals: 2 })}*\n`;
 
   const hasSelected =
     state.strategy ||
@@ -202,34 +195,16 @@ function generatePositionSummary(
 
 async function getPoolTokenBalances(
   walletAddress: string,
-  poolData: Pool
+  poolData: UnifiedPool
 ): Promise<{ tokenABalance: number; tokenBBalance: number }> {
-  let tokenABalance = 0;
-  let tokenBBalance = 0;
+  const getTokenBalance = container.get(GetTokenBalanceUseCase);
 
-  // Get Token A balance
-  if (poolData.tokenA.address === SOL_MINT) {
-    tokenABalance = await solanaService.getBalance(walletAddress);
-  } else {
-    const result = await solanaService.getTokenBalance(
-      walletAddress,
-      poolData.tokenA.address
-    );
-    tokenABalance = result.balance;
-  }
+  const [a, b] = await Promise.all([
+    getTokenBalance.execute({ walletAddress, tokenMint: poolData.tokenA.address }),
+    getTokenBalance.execute({ walletAddress, tokenMint: poolData.tokenB.address }),
+  ]);
 
-  // Get Token B balance
-  if (poolData.tokenB.address === SOL_MINT) {
-    tokenBBalance = await solanaService.getBalance(walletAddress);
-  } else {
-    const result = await solanaService.getTokenBalance(
-      walletAddress,
-      poolData.tokenB.address
-    );
-    tokenBBalance = result.balance;
-  }
-
-  return { tokenABalance, tokenBBalance };
+  return { tokenABalance: a.balance, tokenBBalance: b.balance };
 }
 
 export const createPositionScene = new Scenes.WizardScene<BotContext>(
@@ -247,7 +222,8 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         return ctx.scene.leave();
       }
 
-      const poolData = await poolService.getPoolV2(poolAddress, dex);
+      const poolUseCase = container.get(GetPoolDetailsUseCase);
+      const poolData = await poolUseCase.execute({ poolAddress, dex: dex as DexType });
       if (!poolData) {
         await ctx.reply(MessageService.getErrorMessage("Pool not found"));
         return ctx.scene.leave();
@@ -483,7 +459,8 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         });
       } else {
         // Show SOL amount options
-        const balance = await solanaService.getBalance(user.walletAddress!);
+        const balanceUc = container.get(GetBalanceUseCase);
+        const { sol: balance } = await balanceUc.execute(user.walletAddress!);
         const guide =
           depositMethod === "sol_auto_convert"
             ? "We'll auto-split this SOL evenly between tokens."
@@ -643,29 +620,19 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         return ctx.scene.leave();
       }
 
-      // FIXME handle singled side deposit
-      const { tokenAAmount, tokenBAmount } =
-        await calculateTokenDistributionForBalancedPosition(
-          poolData,
-          amount || 0
-        );
+      // FIXME handle single-sided deposit in future
+      const distUc = container.get(CalculateBalancedDistributionUseCase);
+      const { tokenAAmount, tokenBAmount } = await distUc.execute({
+        pool: poolData,
+        solAmount: amount || 0,
+      });
 
-      let prices = {
-        fromPrice: "0",
-        toPrice: "0",
-      };
-      if (dex === "saros") {
-        const sarosDlmm = new SarosDlmmService();
-        prices = await sarosDlmm.getPriceRange(
-          poolData.address,
-          user.balancedPositionBinRange
-        );
-      } else {
-        prices = await meteoraDlmmService.getPriceRange(
-          poolData.address,
-          user.balancedPositionBinRange
-        );
-      }
+      const priceRangeUc = container.get(GetPriceRangeUseCase);
+      const prices = await priceRangeUc.execute({
+        poolAddress: poolData.address,
+        dex: dex as DexType,
+        rangeInterval: user.balancedPositionBinRange,
+      });
 
       const summary = generatePositionSummary(ctx.scene.state, {
         rangeMin: prices.fromPrice,
@@ -709,15 +676,13 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
 
     try {
       // Recalculate token distribution for balanced position
-      const { tokenAAmount, tokenBAmount } =
-        await calculateTokenDistributionForBalancedPosition(
-          poolData,
-          amount || 0
-        );
+      const distUc = container.get(CalculateBalancedDistributionUseCase);
+      const { tokenAAmount, tokenBAmount } = await distUc.execute({
+        pool: poolData,
+        solAmount: amount || 0,
+      });
 
-      const repo = new PositionRepository(db as any);
-      const txService = new PrivyTransactionService();
-      const createUC = new CreatePositionUseCase(repo, dexRegistry, txService);
+      const createUC = container.get(CreatePositionUseCase);
       const res = await createUC.execute({
         userId: ctx.user.id,
         dex: (dex as DexType) || "meteora",
@@ -1164,68 +1129,7 @@ createPositionScene.command("cancel", async (ctx) => {
 });
 
 // utils
-export async function calculateTokenDistributionForBalancedPosition(
-  poolInfo: Pool,
-  enteredAmount: number
-) {
-  console.log("token a", poolInfo.tokenA.address);
-  console.log("token b", poolInfo.tokenB.address);
-  console.log("SOL_MINT", SOL_MINT);
-  console.log("enteredAmount", enteredAmount);
-
-  const feeAmount = enteredAmount * (OPEN_POSITION_FEE / 100);
-  const amount = enteredAmount - feeAmount;
-  console.log("amount", amount);
-
-  // For balanced, split amount 50/50
-  const halfAmount = amount / 2;
-  const halfAmountLamports = (halfAmount * 1e9).toString();
-
-  const [tokenAAmount, tokenBAmount] = await Promise.all([
-    // Calculate token A amount
-    (async () => {
-      if (poolInfo.tokenA.address === SOL_MINT) {
-        return halfAmount;
-      } else {
-        const orderResponseA = await jupiterService.getOrder({
-          inputMint: SOL_MINT,
-          outputMint: poolInfo.tokenA.address,
-          amount: halfAmountLamports,
-        });
-
-        return (
-          parseInt(orderResponseA.outAmount) /
-          Math.pow(10, poolInfo.tokenA.decimals)
-        );
-      }
-    })(),
-    // Calculate token B amount
-    (async () => {
-      if (poolInfo.tokenB.address === SOL_MINT) {
-        return halfAmount;
-      } else {
-        const orderResponseB = await jupiterService.getOrder({
-          inputMint: SOL_MINT,
-          outputMint: poolInfo.tokenB.address,
-          amount: halfAmountLamports,
-        });
-
-        return (
-          parseInt(orderResponseB.outAmount) /
-          Math.pow(10, poolInfo.tokenB.decimals)
-        );
-      }
-    })(),
-  ]);
-
-  console.log("token a amount", tokenAAmount);
-  console.log("token b amount", tokenBAmount);
-
-  return {
-    tokenAAmount,
-    tokenBAmount,
-  };
-}
+// Balanced distribution logic moved to CalculateBalancedDistributionUseCase
 
 // async function calculateBalancedPositionPreview(
 //   poolInfo: MeteoraDlmmPoolDetail,
@@ -1381,7 +1285,8 @@ async function validateSOLBalance(
   currentBalance: number;
   requiredWithBuffer: number;
 }> {
-  const currentBalance = await solanaService.getBalance(walletAddress);
+  const balanceUc = container.get(GetBalanceUseCase);
+  const { sol: currentBalance } = await balanceUc.execute(walletAddress);
   const requiredWithBuffer = requiredAmount + BUFFER_AMOUNT;
 
   const isValid = currentBalance >= requiredWithBuffer;
@@ -1402,17 +1307,11 @@ export async function validateTokenBalance(
   currentBalance: number;
   requiredAmount: number;
 }> {
-  let currentBalance = 0;
-
-  if (tokenMint === SOL_MINT) {
-    currentBalance = await solanaService.getBalance(walletAddress);
-  } else {
-    const result = await solanaService.getTokenBalance(
-      walletAddress,
-      tokenMint
-    );
-    currentBalance = result.balance;
-  }
+  const tokenBalanceUc = container.get(GetTokenBalanceUseCase);
+  const { balance: currentBalance } = await tokenBalanceUc.execute({
+    walletAddress,
+    tokenMint,
+  });
 
   const isValid = currentBalance >= requiredAmount && requiredAmount > 0;
 

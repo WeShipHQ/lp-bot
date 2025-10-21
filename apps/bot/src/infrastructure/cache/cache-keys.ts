@@ -5,6 +5,7 @@ export const CacheKeys = {
   trendingPoolsKey: (dex: string, sortBy: string, page: number) => `trending:${dex}:${sortBy}:${page}`,
   tokenPriceKey: (address: string) => `price:${address}`,
   walletBalanceKey: (address: string) => `wallet:${address}:balance`,
+  tokenBalanceKey: (wallet: string, mint: string) => `wallet:${wallet}:token:${mint}:balance`,
 };
 
 export const CachePatterns = {
