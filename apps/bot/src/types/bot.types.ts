@@ -27,11 +27,16 @@ interface TwoFactorVerificationState {
   maxAttempts?: number;
 }
 
+interface SettingsState {
+  step: "vault_input" | "schedule_input";
+}
+
 export interface BotContext extends Context {
   user: User;
   session?: {
     transferState?: TransferState;
     twoFactorVerification?: TwoFactorVerificationState;
+    settingsState?: SettingsState;
   };
   scene: any;
   wizard: any;
