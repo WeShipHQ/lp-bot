@@ -12,9 +12,10 @@ import { userService } from "../../services/user.service";
 import { twoFactorAuthService } from "../../services/two-factor-auth.service";
 import { GetBalanceUseCase } from "@/application/wallet/get-balance.use-case";
 import { SendTokensUseCase } from "@/application/wallet/send-tokens.use-case";
-import { UserRepository } from "@/infrastructure/database/repositories/user.repository";
-import { db } from "@/db";
+import { GetTopTokenBalancesUseCase } from "@/application/wallet/get-top-token-balances.use-case";
 import { container } from "@/infrastructure/di/container";
+import { WALLET_CALLBACKS } from "../constants/wallet.callbacks";
+import { WalletFormatter } from "../formatters/wallet.formatter";
 
 export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
   try {
@@ -41,6 +42,7 @@ export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
 
     let solBalance = 0;
     let solPrice = 0;
+    let topTokens: { mint: string; symbol: string; name?: string; balance: number; decimals?: number }[] = [];
 
     try {
       const balanceUc = container.get(GetBalanceUseCase);
@@ -51,11 +53,20 @@ export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
       // Continue with 0 balance if fetch fails
     }
 
+    try {
+      const topTokensUc = container.get(GetTopTokenBalancesUseCase);
+      topTokens = await topTokensUc.execute(user.walletAddress);
+    } catch (error) {
+      // Non-critical: ignore token balance errors
+      topTokens = [];
+    }
+
     const usdValue = solBalance * solPrice;
-    const message = MessageService.getWalletMessage(
+    const message = WalletFormatter.formatWalletSummary(
       user.walletAddress,
       solBalance,
-      usdValue
+      usdValue,
+      topTokens
     );
 
     const keyboard = getWalletKeyboard(user.walletAddress);
@@ -490,21 +501,29 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
     }
 
     switch (callbackData) {
-      case "refresh_wallet":
+      case WALLET_CALLBACKS.ui.refresh:
         try {
           const wallet = ctx.user?.walletAddress;
           if (!wallet) {
             return await ctx.answerCbQuery("❌ No wallet address found");
           }
-          const balanceUc = new GetBalanceUseCase();
+          const balanceUc = container.get(GetBalanceUseCase);
           const { sol: solBalance } = await balanceUc.execute(wallet);
           const solPrice = await solanaService.getSolPrice();
 
+          // top token balances (best-effort)
+          let topTokens: { mint: string; symbol: string; name?: string; balance: number; decimals?: number }[] = [];
+          try {
+            const topTokensUc = container.get(GetTopTokenBalancesUseCase);
+            topTokens = await topTokensUc.execute(wallet);
+          } catch {}
+
           const usdValue = solBalance * solPrice;
-          const messageText = MessageService.getWalletMessage(
+          const messageText = WalletFormatter.formatWalletSummary(
             wallet,
             solBalance,
-            usdValue
+            usdValue,
+            topTokens
           );
           const keyboard = getWalletKeyboard(wallet);
 
@@ -542,7 +561,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
         }
         break;
 
-      case "close_wallet":
+      case WALLET_CALLBACKS.ui.close:
         try {
           const messageId = ctx.callbackQuery?.message?.message_id;
           if (messageId && ctx.chat?.id) {
@@ -557,7 +576,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
         }
         break;
 
-      case "transfer_all_sol":
+      case WALLET_CALLBACKS.transfer.solAll:
         try {
           await ctx.answerCbQuery("⏳ Preparing to transfer all SOL");
 
@@ -570,7 +589,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
             return;
           }
 
-          const balanceUc = new GetBalanceUseCase();
+          const balanceUc = container.get(GetBalanceUseCase);
           const { sol: solBalance } = await balanceUc.execute(
             ctx.user.walletAddress
           );
@@ -598,7 +617,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
         }
         break;
 
-      case "transfer_x_sol":
+      case WALLET_CALLBACKS.transfer.solAmount:
         try {
           await ctx.answerCbQuery("⏳ Preparing to transfer SOL");
 
@@ -624,7 +643,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
         }
         break;
 
-      case "transfer_all_tokens":
+      case WALLET_CALLBACKS.transfer.tokenAll:
         try {
           await ctx.answerCbQuery("⏳ Preparing to transfer all tokens");
 
@@ -650,7 +669,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
         }
         break;
 
-      case "transfer_x_tokens":
+      case WALLET_CALLBACKS.transfer.tokenAmount:
         try {
           await ctx.answerCbQuery("⏳ Preparing to transfer tokens");
 
@@ -676,7 +695,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
         }
         break;
 
-      case "export_private_key":
+      case WALLET_CALLBACKS.export.privateKey:
         try {
           await ctx.answerCbQuery("🔐 Checking export status...");
           
@@ -695,8 +714,8 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
               reply_markup: {
                 inline_keyboard: [
                   [
-                    { text: "✅ Yes, Export Private Key", callback_data: "confirm_first_export" },
-                    { text: "❌ Cancel", callback_data: "cancel_export" }
+                    { text: "✅ Yes, Export Private Key", callback_data: WALLET_CALLBACKS.export.confirmFirst },
+                    { text: "❌ Cancel", callback_data: WALLET_CALLBACKS.export.cancel }
                   ]
                 ]
               }
@@ -734,7 +753,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
         }
         break;
 
-      case "confirm_first_export":
+      case WALLET_CALLBACKS.export.confirmFirst:
         try {
           await ctx.answerCbQuery("🔐 Exporting private key...");
           
@@ -761,7 +780,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
         }
         break;
 
-      case "cancel_export":
+      case WALLET_CALLBACKS.export.cancel:
         try {
           await ctx.answerCbQuery("✅ Export cancelled");
           await ctx.reply(MessageService.getExportCancelledMessage());
@@ -771,7 +790,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
         }
         break;
 
-      case "confirm_transfer": {
+      case WALLET_CALLBACKS.transfer.confirm: {
         let processingMessage: any;
         try {
           await ctx.answerCbQuery("⏳ Processing transfer...");
@@ -802,7 +821,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
             return;
           }
 
-          const processingMessage = await ctx.reply(
+          processingMessage = await ctx.reply(
             MessageService.getProcessingTransactionMessage(),
             {
               parse_mode: "Markdown",
@@ -816,7 +835,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
             transferState.tokenAddress &&
             transferState.step === "token_confirmation"
           ) {
-            const sendUc = new SendTokensUseCase(new UserRepository(db as any));
+            const sendUc = container.get(SendTokensUseCase);
             const { signature } = await sendUc.execute({
               userId: ctx.user.id,
               recipientAddress: transferState.recipientAddress,
@@ -843,7 +862,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
           } else {
             const requestedAmount = transferState.amount;
 
-            const sendUc = new SendTokensUseCase(new UserRepository(db as any));
+            const sendUc = container.get(SendTokensUseCase);
             const { signature, actualAmount } = await sendUc.execute({
               userId: ctx.user.id,
               recipientAddress: transferState.recipientAddress,
@@ -905,7 +924,7 @@ export async function handleWalletCallback(ctx: BotContext, _server: FastifyInst
         break;
       }
         
-      case "cancel_transfer":
+      case WALLET_CALLBACKS.transfer.cancel:
         try {
           await ctx.answerCbQuery("✅ Transfer cancelled");
           delete ctx.session?.transferState;

@@ -35,6 +35,7 @@ import { GetTokenBalanceUseCase } from "@/application/wallet/get-token-balance.u
 import { GetPoolTokenBalancesUseCase } from "@/application/wallet/get-pool-token-balances.use-case";
 import { ConnectWalletUseCase } from "@/application/wallet/connect-wallet.use-case";
 import { SendTokensUseCase } from "@/application/wallet/send-tokens.use-case";
+import { GetTopTokenBalancesUseCase } from "@/application/wallet/get-top-token-balances.use-case";
 
 import { GetTrendingPoolsUseCase } from "@/application/trending/get-trending-pools.use-case";
 import { SearchPoolsUseCase } from "@/application/trending/search-pools.use-case";
@@ -242,6 +243,10 @@ function registerBase() {
   container
     .bind(GetPoolTokenBalancesUseCase)
     .toDynamicValue(() => new GetPoolTokenBalancesUseCase());
+
+  container
+    .bind(GetTopTokenBalancesUseCase)
+    .toDynamicValue(() => new GetTopTokenBalancesUseCase());
 
   container
     .bind(ConnectWalletUseCase)

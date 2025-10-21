@@ -8,6 +8,7 @@ import {
 } from "../handlers";
 import { BotContext } from "@/types/bot.types";
 import { message } from "telegraf/filters";
+import { WALLET_PATTERNS } from "../constants/wallet.callbacks";
 
 export function walletCommand(
   bot: Telegraf<BotContext>,
@@ -15,10 +16,8 @@ export function walletCommand(
 ) {
   bot.command("wallet", (ctx) => walletHandler(ctx, server));
 
-  bot.action(
-    /^transfer_all_sol|transfer_x_sol|transfer_all_tokens|transfer_x_tokens|export_private_key|close_wallet|refresh_wallet|confirm_transfer|cancel_transfer|confirm_first_export|cancel_export$/,
-    (ctx) => handleWalletCallback(ctx, server)
-  );
+  // Standardized wallet callback actions using namespaced pattern
+  bot.action(WALLET_PATTERNS.any, (ctx) => handleWalletCallback(ctx, server));
 
   bot.on(message("text"), async (ctx, next) => {
     try {
