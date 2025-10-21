@@ -1,7 +1,8 @@
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
-import { parseFreeTextMessageUseCase } from "@/application/message/parse-free-text.use-case";
-import { routeFreeTextMessageUseCase } from "@/application/message/route-free-text.use-case";
+import { ParseFreeTextMessageUseCase } from "@/application/message/parse-free-text.use-case";
+import { RouteFreeTextMessageUseCase } from "@/application/message/route-free-text.use-case";
+import { container } from "@/infrastructure/di/container";
 
 export async function messageHandler(
   ctx: BotContext,
@@ -14,8 +15,12 @@ export async function messageHandler(
     return await next();
   }
 
-  const parsed = parseFreeTextMessageUseCase.execute({ text: messageText });
-  const decision = routeFreeTextMessageUseCase.execute(parsed);
+  const parsed = container
+    .get(ParseFreeTextMessageUseCase)
+    .execute({ text: messageText });
+  console.log("parsed", parsed);
+  const decision = container.get(RouteFreeTextMessageUseCase).execute(parsed);
+  console.log("decision", decision);
 
   if (decision.type === "enter_pool_detail") {
     const { poolAddress, dex, poolType } = decision.state;

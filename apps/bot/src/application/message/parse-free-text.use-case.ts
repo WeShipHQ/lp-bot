@@ -57,4 +57,4 @@ export class ParseFreeTextMessageUseCase {
   }
 }
 
-export const parseFreeTextMessageUseCase = new ParseFreeTextMessageUseCase();
+// export const parseFreeTextMessageUseCase = new ParseFreeTextMessageUseCase();

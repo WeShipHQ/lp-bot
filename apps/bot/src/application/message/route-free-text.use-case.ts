@@ -45,4 +45,4 @@ export class RouteFreeTextMessageUseCase {
   }
 }
 
-export const routeFreeTextMessageUseCase = new RouteFreeTextMessageUseCase();
+// export const routeFreeTextMessageUseCase = new RouteFreeTextMessageUseCase();
