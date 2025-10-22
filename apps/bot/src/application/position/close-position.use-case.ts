@@ -18,6 +18,9 @@ export interface ClosePositionCommand {
   // Execution context for submission (if adapter does not submit)
   userAddress: string; // wallet public key (base58)
   walletId?: string; // optional Privy wallet id if needed by transaction service
+  
+  // Closure reason
+  closureReason?: "user_close" | "stop_loss" | "take_profit";
 }
 
 export interface ClosePositionResult {
@@ -102,13 +105,32 @@ export class ClosePositionUseCase {
 
       // Record pending transaction for async processing/observability
       try {
-        const metadata = {
-          dex: dexType,
+        const closeContext = {
+          userId: command.userId,
+          positionId: command.positionId,
           positionAddress,
           poolAddress: position.poolAddress,
-          userAddress: command.userAddress,
-          extras: txResult.metadata ?? {},
-        } as Record<string, any>;
+          closureReason: command.closureReason ?? "user_close",
+          tokenAMint: (position.tokenX as any).mint || (position.tokenX as any).address,
+          tokenBMint: (position.tokenY as any).mint || (position.tokenY as any).address,
+          tokenASymbol: (position.tokenX as any).symbol,
+          tokenBSymbol: (position.tokenY as any).symbol,
+          tokenADecimals: (position.tokenX as any).decimals,
+          tokenBDecimals: (position.tokenY as any).decimals,
+        };
+
+        const metadata = {
+          command: {
+            positionId: command.positionId,
+            userId: command.userId,
+            dex: dexType,
+            positionAddress,
+            poolAddress: position.poolAddress,
+            closureReason: command.closureReason ?? "user_close",
+          },
+          adapterMetadata: txResult.metadata ?? {},
+          closeContext,
+        };
 
         await db.insert(pendingTransactions).values({
           signature,

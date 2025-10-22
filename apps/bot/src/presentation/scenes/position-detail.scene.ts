@@ -157,6 +157,7 @@ positionDetailScene.action("pos_close_yes", async (ctx) => {
       positionId: position.id,
       userAddress: ctx.user.walletAddress as string,
       walletId: ctx.user.walletId as string | undefined,
+      closureReason: "user_close",
     });
 
     if (!res.success) {
@@ -171,8 +172,10 @@ positionDetailScene.action("pos_close_yes", async (ctx) => {
     }
 
     const successMessage =
-      `✅ **Position Closed**\n\n` +
-      `Transaction: [View on Solscan](https://solscan.io/tx/${res.signature})`;
+      `✅ *Position Close Initiated*\n\n` +
+      `Your position close transaction has been submitted to the blockchain.\n\n` +
+      `Transaction: [View on Solscan](${getSolscanLink("tx", res.signature || "")})\n\n` +
+      `⏳ You'll receive a notification with your final PnL when the transaction is confirmed.`;
 
     await ctx.telegram.editMessageText(
       ctx.chat?.id,

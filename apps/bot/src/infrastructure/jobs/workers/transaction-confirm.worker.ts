@@ -9,6 +9,7 @@ import { PositionRepository } from "@/infrastructure/database/repositories/posit
 import { PositionCreationContext } from "@/application/position/create-position.use-case";
 import { positionPersistenceService } from "@/services/position-persistence.service";
 import { rebalancePersistenceService } from "@/services/rebalance-persistence.service";
+import { closePositionPersistenceService } from "@/services/close-position-persistence.service";
 import { getTokenPriceService } from "@/services/token-price.service";
 import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
 import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
@@ -68,12 +69,7 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
         } else if (operationType === 'REBALANCE') {
           await this.handleRebalance(signature, userId, positionId, positionAddress);
         } else if (operationType === 'CLOSE_POSITION') {
-          let pos = positionId ? await this.positionRepository.findById(positionId) : null;
-          if (!pos && positionAddress) pos = await this.positionRepository.findByPositionAddress(positionAddress);
-          if (pos && !pos.isClosed()) {
-            pos.close();
-            await this.positionRepository.update(pos);
-          }
+          await this.handleClosePosition(signature, userId, positionId, positionAddress);
         }
       } catch (err) {
         logger.warn({ err }, '[TxConfirmWorker] Post-confirm side-effects failed');
@@ -369,6 +365,127 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
       });
     } catch (error) {
       logger.error('[TxConfirmWorker] Failed to handle REBALANCE', {
+        error,
+        signature,
+        userId,
+        positionId,
+        positionAddress,
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Handle CLOSE_POSITION confirmation
+   */
+  private async handleClosePosition(
+    signature: string,
+    userId: string,
+    positionId?: string,
+    positionAddress?: string
+  ): Promise<void> {
+    try {
+      const [ptx] = await db
+        .select()
+        .from(pendingTransactions)
+        .where(eq(pendingTransactions.signature, signature))
+        .limit(1);
+
+      if (!ptx || !ptx.metadata) {
+        logger.error('[TxConfirmWorker] No pending transaction metadata for close', {
+          signature,
+        });
+        return;
+      }
+
+      const metadata = JSON.parse(ptx.metadata);
+      const closeContext = metadata.closeContext as
+        | {
+            userId: string;
+            positionId: string;
+            positionAddress: string;
+            poolAddress: string;
+            closureReason: 'user_close' | 'stop_loss' | 'take_profit';
+            tokenAMint: string;
+            tokenBMint: string;
+            finalTokenAAmount?: string;
+            finalTokenBAmount?: string;
+            unclaimedFeeXAmount?: string;
+            unclaimedFeeYAmount?: string;
+          }
+        | undefined;
+
+      if (!closeContext) {
+        logger.error('[TxConfirmWorker] Missing close context', {
+          signature,
+        });
+        return;
+      }
+
+      const effectivePositionId = positionId ?? closeContext.positionId;
+      const effectivePositionAddress =
+        closeContext.positionAddress ?? positionAddress;
+
+      if (!effectivePositionId || !effectivePositionAddress) {
+        logger.error('[TxConfirmWorker] Insufficient data to handle close', {
+          signature,
+          closeContext,
+        });
+        return;
+      }
+
+      const solMint = 'So11111111111111111111111111111111111111112';
+      const priceData = await this.priceService.getPrices([
+        closeContext.tokenAMint,
+        closeContext.tokenBMint,
+        solMint,
+      ]);
+
+      const prices = {
+        tokenAUsd: priceData[closeContext.tokenAMint]?.price ?? 0,
+        tokenBUsd: priceData[closeContext.tokenBMint]?.price ?? 0,
+        solUsd: priceData[solMint]?.price ?? 0,
+      };
+
+      await closePositionPersistenceService.closePosition({
+        signature,
+        context: {
+          userId: closeContext.userId ?? userId,
+          positionId: effectivePositionId,
+          positionAddress: effectivePositionAddress,
+          poolAddress: closeContext.poolAddress,
+          closureReason: closeContext.closureReason ?? 'user_close',
+          tokenAMint: closeContext.tokenAMint,
+          tokenBMint: closeContext.tokenBMint,
+        },
+        onChainData: {
+          finalTokenAAmount: closeContext.finalTokenAAmount ?? '0',
+          finalTokenBAmount: closeContext.finalTokenBAmount ?? '0',
+          claimedFeesX: closeContext.unclaimedFeeXAmount ?? '0',
+          claimedFeesY: closeContext.unclaimedFeeYAmount ?? '0',
+        },
+        prices,
+      });
+
+      await this.cache.invalidate(CachePatterns.portfolioPattern(userId));
+      await this.cache.invalidate(CachePatterns.positionPattern(effectivePositionId));
+
+      const jobQueue = new JobQueueService({ producerOnly: true });
+      await jobQueue.enqueue(JOB_NOTIFICATION, {
+        userId,
+        notification: {
+          type: 'general',
+          title: 'Position Closed',
+          message: `Position ${effectivePositionAddress} has been closed successfully.`,
+        },
+      });
+
+      logger.info('[TxConfirmWorker] CLOSE_POSITION handled successfully', {
+        signature,
+        positionId: effectivePositionId,
+      });
+    } catch (error) {
+      logger.error('[TxConfirmWorker] Failed to handle CLOSE_POSITION', {
         error,
         signature,
         userId,
