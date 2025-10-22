@@ -184,7 +184,8 @@ function registerBase() {
       (c) =>
         new GetPositionUseCase(
           c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
-          c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry)
+          c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
+          c.container.get<IUserRepository>(DI_TOKENS.UserRepo)
         )
     );
 
