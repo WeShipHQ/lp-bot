@@ -27,6 +27,7 @@ import { Pool } from "@/types/pool.types";
 import { TokenPrice } from "@/types/token.types";
 import { PositionPnlResult } from "@/types/position.types";
 import { DISABLE_LINK_PREVIEW } from "../constants/base.constants";
+import { RebalancePositionUseCase } from "@/application/position/rebalance-position.use-case";
 
 type SceneState = {
   positionAddress?: string;
@@ -356,17 +357,51 @@ positionDetailScene.action(/^pos_rebalance_yes_(.+)$/, async (ctx) => {
   });
 
   try {
-    // TODO: Implement actual rebalance logic here
-    const results = await positionService.rebalanceV1(
-      ctx.user,
-      positionAddress
-    );
+    const position = await db.query.positions.findFirst({
+      where: (positions, { eq }) =>
+        eq(positions.positionAddress, positionAddress),
+    });
 
-    // For now, just show a placeholder success message
+    if (!position) {
+      await ctx.telegram.editMessageText(
+        ctx.chat?.id,
+        loadingMsg.message_id,
+        undefined,
+        "❌ Position not found",
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
+
+    const rebalanceUc = container.get(RebalancePositionUseCase);
+
+    const res = await rebalanceUc.execute({
+      userId: ctx.user.id,
+      positionId: position.id,
+      userAddress: ctx.user.walletAddress!,
+      walletId: ctx.user.walletId,
+      metadata: {
+        trigger: "manual",
+        rangeInterval: ctx.user.balancedPositionBinRange,
+      },
+    });
+
+    if (!res.success) {
+      await ctx.telegram.editMessageText(
+        ctx.chat?.id,
+        loadingMsg.message_id,
+        undefined,
+        `❌ *Rebalance Failed*\n\n${res.error || "Unknown error"}`,
+        { parse_mode: "Markdown" }
+      );
+      return;
+    }
+
     const successMessage =
-      `✅ **Position Rebalanced Successfully**\n\n` +
-      `Your position has been rebalanced to optimize liquidity distribution.\n` +
-      `Position: \`${positionAddress}\``;
+      `✅ *Position Rebalance Initiated*\n\n` +
+      `Your position rebalance has been submitted to the blockchain.\n\n` +
+      `Transaction: [View on Solscan](${getSolscanLink("tx", res.signature || "")})\n\n` +
+      `⏳ You'll receive a notification when the rebalance is complete.`;
 
     await ctx.telegram.editMessageText(
       ctx.chat?.id,
@@ -384,7 +419,7 @@ positionDetailScene.action(/^pos_rebalance_yes_(.+)$/, async (ctx) => {
       ctx.chat?.id,
       loadingMsg.message_id,
       undefined,
-      "Failed to rebalance position",
+      "❌ Failed to rebalance position. Please try again.",
       { parse_mode: "Markdown" }
     );
   }

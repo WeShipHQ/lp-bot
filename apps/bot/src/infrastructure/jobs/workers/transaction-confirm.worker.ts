@@ -8,6 +8,7 @@ import { eq } from "drizzle-orm";
 import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
 import { PositionCreationContext } from "@/application/position/create-position.use-case";
 import { positionPersistenceService } from "@/services/position-persistence.service";
+import { rebalancePersistenceService } from "@/services/rebalance-persistence.service";
 import { getTokenPriceService } from "@/services/token-price.service";
 import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
 import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
@@ -65,14 +66,7 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
         if (operationType === 'CREATE_POSITION') {
           await this.handleCreatePosition(signature, userId, positionAddress);
         } else if (operationType === 'REBALANCE') {
-          let pos = positionId ? await this.positionRepository.findById(positionId) : null;
-          if (!pos && positionAddress) {
-            pos = await this.positionRepository.findByPositionAddress(positionAddress);
-          }
-          if (pos) {
-            pos.completeRebalancing();
-            await this.positionRepository.update(pos);
-          }
+          await this.handleRebalance(signature, userId, positionId, positionAddress);
         } else if (operationType === 'CLOSE_POSITION') {
           let pos = positionId ? await this.positionRepository.findById(positionId) : null;
           if (!pos && positionAddress) pos = await this.positionRepository.findByPositionAddress(positionAddress);
@@ -231,4 +225,158 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
       throw error;
     }
   }
+
+  /**
+   * Handle REBALANCE confirmation
+   */
+  private async handleRebalance(
+    signature: string,
+    userId: string,
+    positionId?: string,
+    positionAddress?: string
+  ): Promise<void> {
+    try {
+      const [ptx] = await db
+        .select()
+        .from(pendingTransactions)
+        .where(eq(pendingTransactions.signature, signature))
+        .limit(1);
+
+      if (!ptx || !ptx.metadata) {
+        logger.error('[TxConfirmWorker] No pending transaction metadata for rebalance', {
+          signature,
+        });
+        return;
+      }
+
+      const metadata = JSON.parse(ptx.metadata);
+      const rebalanceContext = metadata.rebalanceContext as
+        | {
+            positionId: string;
+            userId: string;
+            userAddress: string;
+            poolAddress: string;
+            dex: string;
+            oldPositionAddress: string;
+            tokenAMint: string;
+            tokenBMint: string;
+            tokenASymbol?: string;
+            tokenBSymbol?: string;
+            tokenADecimals?: number;
+            tokenBDecimals?: number;
+            triggerReason?: string;
+          }
+        | undefined;
+
+      if (!rebalanceContext) {
+        logger.error('[TxConfirmWorker] Missing rebalance context', {
+          signature,
+        });
+        return;
+      }
+
+      const effectivePositionId = positionId ?? rebalanceContext.positionId;
+      const effectiveOldAddress = rebalanceContext.oldPositionAddress;
+      const adapterMetadata = metadata.adapterMetadata ?? {};
+
+      const newPositionAddress =
+        (adapterMetadata.create?.positionPublicKey as string | undefined) ||
+        (adapterMetadata.newPositionAddress as string | undefined) ||
+        positionAddress;
+
+      if (!newPositionAddress) {
+        logger.error('[TxConfirmWorker] Unable to determine new position address after rebalance', {
+          signature,
+          rebalanceContext,
+        });
+        return;
+      }
+
+      logger.info('[TxConfirmWorker] Processing rebalance confirmation', {
+        signature,
+        positionId: effectivePositionId,
+        oldPositionAddress: effectiveOldAddress,
+        newPositionAddress,
+      });
+
+      // Fetch on-chain data for new position
+      let actualTokenAAmount = '0';
+      let actualTokenBAmount = '0';
+      try {
+        const position = await this.meteoraAdapter.getPosition(newPositionAddress, {
+          userAddress: rebalanceContext.userAddress,
+          poolAddress: rebalanceContext.poolAddress,
+        });
+        if (position) {
+          actualTokenAAmount = position.tokenAAmount;
+          actualTokenBAmount = position.tokenBAmount;
+        }
+      } catch (err) {
+        logger.warn('[TxConfirmWorker] Failed to fetch new position data after rebalance', {
+          err,
+          newPositionAddress,
+        });
+      }
+
+      // Fetch token prices
+      const solMint = 'So11111111111111111111111111111111111111112';
+      const priceData = await this.priceService.getPrices([
+        rebalanceContext.tokenAMint,
+        rebalanceContext.tokenBMint,
+        solMint,
+      ]);
+
+      const prices = {
+        tokenAUsd: priceData[rebalanceContext.tokenAMint]?.price ?? 0,
+        tokenBUsd: priceData[rebalanceContext.tokenBMint]?.price ?? 0,
+        solUsd: priceData[solMint]?.price ?? 0,
+      };
+
+      await rebalancePersistenceService.rebalancePosition({
+        signature,
+        context: {
+          userId: rebalanceContext.userId,
+          positionId: effectivePositionId,
+          oldPositionAddress: effectiveOldAddress,
+          newPositionAddress,
+          triggerReason: rebalanceContext.triggerReason ?? 'rebalance',
+          tokenAAmount: actualTokenAAmount,
+          tokenBAmount: actualTokenBAmount,
+          tokenAMint: rebalanceContext.tokenAMint,
+          tokenBMint: rebalanceContext.tokenBMint,
+          poolAddress: rebalanceContext.poolAddress,
+        },
+        prices,
+      });
+
+      logger.info('[TxConfirmWorker] Rebalance persisted', {
+        signature,
+        positionId: effectivePositionId,
+        newPositionAddress,
+      });
+
+      await this.cache.invalidate(CachePatterns.portfolioPattern(userId));
+      await this.cache.invalidate(CachePatterns.positionPattern(effectivePositionId));
+
+      const jobQueue = new JobQueueService({ producerOnly: true });
+      await jobQueue.enqueue(JOB_NOTIFICATION, {
+        userId,
+        notification: {
+          type: 'rebalance',
+          title: 'Position Rebalanced',
+          message: `Rebalance completed successfully for position ${effectivePositionId}.`,
+        },
+      });
+    } catch (error) {
+      logger.error('[TxConfirmWorker] Failed to handle REBALANCE', {
+        error,
+        signature,
+        userId,
+        positionId,
+        positionAddress,
+      });
+      throw error;
+    }
+  }
 }
+
