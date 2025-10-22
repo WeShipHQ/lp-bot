@@ -5,7 +5,7 @@ import { MeteoraCreatePositionStrategy } from "@/types/meteora.types";
 import { message } from "telegraf/filters";
 import { Token } from "@/types/token.types";
 import { getSolscanLink } from "@/utils/link";
-import { CreatePositionUseCase } from "@/application/position/create-position.use-case";
+import { CreatePositionUseCase, PositionCreationContext } from "@/application/position/create-position.use-case";
 import { container } from "@/infrastructure/di/container";
 import { GetPoolDetailsUseCase } from "@/application/trending/get-pool-details.use-case";
 import { GetBalanceUseCase } from "@/application/wallet/get-balance.use-case";
@@ -22,6 +22,8 @@ import { BUFFER_AMOUNT, SLIPPAGE_SMALL } from "@/config/constants";
 import { formatNumber } from "../formatters/base.formatter";
 import { link } from "@/utils/misc";
 import { DISABLE_LINK_PREVIEW } from "../constants/base.constants";
+import { getTokenPriceService } from "@/services/token-price.service";
+import { logger } from "@/utils/logger";
 
 type WizardState = {
   step?:
@@ -50,6 +52,13 @@ type WizardState = {
   awaitingCustomPriceChange?: boolean;
   enteredCustomAmount?: boolean;
   messageId?: number;
+  tokenAAmountCalculated?: number;
+  tokenBAmountCalculated?: number;
+  priceRange?: {
+    min: number;
+    max: number;
+    rangeInterval: number;
+  };
 };
 
 export const createPositionScene = new Scenes.WizardScene<BotContext>(
@@ -479,6 +488,14 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         rangeInterval: user.balancedPositionBinRange,
       });
 
+      (ctx.scene.state as WizardState).tokenAAmountCalculated = tokenAAmount;
+      (ctx.scene.state as WizardState).tokenBAmountCalculated = tokenBAmount;
+      (ctx.scene.state as WizardState).priceRange = {
+        min: prices.fromPrice,
+        max: prices.toPrice,
+        rangeInterval: user.balancedPositionBinRange,
+      };
+
       const summary = generatePositionSummary(
         poolData,
         ctx.scene.state as WizardState,
@@ -516,19 +533,73 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       { parse_mode: "Markdown" }
     );
 
-    const { strategy, amount, poolData, autoRebalancing, dex } = ctx.scene
-      .state as WizardState;
+    const state = ctx.scene.state as WizardState;
+    const { strategy, amount, poolData, autoRebalancing, dex, depositMethod } = state;
+    
     if (!poolData || !strategy || !amount || amount <= 0) {
-      await ctx.reply("Unknown error");
+      await ctx.reply("❌ Missing required data. Please try again.");
       return ctx.scene.leave();
     }
 
     try {
-      // Recalculate token distribution for balanced position
       const distUc = container.get(CalculateBalancedDistributionUseCase);
-      const { tokenAAmount, tokenBAmount } = await distUc.execute({
-        pool: poolData,
-        solAmount: amount || 0,
+      const tokenAAmount = state.tokenAAmountCalculated ?? (
+        await distUc.execute({ pool: poolData, solAmount: amount || 0 })
+      ).tokenAAmount;
+      const tokenBAmount = state.tokenBAmountCalculated ?? (
+        await distUc.execute({ pool: poolData, solAmount: amount || 0 })
+      ).tokenBAmount;
+
+      const priceService = getTokenPriceService();
+      const solMint = "So11111111111111111111111111111111111111112";
+      const mints = [poolData.tokenA.address, poolData.tokenB.address, solMint];
+      const priceData = await priceService.getPrices(mints);
+
+      const priceRange = state.priceRange ?? {
+        min: 0,
+        max: 0,
+        rangeInterval: ctx.user.balancedPositionBinRange,
+      };
+
+      const rebalanceThreshold = ctx.user.rebalanceThreshold
+        ? Number(ctx.user.rebalanceThreshold)
+        : 20;
+
+      const positionContext: PositionCreationContext = {
+        userId: ctx.user.id,
+        walletAddress: ctx.user.walletAddress!,
+        walletId: ctx.user.walletId,
+        dex: (dex as DexType) || "meteora",
+        poolAddress: poolData.address,
+        strategy,
+        depositMethod: depositMethod || "sol_auto_convert",
+        depositSource: state.depositSource,
+        solAmount: amount,
+        tokenAAmount: String(tokenAAmount),
+        tokenBAmount: String(tokenBAmount),
+        tokenAMint: poolData.tokenA.address,
+        tokenBMint: poolData.tokenB.address,
+        tokenASymbol: poolData.tokenA.symbol,
+        tokenBSymbol: poolData.tokenB.symbol,
+        tokenADecimals: poolData.tokenA.decimals,
+        tokenBDecimals: poolData.tokenB.decimals,
+        priceRange,
+        autoRebalance: autoRebalancing === "yes",
+        rebalanceThreshold,
+        quotes: {
+          solUsd: priceData[solMint]?.price ?? 0,
+          tokenAUsd: priceData[poolData.tokenA.address]?.price ?? 0,
+          tokenBUsd: priceData[poolData.tokenB.address]?.price ?? 0,
+        },
+        slippage: SLIPPAGE_SMALL,
+      };
+
+      logger.info("Creating position with context", {
+        userId: ctx.user.id,
+        poolAddress: poolData.address,
+        strategy,
+        tokenAAmount,
+        tokenBAmount,
       });
 
       const createUC = container.get(CreatePositionUseCase);
@@ -543,31 +614,52 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         strategy,
         slippage: SLIPPAGE_SMALL,
         metadata: {
-          rangeInterval: ctx.user.balancedPositionBinRange,
+          rangeInterval: priceRange.rangeInterval,
           autoRebalancing: autoRebalancing === "yes",
+          positionContext,
         },
       });
 
       if (!res.success || !res.signature) {
+        logger.error('Position creation failed', { 
+          error: res.error, 
+          userId: ctx.user.id 
+        });
+        
         await ctx.editMessageText(
-          `Failure: ❌ Failed: ${res.error || "Unknown error"}`,
+          `❌ *Failed to create position*\n\n${res.error || "Unknown error"}\n\nPlease try again.`,
           { parse_mode: "Markdown" }
         );
         return ctx.scene.leave();
       }
 
+      logger.info('Position transaction submitted', { 
+        signature: res.signature,
+        positionAddress: res.positionAddress,
+        userId: ctx.user.id 
+      });
+
       const solScanLink = link(
-        "View on Solscan",
+        "View Transaction",
         getSolscanLink("tx", res.signature)
       );
+      
       await ctx.editMessageText(
-        `Success: 🎉 Position Created! ${solScanLink}`,
+        `✅ *Position Transaction Submitted!*\n\n` +
+        `${solScanLink}\n\n` +
+        `⏳ Your position is being confirmed on-chain. You'll receive a notification when it's ready.\n\n` +
+        `📊 Check your portfolio in a few moments to see your new position.`,
         { parse_mode: "Markdown", ...DISABLE_LINK_PREVIEW }
       );
     } catch (error) {
-      console.error("Error creating position via use case:", error);
+      logger.error("Error creating position via use case", { 
+        error, 
+        userId: ctx.user.id,
+        poolAddress: poolData?.address 
+      });
+      
       await ctx.editMessageText(
-        "Failed to create position. Please try again.",
+        "❌ *Failed to create position*\n\nAn unexpected error occurred. Please try again.",
         { parse_mode: "Markdown" }
       );
     }

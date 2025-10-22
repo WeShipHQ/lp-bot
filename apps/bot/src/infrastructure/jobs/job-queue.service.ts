@@ -21,7 +21,12 @@ import type { BotContext } from '@/types/bot.types';
 import { PrivyTransactionService } from '@/services/transaction.service';
 import { SolanaAdapter } from '@/adapters/blockchain/solana.adapter';
 
-export type EnqueueOptions = { delay?: number; jobId?: string; attempts?: number };
+export type EnqueueOptions = { 
+  delay?: number; 
+  jobId?: string; 
+  attempts?: number;
+  repeat?: { every?: number; pattern?: string };
+};
 
 type QueueEntry<N extends KnownJobNames> = {
   queue: Queue<KnownJobDataMap[N]>;
@@ -122,6 +127,7 @@ export class JobQueueService {
       delay: options?.delay,
       jobId: options?.jobId,
       attempts: options?.attempts,
+      repeat: options?.repeat,
     });
   }
 

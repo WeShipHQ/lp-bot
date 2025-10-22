@@ -11,6 +11,64 @@ export interface DexRegistryLike {
   get(dexType: DexType): IDexAdapter;
 }
 
+/**
+ * PositionCreationContext: Complete metadata for position creation
+ * This is stored in pendingTransactions and used by the worker to create DB records
+ */
+export interface PositionCreationContext {
+  // User context
+  userId: string;
+  walletAddress: string;
+  walletId?: string;
+
+  // Pool context
+  dex: DexType;
+  poolAddress: string;
+  strategy: string;
+
+  // Deposit details
+  depositMethod: 'sol_auto_convert' | 'single_sided';
+  depositSource?: 'sol_convert' | 'token_balance';
+  solAmount?: number;
+
+  // Token amounts (UI amounts)
+  tokenAAmount: string;
+  tokenBAmount: string;
+  tokenAMint: string;
+  tokenBMint: string;
+  tokenASymbol?: string;
+  tokenBSymbol?: string;
+  tokenADecimals?: number;
+  tokenBDecimals?: number;
+
+  // Price range
+  priceRange?: {
+    min: number;
+    max: number;
+    rangeInterval: number;
+  };
+
+  // Risk management
+  autoRebalance: boolean;
+  rebalanceThreshold?: number;
+  slPercentage?: number;
+  tpPercentage?: number;
+
+  // Price quotes (for USD conversion)
+  quotes?: {
+    solUsd?: number;
+    tokenAUsd?: number;
+    tokenBUsd?: number;
+  };
+
+  // Transaction metadata
+  expectedFeesLamports?: number;
+  slippage?: number;
+
+  // Position address from adapter (if available before confirmation)
+  positionAddress?: string;
+}
+
 export interface CreatePositionCommand {
   // Domain/user context
   userId: string;
@@ -34,8 +92,7 @@ export interface CreatePositionCommand {
 export interface CreatePositionResult {
   success: boolean;
   signature?: string;
-  // On-chain position PDA/address if known at build time (adapter may include it in metadata)
-  positionId?: string;
+  positionAddress?: string;
   error?: string;
 }
 
@@ -68,7 +125,6 @@ export class CreatePositionUseCase {
 
   async execute(command: CreatePositionCommand): Promise<CreatePositionResult> {
     try {
-      // Basic validation
       if (!command?.userId) {
         return { success: false, error: 'User ID is required' };
       }
@@ -83,10 +139,8 @@ export class CreatePositionUseCase {
         return { success: false, error: 'tokenBAmount must be greater than 0' };
       }
 
-      // Resolve adapter
       const adapter = this.dexRegistry.get(command.dex);
 
-      // Build params for adapter
       const adapterParams: CreatePositionParams = {
         poolAddress: command.poolAddress,
         userAddress: command.userAddress,
@@ -97,14 +151,11 @@ export class CreatePositionUseCase {
         metadata: command.metadata,
       };
 
-      // Create position via adapter
-      // Note: According to plan, adapter should build tx and return it without submitting.
-      // However, current adapter implementations may submit and return a signature directly.
       let txResult: TransactionResult;
       try {
         txResult = await adapter.createPosition(adapterParams);
       } catch (error) {
-        logger.error('Adapter.createPosition failed', { error });
+        logger.error('Adapter.createPosition failed', { error, command });
         return {
           success: false,
           error: error instanceof Error ? error.message : 'Failed to create position transaction',
@@ -119,9 +170,7 @@ export class CreatePositionUseCase {
       }
 
       let signature = txResult.signature as string | undefined;
-
       if (!signature) {
-        // If adapter did not submit and only returned a built tx, try to submit via transaction service
         try {
           signature = await this.transactionService.submit(txResult.metadata ?? {}, {
             userId: command.userId,
@@ -129,7 +178,7 @@ export class CreatePositionUseCase {
             userAddress: command.userAddress,
           });
         } catch (err) {
-          logger.error('Transaction submission failed', { err });
+          logger.error('Transaction submission failed', { err, command });
         }
       }
 
@@ -140,66 +189,96 @@ export class CreatePositionUseCase {
         };
       }
 
-      // Persist a pending transaction record so background processor can enrich and create DB position
-      try {
-        const metadata = {
+      const adapterPositionAddress =
+        (txResult.metadata && (txResult.metadata['positionPublicKey'] as string)) ||
+        (txResult.metadata && (txResult.metadata['positionAddress'] as string));
+
+      const rawContext = (command.metadata?.positionContext ?? command.metadata) as
+        | PositionCreationContext
+        | undefined;
+
+      const positionContext: PositionCreationContext | undefined = rawContext
+        ? {
+            ...rawContext,
+            userId: rawContext.userId ?? command.userId,
+            walletAddress: rawContext.walletAddress ?? command.userAddress,
+            dex: rawContext.dex ?? command.dex,
+            poolAddress: rawContext.poolAddress ?? command.poolAddress,
+            strategy: rawContext.strategy ?? (command.strategy ?? ''),
+            tokenAAmount: rawContext.tokenAAmount ?? command.tokenAAmount,
+            tokenBAmount: rawContext.tokenBAmount ?? command.tokenBAmount,
+            autoRebalance: rawContext.autoRebalance ?? false,
+            slippage: rawContext.slippage ?? command.slippage,
+            positionAddress: rawContext.positionAddress ?? adapterPositionAddress ?? undefined,
+          }
+        : undefined;
+
+      const pendingMetadata = {
+        command: {
+          userId: command.userId,
           dex: command.dex,
           poolAddress: command.poolAddress,
-          userAddress: command.userAddress,
           strategy: command.strategy,
-          extras: txResult.metadata ?? command.metadata ?? {},
-        } as Record<string, any>;
+          tokenAAmount: command.tokenAAmount,
+          tokenBAmount: command.tokenBAmount,
+        },
+        adapterMetadata: txResult.metadata ?? {},
+        positionContext,
+      };
 
+      try {
         await db.insert(pendingTransactions).values({
           signature,
           operationType: 'CREATE_POSITION',
           userId: command.userId,
           status: 'PENDING',
-          metadata: JSON.stringify(metadata),
+          metadata: JSON.stringify(pendingMetadata),
           retryCount: 0,
           maxRetries: 3,
           createdAt: new Date(),
           updatedAt: new Date(),
         });
       } catch (err) {
-        logger.error('Failed to insert pending transaction', { err });
+        logger.error('Failed to insert pending transaction', { err, signature, pendingMetadata });
         return {
           success: false,
           error: 'Failed to persist pending transaction for processing',
         };
       }
 
-      // Enqueue transaction confirmation job
       try {
         const jobQueue = new JobQueueService({ producerOnly: true });
-        await jobQueue.enqueue(JOB_TX_CONFIRM, {
-          signature,
-          operationType: 'CREATE_POSITION',
-          userId: command.userId,
-          submittedAt: Date.now(),
-        }, { delay: 500 });
+        await jobQueue.enqueue(
+          JOB_TX_CONFIRM,
+          {
+            signature,
+            operationType: 'CREATE_POSITION',
+            userId: command.userId,
+            positionAddress: positionContext?.positionAddress ?? adapterPositionAddress,
+            submittedAt: Date.now(),
+          },
+          { delay: 500 }
+        );
       } catch (err) {
-        logger.error('Failed to enqueue transaction confirmation job', { err });
-        // We do not fail the whole flow if the job enqueue fails; consumers can retry enqueueing.
+        logger.error('Failed to enqueue transaction confirmation job', { err, signature });
       }
 
-      // If adapter returned a position address in metadata, pass it through for immediate UI linking
-      const positionId =
-        (txResult.metadata && (txResult.metadata['positionAddress'] as string)) ||
-        (command.metadata && (command.metadata['positionAddress'] as string));
-
       try {
-        // Invalidate portfolio cache for this user
         await this.cache.invalidate(CachePatterns.portfolioPattern(command.userId));
-      } catch {}
+      } catch (cacheError) {
+        logger.debug('Failed to invalidate portfolio cache', {
+          userId: command.userId,
+          cacheError,
+        });
+      }
 
       return {
         success: true,
         signature,
-        positionId,
+        positionAddress: positionContext?.positionAddress ?? adapterPositionAddress,
       };
     } catch (error) {
-      logger.error('CreatePositionUseCase.execute unexpected error', { error });
+      logger.error('CreatePositionUseCase.execute unexpected error', { error, command });
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error',
