@@ -24,6 +24,7 @@ export interface ITelegramClient {
 export class TelegramClient implements ITelegramClient {
 
   private minIntervalMs = 50; // simple rate limit per chat
+  private lastSentByChat = new Map<number, number>();
 
   constructor(private readonly bot: Telegraf<BotContext>) {}
 

@@ -1,7 +1,7 @@
 import { Telegraf } from "telegraf";
 import { BotContext } from "@/types/bot.types";
 import { FastifyInstance } from "fastify";
-import { DISABLE_LINK_PREVIEW } from "../handlers";
+import { DISABLE_LINK_PREVIEW } from "../constants/base.constants";
 
 export function devCommand(
   bot: Telegraf<BotContext>,

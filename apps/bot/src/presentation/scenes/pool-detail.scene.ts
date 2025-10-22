@@ -2,11 +2,11 @@ import { Scenes } from "telegraf";
 import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
 import { getPoolInfoKeyboard } from "../keyboards";
-import { DISABLE_LINK_PREVIEW } from "../handlers";
 import { DexType, UnifiedPool } from "@/types/core.types";
 import { PoolFormatter } from "../formatters/pool.formatter";
 import { container } from "@/infrastructure/di/container";
 import { GetPoolDetailsUseCase } from "@/application/trending/get-pool-details.use-case";
+import { DISABLE_LINK_PREVIEW } from "../constants/base.constants";
 
 interface SceneState {
   poolAddress?: string;

@@ -8,7 +8,6 @@ import {
   getClaimFeesConfirmKeyboard,
   getRebalanceConfirmKeyboard,
 } from "../keyboards/position-detail-menu";
-import { DISABLE_LINK_PREVIEW } from "../handlers";
 import { db, Position as DbPosition, Position } from "@/db";
 import { poolService } from "@/services/pool.service";
 import { getTokenPriceService } from "@/services/token-price.service";
@@ -27,6 +26,7 @@ import { LbPair, LbPosition } from "@meteora-ag/dlmm";
 import { Pool } from "@/types/pool.types";
 import { TokenPrice } from "@/types/token.types";
 import { PositionPnlResult } from "@/types/position.types";
+import { DISABLE_LINK_PREVIEW } from "../constants/base.constants";
 
 type SceneState = {
   positionAddress?: string;

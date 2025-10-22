@@ -1,22 +1,21 @@
-import { getCacheService, ICacheService } from "@/infrastructure/cache/cache.service";
+import {
+  getCacheService,
+  ICacheService,
+} from "@/infrastructure/cache/cache.service";
 import { CacheKeys } from "@/infrastructure/cache/cache-keys";
-import { dexRegistry } from "@/services/dex-registry.service";
-import { DexType, PaginatedTrendingPools, TrendingParams, UnifiedPool } from "@/types/core.types";
+import { DexRegistryService } from "@/services/dex-registry.service";
+import {
+  DexType,
+  PaginatedTrendingPools,
+  TrendingParams,
+  UnifiedPool,
+} from "@/types/core.types";
+import { container, DI_TOKENS } from "@/infrastructure/di/container";
 
 export interface GetTrendingPoolsParams extends TrendingParams {
   dex?: DexType | "all";
 }
 
-/**
- * Use case to fetch trending pools, optionally across all enabled DEX adapters.
- * - Reads from cache when available
- * - Falls back to adapters via dexRegistry
- * - Sorts/merges results when dex = "all"
- *
- * Example:
- * const uc = container.resolve(GetTrendingPoolsUseCase)
- * const res = await uc.execute({ dex: 'saros', page: 1, limit: 5, sortBy: 'apy' })
- */
 export class GetTrendingPoolsUseCase {
   private readonly cache: ICacheService;
   constructor(cacheService: ICacheService = getCacheService()) {
@@ -28,12 +27,19 @@ export class GetTrendingPoolsUseCase {
    * @param params filters, pagination and sort options
    * @returns paginated trending pools
    */
-  async execute(params: GetTrendingPoolsParams = {}): Promise<PaginatedTrendingPools> {
+  async execute(
+    params: GetTrendingPoolsParams = {}
+  ): Promise<PaginatedTrendingPools> {
     const { dex = "all", page = 1, limit = 5, sortBy = "apy" } = params;
 
     const cacheKey = CacheKeys.trendingPoolsKey(String(dex), sortBy, page);
     const cached = await this.cache.get<PaginatedTrendingPools>(cacheKey);
     if (cached) return cached;
+
+    // Single DEX path
+    const dexRegistry = container.get<DexRegistryService>(
+      DI_TOKENS.DexRegistry
+    );
 
     if (dex === "all") {
       // Merge across adapters
@@ -68,7 +74,6 @@ export class GetTrendingPoolsUseCase {
       return resp;
     }
 
-    // Single DEX path
     const adapter = dexRegistry.get(dex);
     const resp = await adapter.getTrendingPools({ page, limit, sortBy });
     await this.cache.set(cacheKey, resp, 60);

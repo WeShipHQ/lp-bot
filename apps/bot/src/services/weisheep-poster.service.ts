@@ -33,7 +33,6 @@ Tried:
 - ${resolvedPath2}`);
 }
 
-
 (async () => {
   try {
     const silkscreenBoldPath = await resolveAssetPath(
@@ -58,7 +57,6 @@ Tried:
   }
 })();
 
-
 export type WeisheepPosterInput = {
   backgroundImagePath?: string;
   logoImagePath?: string;
@@ -82,7 +80,7 @@ async function loadImageFromSafePath(imagePath: string) {
   return await loadImage(fileBuffer);
 }
 
- // Drawing help 
+ // Drawing help
 function createRoundedRectanglePath(
   context: ReturnType<typeof createCanvas>["getContext"] extends (
     ...args: any

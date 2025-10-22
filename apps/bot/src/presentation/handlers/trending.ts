@@ -4,12 +4,13 @@ import {
   TRENDING_MESSAGES,
 } from "../constants/trending.constants";
 import { BotContext } from "@/types/bot.types";
-import { TrendingPoolsSortCriteria } from "@/v2";
+// import { TrendingPoolsSortCriteria } from "@/v2";
 import { container, DI_TOKENS } from "@/infrastructure/di/container";
 import { GetTrendingPoolsUseCase } from "@/application/trending/get-trending-pools.use-case";
 import { PoolFormatter } from "../formatters/pool.formatter";
 import { MessageService } from "@/application/message/message.service";
 import { createTextMessage } from "../formatters/message-builder";
+import { TrendingPoolsSortCriteria } from "@/types/core.types";
 
 export async function trendingHandler(
   ctx: BotContext,
@@ -95,7 +96,7 @@ export async function handleTrendingCallback(
       return;
     }
 
-    const [, action, pageStr, sortByStr] = match as [
+    const [, action, pageStr, sortByStr] = match as unknown as [
       string,
       string,
       string,

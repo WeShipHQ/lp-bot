@@ -12,7 +12,6 @@ export function startCommand(
   bot: Telegraf<BotContext>,
   _server: FastifyInstance
 ) {
-  // Initialize dependencies
   const dependencies = createStartCommandDependencies();
 
   bot.start(async (ctx: BotContext) => {
@@ -103,9 +102,10 @@ export function startCommand(
         DI_TOKENS.MessageService
       );
 
-      const errorPayload = error instanceof UserCreationError
-        ? StartFormatter.error("user_creation")
-        : StartFormatter.error("general");
+      const errorPayload =
+        error instanceof UserCreationError
+          ? StartFormatter.error("user_creation")
+          : StartFormatter.error("general");
 
       await messageService.send({
         context: { chatId },

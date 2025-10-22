@@ -59,7 +59,10 @@ import { SarosAdapter } from "@/services/saros/saros.adapter";
 
 // Other services
 import { PrivyTransactionService } from "@/services/transaction.service";
-import { dexRegistry } from "@/services/dex-registry.service";
+import {
+  dexRegistry,
+  DexRegistryService,
+} from "@/services/dex-registry.service";
 
 // DB
 import { db } from "@/db";
@@ -68,6 +71,7 @@ import { db } from "@/db";
 import type { Telegraf } from "telegraf";
 import type { BotContext } from "@/types/bot.types";
 import { getEnabledDexTypes } from "@/config/dex.config";
+import { IDexAdapter } from "@/types/dex-adapter.interface";
 
 /**
  * Central DI tokens for interfaces and non-class deps
@@ -331,10 +335,11 @@ export function initializeContainer(bot?: Telegraf<BotContext>) {
     if (!container.isBound(TelegramMessageGateway)) {
       container
         .bind(TelegramMessageGateway)
-        .toDynamicValue((c) =>
-          new TelegramMessageGateway(
-            c.container.get<ITelegramClient>(DI_TOKENS.TelegramClient)
-          )
+        .toDynamicValue(
+          (c) =>
+            new TelegramMessageGateway(
+              c.container.get<ITelegramClient>(DI_TOKENS.TelegramClient)
+            )
         )
         .inSingletonScope();
     }
@@ -349,8 +354,8 @@ export function initializeContainer(bot?: Telegraf<BotContext>) {
     if (!container.isBound(MessageService)) {
       container
         .bind(MessageService)
-        .toDynamicValue((c) =>
-          new MessageService(c.container.get(TelegramMessageGateway))
+        .toDynamicValue(
+          (c) => new MessageService(c.container.get(TelegramMessageGateway))
         )
         .inSingletonScope();
     }
@@ -374,22 +379,26 @@ export function initializeContainer(bot?: Telegraf<BotContext>) {
           )
       )
       .inSingletonScope();
-    }
+  }
 
-    // Register DEX adapters with the dex registry based on configuration
-    try {
-
+  // Register DEX adapters with the dex registry based on configuration
+  try {
     const enabled = getEnabledDexTypes();
 
-    const adapters: any[] = [];
+    const adapters: IDexAdapter[] = [];
     if (enabled.includes("meteora"))
-      adapters.push(container.get(MeteoraAdapter));
+      adapters.push(container.get<IDexAdapter>(MeteoraAdapter));
     if (enabled.includes("saros")) adapters.push(container.get(SarosAdapter));
 
+    const dexRegistry = container.get<DexRegistryService>(
+      DI_TOKENS.DexRegistry
+    );
     for (const adapter of adapters) {
       try {
-        reg.register(adapter as any);
-      } catch {}
+        dexRegistry.register(adapter);
+      } catch (error) {
+        console.error("Error registering DEX adapter:", error);
+      }
     }
   } catch (error) {
     console.error("Error initializing DEX adapters:", error);
