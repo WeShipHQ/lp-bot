@@ -1,6 +1,5 @@
 import { FastifyInstance } from "fastify";
 import { BotContext } from "@/types/bot.types";
-// import { MessageService } from "@/services/message.service";
 import { userService } from "@/services/user.service";
 import { twoFactorAuthService } from "@/services/two-factor-auth.service";
 import { WalletService } from "@/services/wallet.service";

@@ -6,7 +6,14 @@ export type RouteDecision =
       type: "enter_pool_detail";
       state: { poolAddress: string; dex: DexType; poolType?: PoolType };
     }
-  | { type: "reply"; message: string }
+  | {
+      type: "unsupported_pool_type";
+      payload: { poolType: PoolType | undefined; dex: DexType };
+    }
+  | {
+      type: "token_search_unavailable";
+      payload: { tokenAddress: string };
+    }
   | { type: "continue" };
 
 export class RouteFreeTextMessageUseCase {
@@ -16,9 +23,8 @@ export class RouteFreeTextMessageUseCase {
         const poolType = parsed.poolType || ("DLMM" as PoolType);
         if (poolType !== "DLMM") {
           return {
-            type: "reply",
-            message:
-              "❌ Pool type not supported yet. Currently we support Meteora DLMM pools only.",
+            type: "unsupported_pool_type",
+            payload: { poolType, dex: parsed.dex },
           };
         }
         return {
@@ -33,9 +39,8 @@ export class RouteFreeTextMessageUseCase {
 
       case "token":
         return {
-          type: "reply",
-          message:
-            "🚧 Token details are coming soon. Paste this address when opening a position to proceed.",
+          type: "token_search_unavailable",
+          payload: { tokenAddress: parsed.tokenAddress },
         };
 
       case "unknown":
@@ -44,5 +49,3 @@ export class RouteFreeTextMessageUseCase {
     }
   }
 }
-
-// export const routeFreeTextMessageUseCase = new RouteFreeTextMessageUseCase();

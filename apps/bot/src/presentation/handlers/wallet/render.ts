@@ -1,29 +1,33 @@
 import { FastifyInstance } from "fastify";
 import { BotContext } from "@/types/bot.types";
-import { container } from "@/infrastructure/di/container";
+import { container, DI_TOKENS } from "@/infrastructure/di/container";
 import { GetBalanceUseCase } from "@/application/wallet/get-balance.use-case";
 import { GetTopTokenBalancesUseCase } from "@/application/wallet/get-top-token-balances.use-case";
 import { solanaService } from "@/services/solana.service";
 import { WalletFormatter } from "@/presentation/formatters/wallet.formatter";
-import { getWalletKeyboard } from "@/presentation/keyboards/wallet-menu";
-// import { MessageService } from "@/services/message.service";
+import { MessageService } from "@/application/message/message.service";
+import { createTextMessage } from "@/presentation/formatters/message-builder";
 
 export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
   try {
+    const chatId = ctx.chat?.id;
+    if (!chatId) return;
+
+    const messageService = container.get<MessageService>(
+      DI_TOKENS.MessageService
+    );
+
     const user = ctx.user;
 
     if (!user.walletAddress || user.walletAddress.trim() === "") {
-      try {
-        await ctx.reply(
-          `⏳ *Wallet Still Creating*\n\nYour wallet is being set up. Please wait a moment and try again.\n\nIf this persists, please contact support.`,
-          {
-            parse_mode: "Markdown",
-          }
-        );
-      } catch (error) {
-        await ctx.reply("No wallet found. Please contact support.");
-      }
-
+      await messageService.send({
+        context: { chatId },
+        payload: createTextMessage(
+          "wallet.creating",
+          "⏳ *Wallet Still Creating*\n\nYour wallet is being set up. Please wait a moment and try again.\n\nIf this persists, please contact support.",
+          { parseMode: "markdown" }
+        ),
+      });
       return;
     }
 
@@ -50,28 +54,34 @@ export async function walletHandler(ctx: BotContext, _server: FastifyInstance) {
       const topTokensUc = container.get(GetTopTokenBalancesUseCase);
       topTokens = await topTokensUc.execute(user.walletAddress);
     } catch (error) {
-      // Non-critical: ignore token balance errors
       topTokens = [];
     }
 
     const usdValue = solBalance * solPrice;
-    const message = WalletFormatter.formatWalletSummary(
+    const payload = WalletFormatter.createWalletSummaryPayload(
       user.walletAddress,
       solBalance,
       usdValue,
       topTokens
     );
 
-    const keyboard = getWalletKeyboard(user.walletAddress);
-
-    await ctx.reply(message, {
-      parse_mode: "Markdown",
-      reply_markup: {
-        inline_keyboard: keyboard.inline_keyboard,
-      },
+    await messageService.send({
+      context: { chatId },
+      payload,
     });
   } catch (error) {
-    await ctx.reply("Error loading wallet information. Please try again.");
+    const chatId = ctx.chat?.id;
+    if (!chatId) return;
+    const messageService = container.get<MessageService>(
+      DI_TOKENS.MessageService
+    );
+    await messageService.send({
+      context: { chatId },
+      payload: createTextMessage(
+        "wallet.error",
+        "Error loading wallet information. Please try again."
+      ),
+    });
   }
 }
 
@@ -81,6 +91,18 @@ export async function refreshWalletMessage(ctx: BotContext) {
     await ctx.answerCbQuery("❌ No wallet address found");
     return;
   }
+
+  const chatId = ctx.chat?.id;
+  const messageId = ctx.callbackQuery?.message?.message_id;
+  if (!chatId || !messageId) {
+    await ctx.answerCbQuery("❌ Cannot find message to update");
+    return;
+  }
+
+  const messageService = container.get<MessageService>(
+    DI_TOKENS.MessageService
+  );
+
   const balanceUc = container.get(GetBalanceUseCase);
   const { sol: solBalance } = await balanceUc.execute(wallet);
   const solPrice = await solanaService.getSolPrice();
@@ -98,37 +120,23 @@ export async function refreshWalletMessage(ctx: BotContext) {
   } catch {}
 
   const usdValue = solBalance * solPrice;
-  const messageText = WalletFormatter.formatWalletSummary(
+  const payload = WalletFormatter.createWalletSummaryPayload(
     wallet,
     solBalance,
     usdValue,
     topTokens
   );
-  const keyboard = getWalletKeyboard(wallet);
-
-  const messageId = ctx.callbackQuery?.message?.message_id;
-  const chatId = ctx.chat?.id;
-
-  if (!messageId || !chatId) {
-    await ctx.answerCbQuery("❌ Cannot find message to update");
-    return;
-  }
 
   try {
-    await ctx.telegram.editMessageText(
-      chatId,
-      messageId,
-      undefined,
-      messageText,
-      {
-        parse_mode: "Markdown",
-        reply_markup: keyboard,
-      }
-    );
+    await messageService.edit({
+      context: { chatId, messageId },
+      payload,
+    });
 
     await ctx.answerCbQuery("🔄 Wallet refreshed!");
   } catch (err: any) {
-    if (err.description?.includes("message is not modified")) {
+    const desc = err?.response?.description || err?.description || "";
+    if (desc.includes("message is not modified")) {
       await ctx.answerCbQuery("✅ Wallet already up-to-date");
     } else {
       await ctx.answerCbQuery("❌ Failed to update message");

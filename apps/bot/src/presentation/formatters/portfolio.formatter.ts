@@ -1,13 +1,14 @@
-import { UnifiedPortfolio, UnifiedPosition } from "@/types/core.types";
+import { MessagePayload } from "@/domain/message";
 import { Portfolio } from "@/domain/portfolio/portfolio.entity";
-// import { bold, link } from "@/bot/utils/text-formatters";
+import { getOverviewKeyboard } from "@/presentation/keyboards/portfolio-menu";
+import { UnifiedPortfolio, UnifiedPosition } from "@/types/core.types";
+import { bold, getPositionDeeplink, link } from "@/utils/misc";
 import {
   formatCurrency,
   formatNumber,
   formatPercentage,
 } from "./base.formatter";
-import { bold, getPositionDeeplink, link } from "@/utils/misc";
-// import { getPositionDeeplink } from "@/bot/utils/misc";
+import { createTextMessage } from "./message-builder";
 
 export class PortfolioFormatter {
   static formatOverview(portfolio: UnifiedPortfolio): string {
@@ -127,5 +128,17 @@ export class PortfolioFormatter {
     // drop trailing blank line
     if (lines[lines.length - 1] === "") lines.pop();
     return lines.join("\n");
+  }
+
+  static createDomainOverviewPayload(
+    portfolio: Portfolio,
+    opts?: { botName?: string; unclaimedFeesByAddress?: Record<string, number> }
+  ): MessagePayload {
+    const text = this.formatDomainOverview(portfolio, opts);
+    return createTextMessage("portfolio.overview", text, {
+      parseMode: "markdown",
+      disableLinkPreview: true,
+      keyboard: getOverviewKeyboard(),
+    });
   }
 }

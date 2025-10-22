@@ -2,7 +2,9 @@ import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
 import { ParseFreeTextMessageUseCase } from "@/application/message/parse-free-text.use-case";
 import { RouteFreeTextMessageUseCase } from "@/application/message/route-free-text.use-case";
-import { container } from "@/infrastructure/di/container";
+import { container, DI_TOKENS } from "@/infrastructure/di/container";
+import { MessageService } from "@/application/message/message.service";
+import { createTextMessage } from "../formatters/message-builder";
 
 export async function messageHandler(
   ctx: BotContext,
@@ -30,8 +32,37 @@ export async function messageHandler(
     });
   }
 
-  if (decision.type === "reply") {
-    return ctx.reply(decision.message);
+  const chatId = ctx.chat?.id;
+  if (!chatId) {
+    return await next();
+  }
+
+  const messageService = container.get<MessageService>(
+    DI_TOKENS.MessageService
+  );
+
+  if (decision.type === "unsupported_pool_type") {
+    await messageService.send({
+      context: { chatId },
+      payload: createTextMessage(
+        "message.unsupported_pool",
+        "❌ Pool type not supported yet. Currently we support Meteora DLMM pools only.",
+        { disableLinkPreview: true }
+      ),
+    });
+    return;
+  }
+
+  if (decision.type === "token_search_unavailable") {
+    await messageService.send({
+      context: { chatId },
+      payload: createTextMessage(
+        "message.token_unavailable",
+        "🚧 Token details are coming soon. Paste this address when opening a position to proceed.",
+        { disableLinkPreview: true }
+      ),
+    });
+    return;
   }
 
   return await next();

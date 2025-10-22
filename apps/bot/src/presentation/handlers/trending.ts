@@ -4,20 +4,35 @@ import {
   TRENDING_MESSAGES,
 } from "../constants/trending.constants";
 import { BotContext } from "@/types/bot.types";
-// import { PoolsFormatter } from "@/bot/utils/messages/pool.formatter";
-// import { MessageManager } from "@/bot/utils/messages";
 import { TrendingPoolsSortCriteria } from "@/v2";
-import { getTrendingKeyboard } from "../keyboards/trending-menu";
-import { container } from "@/infrastructure/di/container";
+import { container, DI_TOKENS } from "@/infrastructure/di/container";
 import { GetTrendingPoolsUseCase } from "@/application/trending/get-trending-pools.use-case";
 import { PoolFormatter } from "../formatters/pool.formatter";
+import { MessageService } from "@/application/message/message.service";
+import { createTextMessage } from "../formatters/message-builder";
 
 export async function trendingHandler(
   ctx: BotContext,
   _server: FastifyInstance
 ) {
+  const chatId = ctx.chat?.id;
+  if (!chatId) return;
+
+  const messageService = container.get<MessageService>(
+    DI_TOKENS.MessageService
+  );
+
+  let placeholderMessageId: number | undefined;
+
   try {
-    await ctx.reply(TRENDING_MESSAGES.FETCHING);
+    const placeholder = await messageService.send({
+      context: { chatId },
+      payload: createTextMessage(
+        "trending.fetching",
+        TRENDING_MESSAGES.FETCHING
+      ),
+    });
+    placeholderMessageId = placeholder.messageId;
 
     const sortBy: TrendingPoolsSortCriteria = "apy";
     const useCase = container.get(GetTrendingPoolsUseCase);
@@ -28,25 +43,39 @@ export async function trendingHandler(
       sortBy,
     });
 
-    const message = PoolFormatter.formatTrendingPoolsMessage(
+    const payload = PoolFormatter.createTrendingPoolsPayload(
       poolsResponse.pools,
       poolsResponse.sortBy,
       poolsResponse.currentPage,
       poolsResponse.totalPages
     );
 
-    return await ctx.reply(message, {
-      parse_mode: "Markdown",
-      link_preview_options: { is_disabled: true },
-      reply_markup: getTrendingKeyboard(
-        poolsResponse.currentPage,
-        sortBy,
-        poolsResponse.totalPages
-      ),
+    await messageService.edit({
+      context: {
+        chatId,
+        messageId: placeholder.messageId,
+      },
+      payload,
     });
   } catch (error) {
     console.error("[Trending] Error in handler:", error);
-    await ctx.reply(TRENDING_MESSAGES.ERROR_GENERIC);
+    const fallbackPayload = createTextMessage(
+      "trending.error",
+      TRENDING_MESSAGES.ERROR_GENERIC,
+      { disableLinkPreview: true }
+    );
+
+    if (placeholderMessageId) {
+      await messageService.edit({
+        context: { chatId, messageId: placeholderMessageId },
+        payload: fallbackPayload,
+      });
+    } else {
+      await messageService.send({
+        context: { chatId },
+        payload: fallbackPayload,
+      });
+    }
   }
 }
 
@@ -66,7 +95,6 @@ export async function handleTrendingCallback(
       return;
     }
 
-    // @ts-expect-error FIXME
     const [, action, pageStr, sortByStr] = match as [
       string,
       string,
@@ -94,35 +122,26 @@ export async function handleTrendingCallback(
       sortBy,
     });
 
-    const message = PoolFormatter.formatTrendingPoolsMessage(
+    const payload = PoolFormatter.createTrendingPoolsPayload(
       poolsResponse.pools,
       poolsResponse.sortBy,
       poolsResponse.currentPage,
       poolsResponse.totalPages
     );
 
-    const keyboard = getTrendingKeyboard(
-      poolsResponse.currentPage,
-      poolsResponse.sortBy,
-      poolsResponse.totalPages
+    const chatId = ctx.chat?.id;
+    const messageId = ctx.callbackQuery?.message?.message_id;
+    const messageService = container.get<MessageService>(
+      DI_TOKENS.MessageService
     );
 
-    const messageId = ctx.callbackQuery?.message?.message_id;
     let edited = false;
-
-    if (messageId) {
+    if (chatId && messageId) {
       try {
-        await ctx.telegram.editMessageText(
-          ctx.chat!.id,
-          messageId,
-          undefined,
-          message,
-          {
-            parse_mode: "Markdown",
-            link_preview_options: { is_disabled: true },
-            reply_markup: keyboard,
-          }
-        );
+        await messageService.edit({
+          context: { chatId, messageId },
+          payload,
+        });
         edited = true;
       } catch (err: any) {
         const msg = err?.description || err?.message || String(err);
@@ -132,11 +151,10 @@ export async function handleTrendingCallback(
       }
     }
 
-    if (!edited) {
-      await ctx.reply(message, {
-        parse_mode: "Markdown",
-        link_preview_options: { is_disabled: true },
-        reply_markup: keyboard,
+    if (!edited && chatId) {
+      await messageService.send({
+        context: { chatId },
+        payload,
       });
     }
 

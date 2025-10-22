@@ -17,6 +17,7 @@ import {
   TelegramClient,
   ITelegramClient,
 } from "@/infrastructure/messaging/telegram-client";
+import { TelegramMessageGateway } from "@/infrastructure/messaging/telegram-message.gateway";
 import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 
 // Application use-cases
@@ -45,6 +46,7 @@ import { GetPriceRangeUseCase } from "@/application/position/get-price-range.use
 
 import { ParseFreeTextMessageUseCase } from "@/application/message/parse-free-text.use-case";
 import { RouteFreeTextMessageUseCase } from "@/application/message/route-free-text.use-case";
+import { MessageService } from "@/application/message/message.service";
 import { GetUserSettingsUseCase } from "@/application/settings/get-user-settings.use-case";
 import { UpdateUserSettingUseCase } from "@/application/settings/update-user-setting.use-case";
 
@@ -79,6 +81,8 @@ export const DI_TOKENS = {
   TelegramClient: Symbol("TelegramClient"),
   JobQueue: Symbol("JobQueueService"),
   TransactionService: Symbol("ITransactionService"),
+  MessageGateway: Symbol("MessageGateway"),
+  MessageService: Symbol("MessageService"),
 } as const;
 
 // Create Inversify container
@@ -323,6 +327,41 @@ export function initializeContainer(bot?: Telegraf<BotContext>) {
       .toDynamicValue(() => new JobQueueService({ bot }))
       .inSingletonScope();
 
+    // Message gateway + service (depends on Telegram client)
+    if (!container.isBound(TelegramMessageGateway)) {
+      container
+        .bind(TelegramMessageGateway)
+        .toDynamicValue((c) =>
+          new TelegramMessageGateway(
+            c.container.get<ITelegramClient>(DI_TOKENS.TelegramClient)
+          )
+        )
+        .inSingletonScope();
+    }
+
+    if (!container.isBound(DI_TOKENS.MessageGateway)) {
+      container
+        .bind(DI_TOKENS.MessageGateway)
+        .toDynamicValue((c) => c.container.get(TelegramMessageGateway))
+        .inSingletonScope();
+    }
+
+    if (!container.isBound(MessageService)) {
+      container
+        .bind(MessageService)
+        .toDynamicValue((c) =>
+          new MessageService(c.container.get(TelegramMessageGateway))
+        )
+        .inSingletonScope();
+    }
+
+    if (!container.isBound(DI_TOKENS.MessageService)) {
+      container
+        .bind(DI_TOKENS.MessageService)
+        .toDynamicValue((c) => c.container.get(MessageService))
+        .inSingletonScope();
+    }
+
     // Notification service depends on TelegramClient and UserRepository and JobQueue
     container
       .bind(NotificationService)
@@ -335,11 +374,11 @@ export function initializeContainer(bot?: Telegraf<BotContext>) {
           )
       )
       .inSingletonScope();
-  }
+    }
 
-  // Register DEX adapters with the dex registry based on configuration
-  try {
-    const reg = container.get(DI_TOKENS.DexRegistry) as typeof dexRegistry;
+    // Register DEX adapters with the dex registry based on configuration
+    try {
+
     const enabled = getEnabledDexTypes();
 
     const adapters: any[] = [];

@@ -1,8 +1,10 @@
+import { MessagePayload } from "@/domain/message";
+import { getTrendingKeyboard } from "@/presentation/keyboards/trending-menu";
 import { UnifiedPool } from "@/shared/types/pool.types";
 import { TrendingPoolsSortCriteria } from "@/types/trending.types";
-// import { link } from "@/bot/utils/text-formatters";
 import { getPoolDeeplink, link } from "@/utils/misc";
 import { formatAPR, formatCurrency, formatPercentage } from "./base.formatter";
+import { createTextMessage } from "./message-builder";
 
 export class PoolFormatter {
   static formatPoolCard(pool: UnifiedPool): string {
@@ -135,5 +137,25 @@ export class PoolFormatter {
       "_Tap on the commands above to view pool details_",
       "",
     ].join("\n");
+  }
+
+  static createTrendingPoolsPayload(
+    pools: UnifiedPool[],
+    sortBy: TrendingPoolsSortCriteria,
+    currentPage: number,
+    totalPages: number
+  ): MessagePayload {
+    const text = this.formatTrendingPoolsMessage(
+      pools,
+      sortBy,
+      currentPage,
+      totalPages
+    );
+
+    return createTextMessage("trending.pools", text, {
+      parseMode: "markdown",
+      disableLinkPreview: true,
+      keyboard: getTrendingKeyboard(currentPage, sortBy, totalPages),
+    });
   }
 }
