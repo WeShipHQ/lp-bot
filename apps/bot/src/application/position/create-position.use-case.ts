@@ -218,14 +218,21 @@ export class CreatePositionUseCase {
       // const rawContext = (command.metadata?.positionContext ??
       //   command.metadata) as PositionCreationContext | undefined;
 
-      const positionContext: any = {
+      const positionContext: PositionCreationContext = {
         userId: command.user.id,
         walletAddress: command.user.walletAddress,
         dex: command.dex,
         poolAddress: command.poolAddress,
-        strategy: command.strategy ?? "",
+        strategy: command.strategy ?? "spot",
+        depositMethod: "sol_auto_convert",
         tokenAAmount: command.tokenAAmount,
         tokenBAmount: command.tokenBAmount,
+        tokenAMint: command.tokenA.address,
+        tokenBMint: command.tokenB.address,
+        tokenASymbol: command.tokenA.symbol,
+        tokenBSymbol: command.tokenB.symbol,
+        tokenADecimals: command.tokenA.decimals,
+        tokenBDecimals: command.tokenB.decimals,
         autoRebalance: command.autoRebalance ?? false,
         slippage: command.slippage,
         positionAddress: adapterPositionAddress,

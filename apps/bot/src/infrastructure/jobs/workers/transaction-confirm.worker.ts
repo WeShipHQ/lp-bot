@@ -19,6 +19,7 @@ import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
 import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 import { getCacheService } from "@/infrastructure/cache/cache.service";
 import { CachePatterns } from "@/infrastructure/cache/cache-keys";
+import { parseMeteoraInstructions, MeteoraDlmmInstruction } from "@/utils/tx-parser";
 
 export class TransactionConfirmWorker
   implements IWorker<TransactionConfirmJobData>
@@ -135,7 +136,7 @@ export class TransactionConfirmWorker
 
   /**
    * Handle CREATE_POSITION confirmation
-   * Enrich position data from on-chain and create DB records
+   * Parse transaction data and create DB records
    */
   private async handleCreatePosition(
     signature: string,
@@ -166,8 +167,66 @@ export class TransactionConfirmWorker
         return;
       }
 
+      logger.info("[TxConfirmWorker] Parsing transaction data from blockchain", {
+        signature,
+        poolAddress: context.poolAddress,
+      });
+
+      const connection = this.solana.getConnection();
+      const parsedTransaction = await connection.getParsedTransaction(signature, {
+        maxSupportedTransactionVersion: 0,
+      });
+
+      if (!parsedTransaction) {
+        logger.error("[TxConfirmWorker] Transaction not found on-chain", {
+          signature,
+        });
+        return;
+      }
+
+      const instructions = parseMeteoraInstructions(parsedTransaction);
+
+      if (!instructions || instructions.length === 0) {
+        logger.error("[TxConfirmWorker] No Meteora instructions found in transaction", {
+          signature,
+        });
+        return;
+      }
+
+      logger.info("[TxConfirmWorker] Parsed Meteora instructions", {
+        signature,
+        instructionCount: instructions.length,
+        instructions: instructions.map(i => ({
+          name: i.instructionName,
+          type: i.instructionType,
+        })),
+      });
+
+      const initializeInstruction = instructions.find(
+        (ix) => ix.instructionType === "open"
+      );
+
+      const addLiquidityInstruction = instructions.find(
+        (ix) => ix.instructionType === "add"
+      );
+
+      if (!initializeInstruction || !addLiquidityInstruction) {
+        logger.error(
+          "[TxConfirmWorker] Missing required instructions (open or add)",
+          {
+            signature,
+            hasOpen: !!initializeInstruction,
+            hasAdd: !!addLiquidityInstruction,
+          }
+        );
+        return;
+      }
+
       const effectivePositionAddress =
-        positionAddress ?? context.positionAddress;
+        positionAddress ?? 
+        initializeInstruction.accounts.position ?? 
+        context.positionAddress;
+
       if (!effectivePositionAddress) {
         logger.error("[TxConfirmWorker] Position address not available", {
           signature,
@@ -175,39 +234,41 @@ export class TransactionConfirmWorker
         return;
       }
 
-      logger.info("[TxConfirmWorker] Enriching position data from on-chain", {
-        signature,
-        positionAddress: effectivePositionAddress,
-        poolAddress: context.poolAddress,
-      });
+      let actualTokenAAmount = context.tokenAAmount;
+      let actualTokenBAmount = context.tokenBAmount;
 
-      let onChainData: any = undefined;
-      try {
-        const position = await this.meteoraAdapter.getPosition(
-          effectivePositionAddress,
-          {
-            userAddress: context.walletAddress,
-            poolAddress: context.poolAddress,
-          }
+      if (addLiquidityInstruction.tokenTransfers.length > 0) {
+        const tokenAMint = context.tokenAMint;
+        const tokenBMint = context.tokenBMint;
+
+        const tokenATransfer = addLiquidityInstruction.tokenTransfers.find(
+          (t) => t.mint === tokenAMint
+        );
+        const tokenBTransfer = addLiquidityInstruction.tokenTransfers.find(
+          (t) => t.mint === tokenBMint
         );
 
-        if (position) {
-          onChainData = {
-            actualTokenAAmount: position.tokenAAmount,
-            actualTokenBAmount: position.tokenBAmount,
-            lowerBinId: position.metadata?.lowerBinId as number | undefined,
-            upperBinId: position.metadata?.upperBinId as number | undefined,
-          };
+        if (tokenATransfer) {
+          actualTokenAAmount = (tokenATransfer.amount / Math.pow(10, context.tokenADecimals ?? 9)).toString();
         }
-      } catch (err) {
-        logger.warn(
-          "[TxConfirmWorker] Failed to fetch on-chain position data",
-          {
-            err,
-            positionAddress: effectivePositionAddress,
-          }
-        );
+        if (tokenBTransfer) {
+          actualTokenBAmount = (tokenBTransfer.amount / Math.pow(10, context.tokenBDecimals ?? 9)).toString();
+        }
+
+        logger.info("[TxConfirmWorker] Extracted token amounts from transfers", {
+          signature,
+          actualTokenAAmount,
+          actualTokenBAmount,
+          tokenTransfers: addLiquidityInstruction.tokenTransfers,
+        });
       }
+
+      const onChainData = {
+        actualTokenAAmount,
+        actualTokenBAmount,
+        lowerBinId: undefined,
+        upperBinId: undefined,
+      };
 
       const tokenMints = [context.tokenAMint, context.tokenBMint];
       const solMint = "So11111111111111111111111111111111111111112";
@@ -312,7 +373,9 @@ export class TransactionConfirmWorker
         return;
       }
 
-      const metadata = JSON.parse(ptx.metadata);
+      const metadata = typeof ptx.metadata === 'string' 
+        ? JSON.parse(ptx.metadata) 
+        : ptx.metadata;
       const rebalanceContext = metadata.rebalanceContext as
         | {
             positionId: string;
@@ -479,7 +542,9 @@ export class TransactionConfirmWorker
         return;
       }
 
-      const metadata = JSON.parse(ptx.metadata);
+      const metadata = typeof ptx.metadata === 'string' 
+        ? JSON.parse(ptx.metadata) 
+        : ptx.metadata;
       const closeContext = metadata.closeContext as
         | {
             userId: string;
