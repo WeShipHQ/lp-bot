@@ -1,6 +1,10 @@
 import { Job } from "bullmq";
 import { IWorker } from "../worker-registry";
-import { TransactionConfirmJobData, JOB_POSITION_MONITOR, JOB_NOTIFICATION } from "../job-definitions";
+import {
+  TransactionConfirmJobData,
+  JOB_POSITION_MONITOR,
+  JOB_NOTIFICATION,
+} from "../job-definitions";
 import { logger } from "@/utils/logger";
 import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
 import { db, pendingTransactions } from "@/db";
@@ -16,70 +20,115 @@ import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 import { getCacheService } from "@/infrastructure/cache/cache.service";
 import { CachePatterns } from "@/infrastructure/cache/cache-keys";
 
-export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobData> {
+export class TransactionConfirmWorker
+  implements IWorker<TransactionConfirmJobData>
+{
   private readonly priceService = getTokenPriceService();
   private readonly meteoraAdapter = new MeteoraAdapter();
   private readonly cache = getCacheService();
 
   constructor(
     private readonly solana: SolanaAdapter,
-    private readonly positionRepository: PositionRepository,
+    private readonly positionRepository: PositionRepository
   ) {}
 
   async process(job: Job<TransactionConfirmJobData>) {
-    const { signature, operationType, userId, positionId, positionAddress, submittedAt } = job.data;
+    console.log("TransactionConfirmWorker", job.data);
+    const {
+      signature,
+      operationType,
+      userId,
+      positionId,
+      positionAddress,
+      submittedAt,
+    } = job.data;
     const started = Date.now();
 
     try {
       const status = await this.solana.getSignatureStatus(signature);
       if (!status || (!status.confirmationStatus && !status.err)) {
         // Pending/no info: decide on retry vs timeout
-        const [ptx] = await db.select().from(pendingTransactions).where(eq(pendingTransactions.signature, signature));
-        const created = ptx?.createdAt || (submittedAt ? new Date(submittedAt) : new Date(Date.now() - 1000));
+        const [ptx] = await db
+          .select()
+          .from(pendingTransactions)
+          .where(eq(pendingTransactions.signature, signature));
+        const created =
+          ptx?.createdAt ||
+          (submittedAt ? new Date(submittedAt) : new Date(Date.now() - 1000));
         const ageMs = Date.now() - new Date(created).getTime();
         const timeoutMs = 5 * 60 * 1000; // 5 minutes
         if (ageMs > timeoutMs) {
-          await db.update(pendingTransactions)
-            .set({ status: 'FAILED', updatedAt: new Date(), errorMessage: 'Timeout while waiting for confirmation' })
+          await db
+            .update(pendingTransactions)
+            .set({
+              status: "FAILED",
+              updatedAt: new Date(),
+              errorMessage: "Timeout while waiting for confirmation",
+            })
             .where(eq(pendingTransactions.signature, signature));
-          logger.warn({ signature }, '[TxConfirmWorker] Marked as FAILED due to timeout');
+          logger.warn(
+            { signature },
+            "[TxConfirmWorker] Marked as FAILED due to timeout"
+          );
           return { confirmed: false, timeout: true };
         }
         // Re-throw to trigger retry/backoff
-        throw new Error('Pending confirmation');
+        throw new Error("Pending confirmation");
       }
 
       if (status?.err) {
-        await db.update(pendingTransactions)
-          .set({ status: 'FAILED', updatedAt: new Date(), errorMessage: JSON.stringify(status.err) })
+        await db
+          .update(pendingTransactions)
+          .set({
+            status: "FAILED",
+            updatedAt: new Date(),
+            errorMessage: JSON.stringify(status.err),
+          })
           .where(eq(pendingTransactions.signature, signature));
-        logger.warn({ signature }, '[TxConfirmWorker] Transaction failed');
+        logger.warn({ signature }, "[TxConfirmWorker] Transaction failed");
         return { confirmed: false, failed: true };
       }
 
       // Consider confirmed once confirmationStatus present and not "processed"
-      await db.update(pendingTransactions)
-        .set({ status: 'COMPLETED', updatedAt: new Date() })
+      await db
+        .update(pendingTransactions)
+        .set({ status: "COMPLETED", updatedAt: new Date() })
         .where(eq(pendingTransactions.signature, signature));
 
       // Domain side-effects based on operation type
       try {
-        if (operationType === 'CREATE_POSITION') {
+        if (operationType === "CREATE_POSITION") {
           await this.handleCreatePosition(signature, userId, positionAddress);
-        } else if (operationType === 'REBALANCE') {
-          await this.handleRebalance(signature, userId, positionId, positionAddress);
-        } else if (operationType === 'CLOSE_POSITION') {
-          await this.handleClosePosition(signature, userId, positionId, positionAddress);
+        } else if (operationType === "REBALANCE") {
+          await this.handleRebalance(
+            signature,
+            userId,
+            positionId,
+            positionAddress
+          );
+        } else if (operationType === "CLOSE_POSITION") {
+          await this.handleClosePosition(
+            signature,
+            userId,
+            positionId,
+            positionAddress
+          );
         }
       } catch (err) {
-        logger.warn({ err }, '[TxConfirmWorker] Post-confirm side-effects failed');
+        logger.warn(
+          { err },
+          "[TxConfirmWorker] Post-confirm side-effects failed"
+        );
       }
 
       const duration = Date.now() - started;
-      logger.info({ signature, operationType, duration }, '[TxConfirmWorker] Confirmed');
+      logger.info(
+        { signature, operationType, duration },
+        "[TxConfirmWorker] Confirmed"
+      );
       return { confirmed: true, status };
     } catch (error) {
-      logger.debug({ error, signature }, '[TxConfirmWorker] Pending or error');
+      logger.debug({ error, signature }, "[TxConfirmWorker] Pending or error");
       throw error; // rely on backoff/attempts
     }
   }
@@ -94,32 +143,39 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
     positionAddress?: string
   ): Promise<void> {
     try {
-      const [ptx] = await db
-        .select()
-        .from(pendingTransactions)
-        .where(eq(pendingTransactions.signature, signature))
-        .limit(1);
+      const ptx = await db.query.pendingTransactions.findFirst({
+        where: eq(pendingTransactions.signature, signature),
+      });
 
       if (!ptx || !ptx.metadata) {
-        logger.error('[TxConfirmWorker] No pending transaction metadata found', { signature });
+        logger.error(
+          "[TxConfirmWorker] No pending transaction metadata found",
+          { signature }
+        );
         return;
       }
 
-      const metadata = JSON.parse(ptx.metadata);
-      const context: PositionCreationContext | undefined = metadata.positionContext;
+      const metadata = ptx.metadata as any;
+      const context: PositionCreationContext | undefined =
+        metadata.positionContext;
 
       if (!context) {
-        logger.error('[TxConfirmWorker] No position context in metadata', { signature });
+        logger.error("[TxConfirmWorker] No position context in metadata", {
+          signature,
+        });
         return;
       }
 
-      const effectivePositionAddress = positionAddress ?? context.positionAddress;
+      const effectivePositionAddress =
+        positionAddress ?? context.positionAddress;
       if (!effectivePositionAddress) {
-        logger.error('[TxConfirmWorker] Position address not available', { signature });
+        logger.error("[TxConfirmWorker] Position address not available", {
+          signature,
+        });
         return;
       }
 
-      logger.info('[TxConfirmWorker] Enriching position data from on-chain', {
+      logger.info("[TxConfirmWorker] Enriching position data from on-chain", {
         signature,
         positionAddress: effectivePositionAddress,
         poolAddress: context.poolAddress,
@@ -127,10 +183,13 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
 
       let onChainData: any = undefined;
       try {
-        const position = await this.meteoraAdapter.getPosition(effectivePositionAddress, {
-          userAddress: context.walletAddress,
-          poolAddress: context.poolAddress,
-        });
+        const position = await this.meteoraAdapter.getPosition(
+          effectivePositionAddress,
+          {
+            userAddress: context.walletAddress,
+            poolAddress: context.poolAddress,
+          }
+        );
 
         if (position) {
           onChainData = {
@@ -141,14 +200,17 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
           };
         }
       } catch (err) {
-        logger.warn('[TxConfirmWorker] Failed to fetch on-chain position data', {
-          err,
-          positionAddress: effectivePositionAddress,
-        });
+        logger.warn(
+          "[TxConfirmWorker] Failed to fetch on-chain position data",
+          {
+            err,
+            positionAddress: effectivePositionAddress,
+          }
+        );
       }
 
       const tokenMints = [context.tokenAMint, context.tokenBMint];
-      const solMint = 'So11111111111111111111111111111111111111112';
+      const solMint = "So11111111111111111111111111111111111111112";
       if (!tokenMints.includes(solMint)) {
         tokenMints.push(solMint);
       }
@@ -160,17 +222,19 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
         solUsd: priceData[solMint]?.price ?? 0,
       };
 
-      logger.info('[TxConfirmWorker] Fetched token prices', { prices });
+      logger.info("[TxConfirmWorker] Fetched token prices", { prices });
 
-      const createdPositionId = await positionPersistenceService.createPosition({
-        signature,
-        positionAddress: effectivePositionAddress,
-        context,
-        onChainData,
-        prices,
-      });
+      const createdPositionId = await positionPersistenceService.createPosition(
+        {
+          signature,
+          positionAddress: effectivePositionAddress,
+          context,
+          onChainData,
+          prices,
+        }
+      );
 
-      logger.info('[TxConfirmWorker] Position created in database', {
+      logger.info("[TxConfirmWorker] Position created in database", {
         positionId: createdPositionId,
         positionAddress: effectivePositionAddress,
         signature,
@@ -193,7 +257,7 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
             },
           }
         );
-        logger.info('[TxConfirmWorker] Position monitoring job scheduled', {
+        logger.info("[TxConfirmWorker] Position monitoring job scheduled", {
           positionId: createdPositionId,
         });
       }
@@ -201,18 +265,18 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
       await jobQueue.enqueue(JOB_NOTIFICATION, {
         userId,
         notification: {
-          type: 'general',
-          title: 'Position Created',
+          type: "general",
+          title: "Position Created",
           message: `Your position has been successfully created! View it in your portfolio.`,
         },
       });
 
-      logger.info('[TxConfirmWorker] CREATE_POSITION handled successfully', {
+      logger.info("[TxConfirmWorker] CREATE_POSITION handled successfully", {
         positionId: createdPositionId,
         signature,
       });
     } catch (error) {
-      logger.error('[TxConfirmWorker] Failed to handle CREATE_POSITION', {
+      logger.error("[TxConfirmWorker] Failed to handle CREATE_POSITION", {
         error,
         signature,
         userId,
@@ -239,9 +303,12 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
         .limit(1);
 
       if (!ptx || !ptx.metadata) {
-        logger.error('[TxConfirmWorker] No pending transaction metadata for rebalance', {
-          signature,
-        });
+        logger.error(
+          "[TxConfirmWorker] No pending transaction metadata for rebalance",
+          {
+            signature,
+          }
+        );
         return;
       }
 
@@ -265,7 +332,7 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
         | undefined;
 
       if (!rebalanceContext) {
-        logger.error('[TxConfirmWorker] Missing rebalance context', {
+        logger.error("[TxConfirmWorker] Missing rebalance context", {
           signature,
         });
         return;
@@ -281,14 +348,17 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
         positionAddress;
 
       if (!newPositionAddress) {
-        logger.error('[TxConfirmWorker] Unable to determine new position address after rebalance', {
-          signature,
-          rebalanceContext,
-        });
+        logger.error(
+          "[TxConfirmWorker] Unable to determine new position address after rebalance",
+          {
+            signature,
+            rebalanceContext,
+          }
+        );
         return;
       }
 
-      logger.info('[TxConfirmWorker] Processing rebalance confirmation', {
+      logger.info("[TxConfirmWorker] Processing rebalance confirmation", {
         signature,
         positionId: effectivePositionId,
         oldPositionAddress: effectiveOldAddress,
@@ -296,26 +366,32 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
       });
 
       // Fetch on-chain data for new position
-      let actualTokenAAmount = '0';
-      let actualTokenBAmount = '0';
+      let actualTokenAAmount = "0";
+      let actualTokenBAmount = "0";
       try {
-        const position = await this.meteoraAdapter.getPosition(newPositionAddress, {
-          userAddress: rebalanceContext.userAddress,
-          poolAddress: rebalanceContext.poolAddress,
-        });
+        const position = await this.meteoraAdapter.getPosition(
+          newPositionAddress,
+          {
+            userAddress: rebalanceContext.userAddress,
+            poolAddress: rebalanceContext.poolAddress,
+          }
+        );
         if (position) {
           actualTokenAAmount = position.tokenAAmount;
           actualTokenBAmount = position.tokenBAmount;
         }
       } catch (err) {
-        logger.warn('[TxConfirmWorker] Failed to fetch new position data after rebalance', {
-          err,
-          newPositionAddress,
-        });
+        logger.warn(
+          "[TxConfirmWorker] Failed to fetch new position data after rebalance",
+          {
+            err,
+            newPositionAddress,
+          }
+        );
       }
 
       // Fetch token prices
-      const solMint = 'So11111111111111111111111111111111111111112';
+      const solMint = "So11111111111111111111111111111111111111112";
       const priceData = await this.priceService.getPrices([
         rebalanceContext.tokenAMint,
         rebalanceContext.tokenBMint,
@@ -335,7 +411,7 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
           positionId: effectivePositionId,
           oldPositionAddress: effectiveOldAddress,
           newPositionAddress,
-          triggerReason: rebalanceContext.triggerReason ?? 'rebalance',
+          triggerReason: rebalanceContext.triggerReason ?? "rebalance",
           tokenAAmount: actualTokenAAmount,
           tokenBAmount: actualTokenBAmount,
           tokenAMint: rebalanceContext.tokenAMint,
@@ -345,26 +421,28 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
         prices,
       });
 
-      logger.info('[TxConfirmWorker] Rebalance persisted', {
+      logger.info("[TxConfirmWorker] Rebalance persisted", {
         signature,
         positionId: effectivePositionId,
         newPositionAddress,
       });
 
       await this.cache.invalidate(CachePatterns.portfolioPattern(userId));
-      await this.cache.invalidate(CachePatterns.positionPattern(effectivePositionId));
+      await this.cache.invalidate(
+        CachePatterns.positionPattern(effectivePositionId)
+      );
 
       const jobQueue = new JobQueueService({ producerOnly: true });
       await jobQueue.enqueue(JOB_NOTIFICATION, {
         userId,
         notification: {
-          type: 'rebalance',
-          title: 'Position Rebalanced',
+          type: "rebalance",
+          title: "Position Rebalanced",
           message: `Rebalance completed successfully for position ${effectivePositionId}.`,
         },
       });
     } catch (error) {
-      logger.error('[TxConfirmWorker] Failed to handle REBALANCE', {
+      logger.error("[TxConfirmWorker] Failed to handle REBALANCE", {
         error,
         signature,
         userId,
@@ -392,9 +470,12 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
         .limit(1);
 
       if (!ptx || !ptx.metadata) {
-        logger.error('[TxConfirmWorker] No pending transaction metadata for close', {
-          signature,
-        });
+        logger.error(
+          "[TxConfirmWorker] No pending transaction metadata for close",
+          {
+            signature,
+          }
+        );
         return;
       }
 
@@ -405,7 +486,7 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
             positionId: string;
             positionAddress: string;
             poolAddress: string;
-            closureReason: 'user_close' | 'stop_loss' | 'take_profit';
+            closureReason: "user_close" | "stop_loss" | "take_profit";
             tokenAMint: string;
             tokenBMint: string;
             finalTokenAAmount?: string;
@@ -416,7 +497,7 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
         | undefined;
 
       if (!closeContext) {
-        logger.error('[TxConfirmWorker] Missing close context', {
+        logger.error("[TxConfirmWorker] Missing close context", {
           signature,
         });
         return;
@@ -427,14 +508,14 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
         closeContext.positionAddress ?? positionAddress;
 
       if (!effectivePositionId || !effectivePositionAddress) {
-        logger.error('[TxConfirmWorker] Insufficient data to handle close', {
+        logger.error("[TxConfirmWorker] Insufficient data to handle close", {
           signature,
           closeContext,
         });
         return;
       }
 
-      const solMint = 'So11111111111111111111111111111111111111112';
+      const solMint = "So11111111111111111111111111111111111111112";
       const priceData = await this.priceService.getPrices([
         closeContext.tokenAMint,
         closeContext.tokenBMint,
@@ -454,38 +535,40 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
           positionId: effectivePositionId,
           positionAddress: effectivePositionAddress,
           poolAddress: closeContext.poolAddress,
-          closureReason: closeContext.closureReason ?? 'user_close',
+          closureReason: closeContext.closureReason ?? "user_close",
           tokenAMint: closeContext.tokenAMint,
           tokenBMint: closeContext.tokenBMint,
         },
         onChainData: {
-          finalTokenAAmount: closeContext.finalTokenAAmount ?? '0',
-          finalTokenBAmount: closeContext.finalTokenBAmount ?? '0',
-          claimedFeesX: closeContext.unclaimedFeeXAmount ?? '0',
-          claimedFeesY: closeContext.unclaimedFeeYAmount ?? '0',
+          finalTokenAAmount: closeContext.finalTokenAAmount ?? "0",
+          finalTokenBAmount: closeContext.finalTokenBAmount ?? "0",
+          claimedFeesX: closeContext.unclaimedFeeXAmount ?? "0",
+          claimedFeesY: closeContext.unclaimedFeeYAmount ?? "0",
         },
         prices,
       });
 
       await this.cache.invalidate(CachePatterns.portfolioPattern(userId));
-      await this.cache.invalidate(CachePatterns.positionPattern(effectivePositionId));
+      await this.cache.invalidate(
+        CachePatterns.positionPattern(effectivePositionId)
+      );
 
       const jobQueue = new JobQueueService({ producerOnly: true });
       await jobQueue.enqueue(JOB_NOTIFICATION, {
         userId,
         notification: {
-          type: 'general',
-          title: 'Position Closed',
+          type: "general",
+          title: "Position Closed",
           message: `Position ${effectivePositionAddress} has been closed successfully.`,
         },
       });
 
-      logger.info('[TxConfirmWorker] CLOSE_POSITION handled successfully', {
+      logger.info("[TxConfirmWorker] CLOSE_POSITION handled successfully", {
         signature,
         positionId: effectivePositionId,
       });
     } catch (error) {
-      logger.error('[TxConfirmWorker] Failed to handle CLOSE_POSITION', {
+      logger.error("[TxConfirmWorker] Failed to handle CLOSE_POSITION", {
         error,
         signature,
         userId,
@@ -496,4 +579,3 @@ export class TransactionConfirmWorker implements IWorker<TransactionConfirmJobDa
     }
   }
 }
-

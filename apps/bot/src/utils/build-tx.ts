@@ -3,6 +3,8 @@ import {
   BlockhashWithExpiryBlockHeight,
   ComputeBudgetProgram,
   Connection,
+  Keypair,
+  LAMPORTS_PER_SOL,
   PublicKey,
   Signer,
   SystemProgram,
@@ -26,14 +28,25 @@ import {
 
 // https://jito-foundation.gitbook.io/mev/mev-payment-and-distribution/on-chain-addresses
 export const JITO_TIP_ACCOUNTS: string[] = [
-  "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
-  "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
-  "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
-  "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49",
-  "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh",
-  "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt",
-  "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL",
-  "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT",
+  // "96gYZGLnJYVFmbjzopPSU6QiEV5fGqZNyN9nmNhvrZU5",
+  // "HFqU5x63VTqvQss8hp11i4wVV8bD44PvwucfZ2bU7gRe",
+  // "Cw8CFyM9FkoMi7K7Crf6HNQqf4uEMzpKw6QNghXLvLkY",
+  // "ADaUMid9yfUytqMBgopwjb2DTLSokTSzL1zt6iGPaS49",
+  // "DfXygSm4jCyNCybVYYK6DwvWqjKee8pbDmJGcLWNDXjh",
+  // "ADuUkR4vqLUMWXxW9gh6D6L8pMSawimctcNZ5pGwDcEt",
+  // "DttWaMuVvTiduZRnguLF7jNxTgiMBZ1hyAumKUiL2KRL",
+  // "3AVi9Tg9Uo68tJfuvoKvqKNWKkC5wPdSSdeBnizKZ6jT",
+
+  "4ACfpUFoaSD9bfPdeu6DBt89gB6ENTeHBXCAi87NhDEE",
+  "D2L6yPZ2FmmmTKPgzaMKdhu6EWZcTpLy1Vhx8uvZe7NZ",
+  "9bnz4RShgq1hAnLnZbP8kbgBg1kEmcJBYQq3gQbmnSta",
+  "5VY91ws6B2hMmBFRsXkoAAdsPHBJwRfBht4DXox3xkwn",
+  "2nyhqdwKcJZR2vcqCyrYsaPVdAnFoJjiksCXJ7hfEYgD",
+  "2q5pghRs6arqVjRvT5gfgWfWcHWmw1ZuCzphgd5KfWGJ",
+  "wyvPkWjVZz1M8fHQnMMCDTQDbkManefNNhweYk5WkcF",
+  "3KCKozbAaF75qEU33jtzozcJ29yJuaLJTy2jFdzUY8bT",
+  "4vieeGHPYPG2MmyPRcYjdiDmmhN3ww7hsFNap8pVN3Ey",
+  "4TQLFNWK8AovT1gFvda5jfw2oJeRMKEmw7aH6MGBJ3or",
 ];
 
 export type JitoRegion = "Default" | "NY" | "Amsterdam" | "Frankfurt" | "Tokyo";
@@ -632,3 +645,288 @@ export async function createSmartTransactionWithTip(
     options
   );
 }
+
+// v222222
+
+const TIP_ACCOUNTS = [
+  "4ACfpUFoaSD9bfPdeu6DBt89gB6ENTeHBXCAi87NhDEE",
+  "D2L6yPZ2FmmmTKPgzaMKdhu6EWZcTpLy1Vhx8uvZe7NZ",
+  "9bnz4RShgq1hAnLnZbP8kbgBg1kEmcJBYQq3gQbmnSta",
+  "5VY91ws6B2hMmBFRsXkoAAdsPHBJwRfBht4DXox3xkwn",
+  "2nyhqdwKcJZR2vcqCyrYsaPVdAnFoJjiksCXJ7hfEYgD",
+  "2q5pghRs6arqVjRvT5gfgWfWcHWmw1ZuCzphgd5KfWGJ",
+  "wyvPkWjVZz1M8fHQnMMCDTQDbkManefNNhweYk5WkcF",
+  "3KCKozbAaF75qEU33jtzozcJ29yJuaLJTy2jFdzUY8bT",
+  "4vieeGHPYPG2MmyPRcYjdiDmmhN3ww7hsFNap8pVN3Ey",
+  "4TQLFNWK8AovT1gFvda5jfw2oJeRMKEmw7aH6MGBJ3or",
+];
+
+async function getDynamicTipAmount(): Promise<number> {
+  try {
+    const response = await fetch(
+      "https://bundles.jito.wtf/api/v1/bundles/tip_floor"
+    );
+    const data = await response.json();
+
+    if (
+      data &&
+      data[0] &&
+      typeof data[0].landed_tips_75th_percentile === "number"
+    ) {
+      const tip75th = data[0].landed_tips_75th_percentile;
+      // Use 75th percentile but minimum 0.001 SOL
+      return Math.max(tip75th, 0.001);
+    }
+
+    // Fallback if API fails or data is invalid
+    return 0.001;
+  } catch (error) {
+    console.warn("Failed to fetch dynamic tip amount, using fallback:", error);
+    return 0.001; // Fallback to minimum
+  }
+}
+
+export async function sendWithSender(
+  keypair: Keypair,
+  instructions: TransactionInstruction[],
+  connection: Connection
+): Promise<string> {
+  // const connection = new Connection(
+  //   "https://mainnet.helius-rpc.com/?api-key=YOUR_API_KEY"
+  // );
+
+  // Validate user hasn't included compute budget instructions
+  const hasComputeBudget = instructions.some((ix) =>
+    ix.programId.equals(ComputeBudgetProgram.programId)
+  );
+
+  if (hasComputeBudget) {
+    throw new Error(
+      "Do not include compute budget instructions - they are added automatically"
+    );
+  }
+
+  // Create copy of instructions to avoid modifying the original array
+  const allInstructions = [...instructions];
+
+  // Get dynamic tip amount from Jito API (75th percentile, minimum 0.001 SOL)
+  const tipAmountSOL = await getDynamicTipAmount();
+  const tipAccount = new PublicKey(
+    TIP_ACCOUNTS[Math.floor(Math.random() * TIP_ACCOUNTS.length)]
+  );
+
+  console.log(`Using dynamic tip amount: ${tipAmountSOL} SOL`);
+
+  allInstructions.push(
+    SystemProgram.transfer({
+      fromPubkey: keypair.publicKey,
+      toPubkey: tipAccount,
+      lamports: tipAmountSOL * LAMPORTS_PER_SOL,
+    })
+  );
+
+  // Get recent blockhash with context (Helius best practice)
+  const { value: blockhashInfo } =
+    await connection.getLatestBlockhashAndContext("confirmed");
+  const { blockhash, lastValidBlockHeight } = blockhashInfo;
+
+  // Simulate transaction to get compute units
+  const testInstructions = [
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }),
+    ...allInstructions,
+  ];
+
+  const testTransaction = new VersionedTransaction(
+    new TransactionMessage({
+      instructions: testInstructions,
+      payerKey: keypair.publicKey,
+      recentBlockhash: blockhash,
+    }).compileToV0Message()
+  );
+  testTransaction.sign([keypair]);
+
+  const simulation = await connection.simulateTransaction(testTransaction, {
+    replaceRecentBlockhash: true,
+    sigVerify: false,
+  });
+
+  if (!simulation.value.unitsConsumed) {
+    throw new Error("Simulation failed to return compute units");
+  }
+
+  // Set compute unit limit with minimum 1000 CUs and 10% margin (Helius best practice)
+  const units = simulation.value.unitsConsumed;
+  const computeUnits = units < 1000 ? 1000 : Math.ceil(units * 1.1);
+
+  // Get dynamic priority fee from Helius Priority Fee API
+  const priorityFee = await getPriorityFee(
+    connection,
+    allInstructions,
+    keypair.publicKey,
+    blockhash
+  );
+
+  // Add compute budget instructions at the BEGINNING (must be first)
+  allInstructions.unshift(
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: priorityFee })
+  );
+  allInstructions.unshift(
+    ComputeBudgetProgram.setComputeUnitLimit({ units: computeUnits })
+  );
+
+  // Build final optimized transaction
+  const transaction = new VersionedTransaction(
+    new TransactionMessage({
+      instructions: allInstructions,
+      payerKey: keypair.publicKey,
+      recentBlockhash: blockhash,
+    }).compileToV0Message()
+  );
+  transaction.sign([keypair]);
+
+  // Send via Sender endpoint with retry logic
+  return await sendWithRetry(transaction, connection, lastValidBlockHeight);
+}
+
+async function getPriorityFee(
+  connection: Connection,
+  instructions: TransactionInstruction[],
+  payerKey: PublicKey,
+  blockhash: string
+): Promise<number> {
+  try {
+    const tempTx = new VersionedTransaction(
+      new TransactionMessage({
+        instructions,
+        payerKey,
+        recentBlockhash: blockhash,
+      }).compileToV0Message()
+    );
+
+    const response = await fetch(connection.rpcEndpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "1",
+        method: "getPriorityFeeEstimate",
+        params: [
+          {
+            transaction: bs58.encode(tempTx.serialize()),
+            options: { recommended: true },
+          },
+        ],
+      }),
+    });
+
+    const data = await response.json();
+    return data.result?.priorityFeeEstimate
+      ? Math.ceil(data.result.priorityFeeEstimate * 1.2)
+      : 50_000;
+  } catch {
+    return 50_000; // Fallback fee
+  }
+}
+
+async function sendWithRetry(
+  transaction: VersionedTransaction,
+  connection: Connection,
+  lastValidBlockHeight: number
+): Promise<string> {
+  const maxRetries = 3;
+  // Frontend: Use HTTPS endpoint to avoid CORS issues
+  // const endpoint = "https://sender.helius-rpc.com/fast";
+  // Backend: Use regional HTTP endpoint closest to your servers
+  const endpoint = "http://slc-sender.helius-rpc.com/fast";
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      // Check blockhash validity
+      const currentHeight = await connection.getBlockHeight("confirmed");
+      if (currentHeight > lastValidBlockHeight) {
+        throw new Error("Blockhash expired");
+      }
+
+      // Send transaction via Sender endpoint
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: Date.now().toString(),
+          method: "sendTransaction",
+          params: [
+            Buffer.from(transaction.serialize()).toString("base64"),
+            {
+              encoding: "base64",
+              skipPreflight: true, // Required for Sender
+              maxRetries: 0, // Implement your own retry logic
+            },
+          ],
+        }),
+      });
+
+      const result = await response.json();
+      if (result.error) throw new Error(result.error.message);
+
+      console.log(`Transaction sent: ${result.result}`);
+      return await confirmTransaction(result.result, connection);
+    } catch (error) {
+      console.warn(`Attempt ${attempt + 1} failed:`, error);
+      if (attempt === maxRetries - 1) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
+
+  throw new Error("All retry attempts failed");
+}
+
+async function confirmTransaction(
+  signature: string,
+  connection: Connection
+): Promise<string> {
+  const timeout = 15000;
+  const interval = 3000;
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeout) {
+    try {
+      const status = await connection.getSignatureStatuses([signature]);
+      if (status?.value[0]?.confirmationStatus === "confirmed") {
+        return signature;
+      }
+    } catch (error) {
+      console.warn("Status check failed:", error);
+    }
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+
+  throw new Error(`Transaction confirmation timeout: ${signature}`);
+}
+
+// Example usage following standard Helius docs pattern
+// export async function exampleUsage() {
+//   const keypair = Keypair.fromSecretKey(
+//     new Uint8Array([
+//       /* your secret key */
+//     ])
+//   );
+
+//   // 1. Prepare your transaction instructions (USER ADDS THEIR INSTRUCTIONS HERE)
+//   const instructions: TransactionInstruction[] = [
+//     SystemProgram.transfer({
+//       fromPubkey: keypair.publicKey,
+//       toPubkey: new PublicKey("RECIPIENT_ADDRESS"),
+//       lamports: 0.1 * LAMPORTS_PER_SOL,
+//     }),
+//     // Add more instructions as needed
+//   ];
+
+//   // 2. Send with Sender (automatically adds tip + optimizations)
+//   try {
+//     const signature = await sendWithSender(keypair, instructions, connection);
+//     console.log(`Successful transaction: ${signature}`);
+//   } catch (error) {
+//     console.error("Transaction failed:", error);
+//   }
+// }

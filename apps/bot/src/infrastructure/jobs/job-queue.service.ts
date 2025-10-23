@@ -20,6 +20,7 @@ import type { Telegraf } from 'telegraf';
 import type { BotContext } from '@/types/bot.types';
 import { PrivyTransactionService } from '@/services/transaction.service';
 import { SolanaAdapter } from '@/adapters/blockchain/solana.adapter';
+import { container } from '../di/container';
 
 export type EnqueueOptions = { 
   delay?: number; 
@@ -58,18 +59,18 @@ export class JobQueueService {
 
     if (!this.producerOnly) {
       // Instantiate infrastructure dependencies
-      const userRepo = new UserRepository(db as any);
-      const positionRepo = new PositionRepository(db as any);
+      const userRepo = new UserRepository(db);
+      const positionRepo = new PositionRepository(db);
 
       const telegramClient = opts?.bot ? new TelegramClient(opts.bot) : undefined;
       const notificationService = new NotificationService(
         telegramClient as any,
         userRepo,
         // pass this to avoid circular dependency; will be set after instantiation
-        this as any,
+        this,
       );
 
-      const getPositionUseCase = new GetPositionUseCase(positionRepo, dexRegistry);
+      const getPositionUseCase = container.get(GetPositionUseCase); //new GetPositionUseCase(positionRepo, dexRegistry);
       const txService = new PrivyTransactionService();
       const rebalanceUseCase = new RebalancePositionUseCase(positionRepo, dexRegistry, txService);
 
@@ -119,9 +120,8 @@ export class JobQueueService {
     if (!entry) {
       // In producer-only mode, lazily create a queue without a worker
       const queue = new Queue<KnownJobDataMap[N]>(queueName, this.qOpts);
-      // @ts-expect-error: no worker in producer-only mode
-      entry = { queue, worker: undefined as any, concurrency: 0 } as QueueEntry<N> as any;
-      this.entries.set(queueName, entry as any);
+      entry = { queue, worker: undefined as any, concurrency: 0 } as QueueEntry<N>;
+      this.entries.set(queueName, entry);
     }
     await entry.queue.add(queueName, data, {
       delay: options?.delay,

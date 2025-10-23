@@ -4,6 +4,7 @@ import {
   UnifiedPosition,
   UnifiedPortfolio,
   TransactionResult,
+  CreatePositionResult,
   CreatePositionParams,
   RebalanceParams,
   TrendingParams,
@@ -28,8 +29,12 @@ export interface IDexAdapter {
 
   // Position operations
   getUserPositions(userAddress: string): Promise<UnifiedPosition[]>;
-  getPosition(positionAddress: string, context?: PositionContext): Promise<UnifiedPosition>;
+  getPosition(
+    positionAddress: string,
+    context?: PositionContext
+  ): Promise<UnifiedPosition>;
   createPosition(params: CreatePositionParams): Promise<TransactionResult>;
+  createPositionIx(params: CreatePositionParams): Promise<CreatePositionResult>;
   closePosition(positionAddress: string): Promise<TransactionResult>;
   claimFees(positionAddress: string): Promise<TransactionResult>;
   rebalancePosition(

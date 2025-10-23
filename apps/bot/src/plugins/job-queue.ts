@@ -17,7 +17,7 @@ const jobQueuePlugin: FastifyPluginAsync = fp(async (server, _options) => {
   server.log.info("Initializing job queue service...");
 
   // Resolve from DI (initialized in telegraf plugin)
-  const jobQueueService = container.get<JobQueueService>(DI_TOKENS.JobQueue as any);
+  const jobQueueService = container.get<JobQueueService>(DI_TOKENS.JobQueue);
   await jobQueueService.setupScheduledJobs();
 
   server.log.info("Job queue service initialized");

@@ -15,6 +15,7 @@ import {
   UnifiedPool,
   UnifiedPosition,
   UrlParseResult,
+  CreatePositionResult,
 } from "@/types/core.types";
 import type { PositionContext } from "@/types/dex-adapter.interface";
 import { SarosPoolService } from "./pool.service";
@@ -100,7 +101,10 @@ export class SarosAdapter extends BaseDexAdapter {
     return unifiedPositions;
   }
 
-  async getPosition(positionAddress: string, _context?: PositionContext): Promise<UnifiedPosition> {
+  async getPosition(
+    positionAddress: string,
+    _context?: PositionContext
+  ): Promise<UnifiedPosition> {
     // TODO: Implement single position retrieval
     throw new Error("Method not implemented.");
   }
@@ -108,6 +112,13 @@ export class SarosAdapter extends BaseDexAdapter {
   async createPosition(
     params: CreatePositionParams
   ): Promise<TransactionResult> {
+    // TODO: Implement using existing sarosDlmmService.createPositionIx()
+    throw new Error("Method not implemented.");
+  }
+
+  async createPositionIx(
+    params: CreatePositionParams
+  ): Promise<CreatePositionResult> {
     // TODO: Implement using existing sarosDlmmService.createPositionIx()
     throw new Error("Method not implemented.");
   }
