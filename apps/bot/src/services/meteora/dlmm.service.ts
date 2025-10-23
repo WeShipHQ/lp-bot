@@ -5,7 +5,12 @@ import DLMM, {
   LbPosition,
   LbPair,
 } from "@meteora-ag/dlmm";
-import { Connection, PublicKey, TransactionInstruction, Keypair } from "@solana/web3.js";
+import {
+  Connection,
+  PublicKey,
+  TransactionInstruction,
+  Keypair,
+} from "@solana/web3.js";
 import BN from "bn.js";
 import { CONFIG } from "@/config";
 import Decimal from "decimal.js";
@@ -156,8 +161,7 @@ export class MeteoraDlmmService {
     };
   }
 
-  // New SDK wrapper helpers (Phase 2.3.10)
-  async buildCreatePositionTx(
+  async buildCreatePositionIxs(
     poolAddress: string | PublicKey,
     userPublicKey: string | PublicKey,
     totalXAmount: Decimal,
@@ -166,7 +170,7 @@ export class MeteoraDlmmService {
     rangeInterval: number
   ): Promise<{
     instructions: TransactionInstruction[];
-    positionPublicKey: PublicKey;
+    positionKp: Keypair;
   }> {
     const dlmmPool = await this.createInstance(poolAddress);
 
@@ -180,21 +184,25 @@ export class MeteoraDlmmService {
 
     const positionKeypair = Keypair.generate();
 
-    const createPositionTx = await dlmmPool.initializePositionAndAddLiquidityByStrategy({
-      positionPubKey: positionKeypair.publicKey,
-      user: typeof userPublicKey === "string" ? new PublicKey(userPublicKey) : userPublicKey,
-      totalXAmount: new BN(totalXAmount.toString()),
-      totalYAmount: new BN(totalYAmount.toString()),
-      strategy: {
-        maxBinId,
-        minBinId,
-        strategyType: strategy,
-      },
-    });
+    const createPositionTx =
+      await dlmmPool.initializePositionAndAddLiquidityByStrategy({
+        positionPubKey: positionKeypair.publicKey,
+        user:
+          typeof userPublicKey === "string"
+            ? new PublicKey(userPublicKey)
+            : userPublicKey,
+        totalXAmount: new BN(totalXAmount.toString()),
+        totalYAmount: new BN(totalYAmount.toString()),
+        strategy: {
+          maxBinId,
+          minBinId,
+          strategyType: strategy,
+        },
+      });
 
     return {
       instructions: createPositionTx.instructions,
-      positionPublicKey: positionKeypair.publicKey,
+      positionKp: positionKeypair,
     };
   }
 
@@ -204,9 +212,15 @@ export class MeteoraDlmmService {
     positionAddress: string | PublicKey
   ): Promise<{ instructions: TransactionInstruction[] }> {
     return this.closePositionIx(
-      typeof ownerAddress === "string" ? new PublicKey(ownerAddress) : ownerAddress,
-      typeof poolAddress === "string" ? new PublicKey(poolAddress) : poolAddress,
-      typeof positionAddress === "string" ? new PublicKey(positionAddress) : positionAddress
+      typeof ownerAddress === "string"
+        ? new PublicKey(ownerAddress)
+        : ownerAddress,
+      typeof poolAddress === "string"
+        ? new PublicKey(poolAddress)
+        : poolAddress,
+      typeof positionAddress === "string"
+        ? new PublicKey(positionAddress)
+        : positionAddress
     );
   }
 
@@ -216,13 +230,21 @@ export class MeteoraDlmmService {
     positionAddress: string | PublicKey
   ): Promise<{ instructions: TransactionInstruction[] }> {
     return this.claimFeesIx(
-      typeof ownerAddress === "string" ? new PublicKey(ownerAddress) : ownerAddress,
-      typeof poolAddress === "string" ? new PublicKey(poolAddress) : poolAddress,
-      typeof positionAddress === "string" ? new PublicKey(positionAddress) : positionAddress
+      typeof ownerAddress === "string"
+        ? new PublicKey(ownerAddress)
+        : ownerAddress,
+      typeof poolAddress === "string"
+        ? new PublicKey(poolAddress)
+        : poolAddress,
+      typeof positionAddress === "string"
+        ? new PublicKey(positionAddress)
+        : positionAddress
     );
   }
 
-  async getPositions(userAddress: string | PublicKey): Promise<Map<string, PositionInfo>> {
+  async getPositions(
+    userAddress: string | PublicKey
+  ): Promise<Map<string, PositionInfo>> {
     return this.getAllLbPairPositionsByUser(userAddress);
   }
 

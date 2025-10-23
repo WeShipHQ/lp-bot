@@ -11,6 +11,7 @@ import {
   PaginatedTrendingPools,
   UrlParseResult,
   DexAdapterError,
+  CreatePositionResult,
 } from "../types/core.types";
 
 export abstract class BaseDexAdapter implements IDexAdapter {
@@ -24,10 +25,16 @@ export abstract class BaseDexAdapter implements IDexAdapter {
   ): Promise<PaginatedTrendingPools>;
   abstract searchPools(query: string): Promise<UnifiedPool[]>;
   abstract getUserPositions(userAddress: string): Promise<UnifiedPosition[]>;
-  abstract getPosition(positionAddress: string, context?: PositionContext): Promise<UnifiedPosition>;
+  abstract getPosition(
+    positionAddress: string,
+    context?: PositionContext
+  ): Promise<UnifiedPosition>;
   abstract createPosition(
     params: CreatePositionParams
   ): Promise<TransactionResult>;
+  abstract createPositionIx(
+    params: CreatePositionParams
+  ): Promise<CreatePositionResult>;
   abstract closePosition(positionAddress: string): Promise<TransactionResult>;
   abstract claimFees(positionAddress: string): Promise<TransactionResult>;
   abstract rebalancePosition(

@@ -1,4 +1,5 @@
 import { Token } from "@/types/token.types";
+import { Keypair, TransactionInstruction } from "@solana/web3.js";
 
 export type DexType = "meteora" | "saros" | "orca" | "raydium";
 export type PoolType = "DLMM" | "DAMM" | "CLMM" | "AMM";
@@ -92,6 +93,13 @@ export interface TransactionResult {
   metadata?: Record<string, any>;
 }
 
+export interface CreatePositionResult {
+  success: boolean;
+  instructions: TransactionInstruction[];
+  positionKp: Keypair;
+  error?: string;
+}
+
 export interface CreatePositionParams {
   poolAddress: string;
   userAddress: string;
@@ -99,7 +107,7 @@ export interface CreatePositionParams {
   tokenBAmount: string;
   strategy?: string;
   slippage?: number;
-  metadata?: Record<string, any>;
+  // metadata?: Record<string, any>;
 }
 
 export interface RebalanceParams {

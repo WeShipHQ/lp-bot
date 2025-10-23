@@ -11,6 +11,6 @@ export async function registerPlugins(app: FastifyInstance) {
   await registerCorsPlugin(app);
   await registerDrizzlePlugin(app); // Database first
   await registerTelegrafPlugin(app); // Bot before job queue to allow notifications
-  await registerJobQueuePlugin(app); // Job queue after bot and database
   await registerTokenPricePlugin(app);
+  await registerJobQueuePlugin(app); // Job queue after bot and database
 }

@@ -17,6 +17,7 @@ export interface PriceRangeResult {
  * Application-level wrapper to compute DLMM price range for a given pool and bin interval.
  * Delegates to the appropriate underlying service based on dex type.
  */
+// FIXME use DI to get dex registry
 export class GetPriceRangeUseCase {
   private readonly saros = new SarosDlmmService();
   async execute(input: GetPriceRangeInput): Promise<PriceRangeResult> {

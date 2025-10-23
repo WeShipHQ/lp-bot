@@ -1,6 +1,7 @@
 import { BaseDexAdapter } from "@/adapters/base-dex.adapter";
 import { IDexAdapter, PositionContext } from "@/types/dex-adapter.interface";
 import {
+  CreatePositionResult,
   CreatePositionParams,
   DexType,
   PaginatedTrendingPools,
@@ -13,8 +14,14 @@ import {
 } from "@/types/core.types";
 import { MeteoraApiClient, meteoraApiClient } from "./meteora-api.client";
 import { Token } from "@/types/token.types";
-import { TokenPriceService, getTokenPriceService } from "@/services/token-price.service";
-import { meteoraDlmmService, MeteoraDlmmService } from "@/services/meteora/dlmm.service";
+import {
+  TokenPriceService,
+  getTokenPriceService,
+} from "@/services/token-price.service";
+import {
+  meteoraDlmmService,
+  MeteoraDlmmService,
+} from "@/services/meteora/dlmm.service";
 import { PublicKey } from "@solana/web3.js";
 import Decimal from "decimal.js";
 import { MeteoraDlmmPoolResponse } from "@/types/meteora.types";
@@ -36,21 +43,29 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
 
   private readonly urlPatterns = {
     dlmm: /^https:\/\/(?:www\.)?meteora\.ag\/dlmm\/([1-9A-HJ-NP-Za-km-z]{32,44})(?:\?.*)?$/,
-    dammV1: /^https:\/\/(?:www\.)?meteora\.ag\/pools\/([1-9A-HJ-NP-Za-km-z]{32,44})(?:\?.*)?$/,
-    dammV2: /^https:\/\/(?:www\.)?meteora\.ag\/dammv2\/([1-9A-HJ-NP-Za-km-z]{32,44})(?:\?.*)?$/,
+    dammV1:
+      /^https:\/\/(?:www\.)?meteora\.ag\/pools\/([1-9A-HJ-NP-Za-km-z]{32,44})(?:\?.*)?$/,
+    dammV2:
+      /^https:\/\/(?:www\.)?meteora\.ag\/dammv2\/([1-9A-HJ-NP-Za-km-z]{32,44})(?:\?.*)?$/,
   };
 
-  constructor(
-    deps?: {
-      dlmmService?: MeteoraDlmmService;
-      apiClient?: MeteoraApiClient;
-      tokenPriceService?: TokenPriceService;
-    }
-  ) {
+  constructor(deps?: {
+    dlmmService?: MeteoraDlmmService;
+    apiClient?: MeteoraApiClient;
+    tokenPriceService?: TokenPriceService;
+  }) {
     super();
     this.dlmm = deps?.dlmmService ?? meteoraDlmmService;
     this.api = deps?.apiClient ?? meteoraApiClient;
-    this.prices = deps?.tokenPriceService ?? (() => { try { return getTokenPriceService(); } catch { return new TokenPriceService(); } })();
+    this.prices =
+      deps?.tokenPriceService ??
+      (() => {
+        try {
+          return getTokenPriceService();
+        } catch {
+          return new TokenPriceService();
+        }
+      })();
   }
 
   async getPool(poolId: string): Promise<UnifiedPool> {
@@ -62,7 +77,9 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     }
   }
 
-  async getTrendingPools(params?: TrendingParams): Promise<PaginatedTrendingPools> {
+  async getTrendingPools(
+    params?: TrendingParams
+  ): Promise<PaginatedTrendingPools> {
     try {
       const page = params?.page ?? 1;
       const limit = params?.limit ?? 10;
@@ -99,11 +116,12 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       if (!query || query.trim().length === 0) return [];
       const all = await this.api.getAllPools();
       const lowered = query.toLowerCase();
-      const filtered = all.filter((p) =>
-        (p.name || "").toLowerCase().includes(lowered) ||
-        p.address.toLowerCase().includes(lowered) ||
-        p.mint_x.toLowerCase().includes(lowered) ||
-        p.mint_y.toLowerCase().includes(lowered)
+      const filtered = all.filter(
+        (p) =>
+          (p.name || "").toLowerCase().includes(lowered) ||
+          p.address.toLowerCase().includes(lowered) ||
+          p.mint_x.toLowerCase().includes(lowered) ||
+          p.mint_y.toLowerCase().includes(lowered)
       );
       return filtered.map((p) => this.transformPoolToUnified(p));
     } catch (error) {
@@ -113,9 +131,8 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
 
   async getUserPositions(userAddress: string): Promise<UnifiedPosition[]> {
     try {
-      const positionsByPool = await this.dlmm.getAllLbPairPositionsByUser(
-        userAddress
-      );
+      const positionsByPool =
+        await this.dlmm.getAllLbPairPositionsByUser(userAddress);
 
       const unified: UnifiedPosition[] = [];
 
@@ -178,11 +195,19 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
           const address = pos.publicKey.toString();
           const pd = pos.positionData;
 
-          const totalXRaw = (pd.totalXAmountExcludeTransferFee ?? pd.totalXAmount) as any;
-          const totalYRaw = (pd.totalYAmountExcludeTransferFee ?? pd.totalYAmount) as any;
+          const totalXRaw = (pd.totalXAmountExcludeTransferFee ??
+            pd.totalXAmount) as any;
+          const totalYRaw = (pd.totalYAmountExcludeTransferFee ??
+            pd.totalYAmount) as any;
 
-          const tokenAAmount = this.fromRawAmount(totalXRaw, xDecimals).toString();
-          const tokenBAmount = this.fromRawAmount(totalYRaw, yDecimals).toString();
+          const tokenAAmount = this.fromRawAmount(
+            totalXRaw,
+            xDecimals
+          ).toString();
+          const tokenBAmount = this.fromRawAmount(
+            totalYRaw,
+            yDecimals
+          ).toString();
 
           const currentValueUsd =
             this.fromRawAmount(totalXRaw, xDecimals) * xPrice +
@@ -243,7 +268,10 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     }
   }
 
-  async getPosition(positionAddress: string, context?: PositionContext): Promise<UnifiedPosition> {
+  async getPosition(
+    positionAddress: string,
+    context?: PositionContext
+  ): Promise<UnifiedPosition> {
     try {
       this.validateAddress(positionAddress);
       const userAddress = context?.userAddress;
@@ -255,17 +283,27 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
 
       if (poolAddress) {
         this.validateAddress(poolAddress);
-        return await this.getPositionForPool(positionAddress, poolAddress, context?.userAddress);
+        return await this.getPositionForPool(
+          positionAddress,
+          poolAddress,
+          context?.userAddress
+        );
       }
 
-      throw new Error("userAddress or poolAddress is required to fetch position details from Meteora");
+      throw new Error(
+        "userAddress or poolAddress is required to fetch position details from Meteora"
+      );
     } catch (error) {
       return this.handleError(error, "getPosition");
     }
   }
 
-  private async getPositionForUser(positionAddress: string, userAddress: string): Promise<UnifiedPosition> {
-    const positionsByPool = await this.dlmm.getAllLbPairPositionsByUser(userAddress);
+  private async getPositionForUser(
+    positionAddress: string,
+    userAddress: string
+  ): Promise<UnifiedPosition> {
+    const positionsByPool =
+      await this.dlmm.getAllLbPairPositionsByUser(userAddress);
 
     for (const [poolAddress, info] of Array.from(positionsByPool.entries())) {
       const positionsData = ((info as any).lbPairPositionsData ?? []) as Array<{
@@ -285,10 +323,14 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       const yMint = info.lbPair.tokenYMint.toString();
 
       const xDecimals = Number(
-        (info as any).tokenX?.mint?.decimals ?? (info as any).tokenX?.decimals ?? 6
+        (info as any).tokenX?.mint?.decimals ??
+          (info as any).tokenX?.decimals ??
+          6
       );
       const yDecimals = Number(
-        (info as any).tokenY?.mint?.decimals ?? (info as any).tokenY?.decimals ?? 6
+        (info as any).tokenY?.mint?.decimals ??
+          (info as any).tokenY?.decimals ??
+          6
       );
 
       const prices = await this.prices.getPrices([xMint, yMint]);
@@ -342,7 +384,10 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     poolAddress: string,
     userAddress?: string
   ): Promise<UnifiedPosition> {
-    const { lbPair, lbPosition } = await this.dlmm.getPosition(positionAddress, poolAddress);
+    const { lbPair, lbPosition } = await this.dlmm.getPosition(
+      positionAddress,
+      poolAddress
+    );
     if (!lbPosition) {
       throw new Error("Position not found");
     }
@@ -399,21 +444,39 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     lbPairInfo: { activeId?: number; binStep?: number };
     metadataExtras?: Record<string, unknown>;
   }): UnifiedPosition {
-    const { poolAddress, positionAddress, tokenA, tokenB, positionData, priceMap, lbPairInfo, metadataExtras } = params;
+    const {
+      poolAddress,
+      positionAddress,
+      tokenA,
+      tokenB,
+      positionData,
+      priceMap,
+      lbPairInfo,
+      metadataExtras,
+    } = params;
 
     const tokenAPrice = priceMap[tokenA.address]?.price ?? 0;
     const tokenBPrice = priceMap[tokenB.address]?.price ?? 0;
 
-    const totalXRaw = positionData.totalXAmountExcludeTransferFee ?? positionData.totalXAmount ?? 0;
-    const totalYRaw = positionData.totalYAmountExcludeTransferFee ?? positionData.totalYAmount ?? 0;
+    const totalXRaw =
+      positionData.totalXAmountExcludeTransferFee ??
+      positionData.totalXAmount ??
+      0;
+    const totalYRaw =
+      positionData.totalYAmountExcludeTransferFee ??
+      positionData.totalYAmount ??
+      0;
 
     const tokenAAmountUi = this.fromRawAmount(totalXRaw, tokenA.decimals);
     const tokenBAmountUi = this.fromRawAmount(totalYRaw, tokenB.decimals);
 
-    const currentValueUsd = tokenAAmountUi * tokenAPrice + tokenBAmountUi * tokenBPrice;
+    const currentValueUsd =
+      tokenAAmountUi * tokenAPrice + tokenBAmountUi * tokenBPrice;
 
-    const feeXRaw = positionData.feeXExcludeTransferFee ?? positionData.feeX ?? 0;
-    const feeYRaw = positionData.feeYExcludeTransferFee ?? positionData.feeY ?? 0;
+    const feeXRaw =
+      positionData.feeXExcludeTransferFee ?? positionData.feeX ?? 0;
+    const feeYRaw =
+      positionData.feeYExcludeTransferFee ?? positionData.feeY ?? 0;
 
     const unclaimedFeesUsd =
       this.fromRawAmount(feeXRaw, tokenA.decimals) * tokenAPrice +
@@ -425,12 +488,18 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       this.fromRawAmount(claimedFeeXRaw, tokenA.decimals) * tokenAPrice +
       this.fromRawAmount(claimedFeeYRaw, tokenB.decimals) * tokenBPrice;
 
-    const lowerBinId = Number(positionData.lowerBinId ?? positionData.binLower ?? 0);
-    const upperBinId = Number(positionData.upperBinId ?? positionData.binUpper ?? 0);
+    const lowerBinId = Number(
+      positionData.lowerBinId ?? positionData.binLower ?? 0
+    );
+    const upperBinId = Number(
+      positionData.upperBinId ?? positionData.binUpper ?? 0
+    );
     const activeId = Number(lbPairInfo.activeId ?? 0);
     const binStepBps = Number(lbPairInfo.binStep ?? 0);
 
-    const updatedAt = this.toDate(positionData.lastUpdatedAt ?? positionData.updatedAt ?? Date.now());
+    const updatedAt = this.toDate(
+      positionData.lastUpdatedAt ?? positionData.updatedAt ?? Date.now()
+    );
     const createdAt = this.toDate(positionData.createdAt ?? updatedAt);
 
     return {
@@ -477,7 +546,9 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     if (typeof value === "object") {
       if (typeof (value as any).toNumber === "function") {
         const num = (value as any).toNumber();
-        return typeof num === "number" && Number.isFinite(num) ? num : undefined;
+        return typeof num === "number" && Number.isFinite(num)
+          ? num
+          : undefined;
       }
       if (typeof (value as any).toString === "function") {
         const parsed = Number((value as any).toString());
@@ -514,7 +585,9 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     return new Date(numeric);
   }
 
-  async createPosition(params: CreatePositionParams): Promise<TransactionResult> {
+  async createPosition(
+    params: CreatePositionParams
+  ): Promise<TransactionResult> {
     try {
       this.validateAddress(params.poolAddress);
       this.validateAddress(params.userAddress);
@@ -524,7 +597,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       const strategy = this.mapStrategy(params.strategy);
       const rangeInterval = Number(params.metadata?.rangeInterval ?? 10);
 
-      const res = await this.dlmm.buildCreatePositionTx(
+      const res = await this.dlmm.buildCreatePositionIxs(
         params.poolAddress,
         params.userAddress,
         new Decimal(params.tokenAAmount),
@@ -537,9 +610,40 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
         success: true,
         metadata: {
           instructions: res.instructions,
-          positionPublicKey: res.positionPublicKey.toBase58(),
+          positionKp: res.positionKp,
           estimatedFeesLamports: 0,
         },
+      };
+    } catch (error) {
+      return this.handleError(error, "createPosition");
+    }
+  }
+
+  async createPositionIx(
+    params: CreatePositionParams
+  ): Promise<CreatePositionResult> {
+    try {
+      this.validateAddress(params.poolAddress);
+      this.validateAddress(params.userAddress);
+      this.validateAmount(params.tokenAAmount);
+      this.validateAmount(params.tokenBAmount);
+
+      const strategy = this.mapStrategy(params.strategy);
+      const rangeInterval = Number(params.metadata?.rangeInterval ?? 10);
+
+      const res = await this.dlmm.buildCreatePositionIxs(
+        params.poolAddress,
+        params.userAddress,
+        new Decimal(params.tokenAAmount),
+        new Decimal(params.tokenBAmount),
+        strategy,
+        rangeInterval
+      );
+
+      return {
+        success: true,
+        instructions: res.instructions,
+        positionKp: res.positionKp,
       };
     } catch (error) {
       return this.handleError(error, "createPosition");
@@ -552,7 +656,9 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       // Expect caller to provide required context via metadata on the call site
       const ctx = (arguments as any)[1] || {};
       if (!ctx.userAddress || !ctx.poolAddress) {
-        throw new Error("Missing userAddress or poolAddress in metadata for closePosition");
+        throw new Error(
+          "Missing userAddress or poolAddress in metadata for closePosition"
+        );
       }
       const owner = new PublicKey(ctx.userAddress);
       const pool = new PublicKey(ctx.poolAddress);
@@ -579,7 +685,9 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       this.validateAddress(positionAddress);
       const ctx = (arguments as any)[1] || {};
       if (!ctx.userAddress || !ctx.poolAddress) {
-        throw new Error("Missing userAddress or poolAddress in metadata for claimFees");
+        throw new Error(
+          "Missing userAddress or poolAddress in metadata for claimFees"
+        );
       }
       const owner = new PublicKey(ctx.userAddress);
       const pool = new PublicKey(ctx.poolAddress);
@@ -620,7 +728,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
         new PublicKey(positionAddress)
       );
 
-      const createRes = await this.dlmm.buildCreatePositionTx(
+      const createRes = await this.dlmm.buildCreatePositionIxs(
         poolAddress,
         userAddress,
         new Decimal(newXA),
@@ -633,7 +741,10 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
         success: true,
         metadata: {
           close: { instructions: closeRes.instructions },
-          create: { instructions: createRes.instructions, positionPublicKey: createRes.positionPublicKey.toBase58() },
+          create: {
+            instructions: createRes.instructions,
+            positionPublicKey: createRes.positionPublicKey.toBase58(),
+          },
         },
       };
     } catch (error) {
@@ -675,7 +786,9 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
   }
 
   private transformPoolToUnified(p: MeteoraDlmmPoolResponse): UnifiedPool {
-    const [symA, symB] = (p.name || "").split("-").map((s) => s?.trim().toUpperCase());
+    const [symA, symB] = (p.name || "")
+      .split("-")
+      .map((s) => s?.trim().toUpperCase());
 
     const tokenA: Token = {
       address: p.mint_x,
@@ -693,9 +806,11 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
 
     const volume24h = Number(p.trade_volume_24h ?? 0);
     const fees24h = Number(p.fees_24h ?? 0);
-    const feeTvlRatio24h = (typeof (p as any).fee_tvl_ratio === "object"
-      ? Number((p as any).fee_tvl_ratio?.hour_24 ?? 0)
-      : Number((p as any).fee_tvl_ratio ?? 0)) as number;
+    const feeTvlRatio24h = (
+      typeof (p as any).fee_tvl_ratio === "object"
+        ? Number((p as any).fee_tvl_ratio?.hour_24 ?? 0)
+        : Number((p as any).fee_tvl_ratio ?? 0)
+    ) as number;
 
     return {
       id: p.address,

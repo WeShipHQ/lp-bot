@@ -56,10 +56,32 @@ export class RebalancePositionUseCase {
 
       const adapter: IDexAdapter = this.dexRegistry.get(dexType);
 
+      const unifiedPosition = await adapter.getPosition(positionAddress, {
+        userAddress: command.userAddress,
+        poolAddress: position.poolAddress,
+      });
+
+      const currentTokenAAmount = unifiedPosition?.tokenAAmount ?? String(position.initialTokenXAmount);
+      const currentTokenBAmount = unifiedPosition?.tokenBAmount ?? String(position.initialTokenYAmount);
+
+      const strategyForMetadata =
+        command.newStrategy ?? (position as any).strategyType ?? 'spot';
+
+      const rangeInterval =
+        (command.metadata?.rangeInterval as number | undefined) ?? 10;
+
       const params: RebalanceParams = {
         newStrategy: command.newStrategy,
         slippage: command.slippage,
-        metadata: command.metadata,
+        metadata: {
+          ...(command.metadata ?? {}),
+          userAddress: command.userAddress,
+          poolAddress: position.poolAddress,
+          tokenAAmount: currentTokenAAmount,
+          tokenBAmount: currentTokenBAmount,
+          strategy: strategyForMetadata,
+          rangeInterval,
+        },
       };
 
       let txResult: TransactionResult;
@@ -96,14 +118,33 @@ export class RebalancePositionUseCase {
 
       // Record pending transaction for async processing
       try {
-        const metadata = {
-          dex: dexType,
-          positionAddress,
-          poolAddress: position.poolAddress,
+        const rebalanceContext = {
+          positionId: command.positionId,
+          userId: command.userId,
           userAddress: command.userAddress,
-          params,
-          extras: txResult.metadata ?? command.metadata ?? {},
-        } as Record<string, any>;
+          poolAddress: position.poolAddress,
+          dex: dexType,
+          oldPositionAddress: positionAddress,
+          tokenAMint: (position.tokenX as any).mint || (position.tokenX as any).address,
+          tokenBMint: (position.tokenY as any).mint || (position.tokenY as any).address,
+          tokenASymbol: (position.tokenX as any).symbol,
+          tokenBSymbol: (position.tokenY as any).symbol,
+          tokenADecimals: (position.tokenX as any).decimals,
+          tokenBDecimals: (position.tokenY as any).decimals,
+          triggerReason: (command.metadata?.trigger as string) ?? 'manual',
+        };
+
+        const metadata = {
+          command: {
+            positionId: command.positionId,
+            userId: command.userId,
+            dex: dexType,
+            oldPositionAddress: positionAddress,
+            poolAddress: position.poolAddress,
+          },
+          adapterMetadata: txResult.metadata ?? {},
+          rebalanceContext,
+        };
 
         await db.insert(pendingTransactions).values({
           signature,

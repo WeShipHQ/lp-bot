@@ -475,7 +475,7 @@ export const pendingTransactions = pgTable("PendingTransaction", {
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   status: pendingTransactionStatusEnum("status").notNull().default("PENDING"),
-  metadata: text("metadata"),
+  metadata: jsonb("metadata"),
   retryCount: integer("retryCount").notNull().default(0),
   maxRetries: integer("maxRetries").notNull().default(3),
   lastProcessedAt: timestamp("lastProcessedAt"),
