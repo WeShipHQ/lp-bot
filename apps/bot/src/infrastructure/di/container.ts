@@ -104,7 +104,7 @@ function registerBase() {
   // Repositories (singleton)
   container
     .bind<IPositionRepository>(DI_TOKENS.PositionRepo)
-    .toDynamicValue(() => new PositionRepository(db as any))
+    .toDynamicValue(() => new PositionRepository(db))
     .inSingletonScope();
 
   container

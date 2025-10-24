@@ -10,6 +10,8 @@ import {
   TrendingParams,
   PaginatedTrendingPools,
   UrlParseResult,
+  ClosePositionResult,
+  ClosePositionParams,
 } from "./core.types";
 
 export interface PositionContext {
@@ -36,6 +38,7 @@ export interface IDexAdapter {
   createPosition(params: CreatePositionParams): Promise<TransactionResult>;
   createPositionIx(params: CreatePositionParams): Promise<CreatePositionResult>;
   closePosition(positionAddress: string): Promise<TransactionResult>;
+  closePositionIx(params: ClosePositionParams): Promise<ClosePositionResult>;
   claimFees(positionAddress: string): Promise<TransactionResult>;
   rebalancePosition(
     positionAddress: string,

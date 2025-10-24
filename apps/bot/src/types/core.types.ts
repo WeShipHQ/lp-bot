@@ -174,3 +174,15 @@ export class DexAdapterError extends Error {
     this.name = "DexAdapterError";
   }
 }
+
+export interface ClosePositionParams {
+  poolAddress: string;
+  userAddress: string;
+  positionAddress: string;
+}
+
+export interface ClosePositionResult {
+  success: boolean;
+  instructions: TransactionInstruction[];
+  error?: string;
+}

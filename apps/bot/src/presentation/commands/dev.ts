@@ -10,17 +10,17 @@ export function devCommand(
   _server: FastifyInstance
 ) {
   bot.command("dev", async (ctx) => {
-    // init();
-    // return ctx.replyWithMarkdown(`Dev command`, DISABLE_LINK_PREVIEW);
+    init();
+    return ctx.replyWithMarkdown(`Dev command`, DISABLE_LINK_PREVIEW);
 
     // return ctx.scene.enter(SCENE_IDS.CREATE_POSITION_SCENE, {
     //   poolAddress: "5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6",
     //   dex: "meteora",
     // });
 
-    return ctx.scene.enter(SCENE_IDS.POSITION_DETAIL_SCENE, {
-      positionId: "05709532-31cf-4d47-b360-de90d9db8b8e",
-      positionAddress: "HNpsi26Am2ZsW94sfkAoM8onqkQsXkkCxYDsPLSUECJe",
-    });
+    // return ctx.scene.enter(SCENE_IDS.POSITION_DETAIL_SCENE, {
+    //   positionId: "05709532-31cf-4d47-b360-de90d9db8b8e",
+    //   positionAddress: "HNpsi26Am2ZsW94sfkAoM8onqkQsXkkCxYDsPLSUECJe",
+    // });
   });
 }

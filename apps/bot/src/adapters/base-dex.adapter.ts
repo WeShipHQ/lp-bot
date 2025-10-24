@@ -12,6 +12,8 @@ import {
   UrlParseResult,
   DexAdapterError,
   CreatePositionResult,
+  ClosePositionParams,
+  ClosePositionResult,
 } from "../types/core.types";
 
 export abstract class BaseDexAdapter implements IDexAdapter {
@@ -36,6 +38,9 @@ export abstract class BaseDexAdapter implements IDexAdapter {
     params: CreatePositionParams
   ): Promise<CreatePositionResult>;
   abstract closePosition(positionAddress: string): Promise<TransactionResult>;
+  abstract closePositionIx(
+    params: ClosePositionParams
+  ): Promise<ClosePositionResult>;
   abstract claimFees(positionAddress: string): Promise<TransactionResult>;
   abstract rebalancePosition(
     positionAddress: string,

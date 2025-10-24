@@ -11,6 +11,8 @@ import {
   UnifiedPool,
   UnifiedPosition,
   UrlParseResult,
+  ClosePositionResult,
+  ClosePositionParams,
 } from "@/types/core.types";
 import { MeteoraApiClient, meteoraApiClient } from "./meteora-api.client";
 import { Token } from "@/types/token.types";
@@ -676,6 +678,35 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
         metadata: {
           instructions: res.instructions,
         },
+      };
+    } catch (error) {
+      return this.handleError(error, "closePosition");
+    }
+  }
+
+  async closePositionIx(params: ClosePositionParams): Promise<ClosePositionResult> {
+    try {
+      this.validateAddress(params.poolAddress);
+      this.validateAddress(params.userAddress);
+      this.validateAddress(params.positionAddress);
+
+      if (!params.userAddress || !params.poolAddress) {
+        throw new Error(
+          "Missing userAddress or poolAddress in metadata for closePosition"
+        );
+      }
+      const owner = new PublicKey(params.userAddress);
+      const pool = new PublicKey(params.poolAddress);
+
+      const res = await this.dlmm.buildClosePositionTx(
+        owner,
+        pool,
+        new PublicKey(params.positionAddress)
+      );
+
+      return {
+        success: true,
+        instructions: res.instructions,
       };
     } catch (error) {
       return this.handleError(error, "closePosition");

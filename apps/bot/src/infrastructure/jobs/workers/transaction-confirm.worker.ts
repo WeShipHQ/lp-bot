@@ -23,6 +23,7 @@ import {
   parseMeteoraInstructions,
   MeteoraDlmmInstruction,
 } from "@/utils/tx-parser";
+import { PositionClosureContext } from "@/application";
 
 export class TransactionConfirmWorker
   implements IWorker<TransactionConfirmJobData>
@@ -546,11 +547,9 @@ export class TransactionConfirmWorker
     positionAddress?: string
   ): Promise<void> {
     try {
-      const [ptx] = await db
-        .select()
-        .from(pendingTransactions)
-        .where(eq(pendingTransactions.signature, signature))
-        .limit(1);
+      const ptx = await db.query.pendingTransactions.findFirst({
+        where: eq(pendingTransactions.signature, signature),
+      });
 
       if (!ptx || !ptx.metadata) {
         logger.error(
@@ -562,24 +561,10 @@ export class TransactionConfirmWorker
         return;
       }
 
-      const metadata =
-        typeof ptx.metadata === "string"
-          ? JSON.parse(ptx.metadata)
-          : ptx.metadata;
+      const metadata = ptx.metadata as any;
+
       const closeContext = metadata.closeContext as
-        | {
-            userId: string;
-            positionId: string;
-            positionAddress: string;
-            poolAddress: string;
-            closureReason: "user_close" | "stop_loss" | "take_profit";
-            tokenAMint: string;
-            tokenBMint: string;
-            finalTokenAAmount?: string;
-            finalTokenBAmount?: string;
-            unclaimedFeeXAmount?: string;
-            unclaimedFeeYAmount?: string;
-          }
+        | PositionClosureContext
         | undefined;
 
       if (!closeContext) {

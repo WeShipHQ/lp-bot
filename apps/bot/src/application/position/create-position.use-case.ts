@@ -196,8 +196,6 @@ export class CreatePositionUseCase {
         };
       }
 
-      // let signature =
-      // "5jzEkBvsZTMb5xw9ZWQqqvdepSpuNNmHyGuEVKx7A96KJqmkH7KwbvQL1Yp8qytvXT2vEZcbYjv4FarqezJdhdzv";
       let signature = "" as string | undefined;
       try {
         signature = await WalletService.signAndSendTransactionWithJito(
