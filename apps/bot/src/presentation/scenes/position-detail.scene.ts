@@ -425,10 +425,8 @@ positionDetailScene.action(
     try {
       const uc = container.get(ClaimFeesUseCase);
       const res = await uc.execute({
-        userId: ctx.user.id,
+        user: ctx.user,
         positionId,
-        userAddress: ctx.user.walletAddress,
-        walletId: ctx.user.walletId ?? undefined,
       });
 
       if (!res.success) {
@@ -447,9 +445,13 @@ positionDetailScene.action(
           ? `• Claimed Fees (est): ${formatCurrency(res.claimedFeesUsd, { maxDecimals: 2 })}\n`
           : "";
 
+      const conversionLine =
+        "• Conversion: Fees will be automatically swapped to SOL after confirmation.\n";
+
       const successMessage =
         `✅ *Fees Claimed Successfully*\n\n` +
         claimedLine +
+        conversionLine +
         `Transaction: [View on Solscan](${getSolscanLink("tx", res.signature ?? "")})`;
 
       await ctx.telegram.editMessageText(

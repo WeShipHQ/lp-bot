@@ -33,6 +33,7 @@ import {
   formatPercentage,
   formatPrice,
 } from "@/presentation/formatters/base.formatter";
+import { claimFeesPersistenceService } from "@/services/claim-fees-persistence.service";
 
 type CloseInstructionExtractionResult = {
   positionAddress?: string;
@@ -133,6 +134,13 @@ export class TransactionConfirmWorker
           );
         } else if (operationType === "CLOSE_POSITION") {
           await this.handleClosePosition(
+            signature,
+            userId,
+            positionId,
+            positionAddress
+          );
+        } else if (operationType === "CLAIM_FEES") {
+          await this.handleClaimFees(
             signature,
             userId,
             positionId,
@@ -385,6 +393,313 @@ export class TransactionConfirmWorker
         error,
         signature,
         userId,
+        positionAddress,
+      });
+      throw error;
+    }
+  }
+
+  private async handleClaimFees(
+    signature: string,
+    userId: string,
+    positionId?: string,
+    positionAddress?: string
+  ): Promise<void> {
+    try {
+      const [ptx] = await db
+        .select()
+        .from(pendingTransactions)
+        .where(eq(pendingTransactions.signature, signature))
+        .limit(1);
+
+      if (!ptx || !ptx.metadata) {
+        logger.error(
+          "[TxConfirmWorker] No pending transaction metadata for claim fees",
+          { signature }
+        );
+        return;
+      }
+
+      const metadata =
+        typeof ptx.metadata === "string"
+          ? JSON.parse(ptx.metadata)
+          : ptx.metadata;
+
+      const claimContext = metadata?.claimContext as
+        | {
+            userId?: string;
+            positionId?: string;
+            positionAddress?: string;
+            poolAddress?: string;
+            userAddress?: string;
+            tokenAMint?: string;
+            tokenBMint?: string;
+            tokenASymbol?: string;
+            tokenBSymbol?: string;
+            tokenADecimals?: number;
+            tokenBDecimals?: number;
+            convertToSol?: boolean;
+            estimatedFeesUsd?: number;
+          }
+        | undefined;
+
+      if (!claimContext) {
+        logger.error("[TxConfirmWorker] Missing claim context", {
+          signature,
+        });
+        return;
+      }
+
+      const solMint = "So11111111111111111111111111111111111111112";
+
+      let effectivePositionId =
+        positionId ?? claimContext.positionId ?? undefined;
+      const effectiveUserId = claimContext.userId ?? userId;
+      const effectivePositionAddress =
+        positionAddress ?? claimContext.positionAddress ?? undefined;
+
+      if (!effectivePositionId && claimContext.positionAddress) {
+        try {
+          const found = await this.positionRepository.findByPositionAddress(
+            claimContext.positionAddress
+          );
+          effectivePositionId = found?.id;
+        } catch (error) {
+          logger.warn(
+            "[TxConfirmWorker] Failed to resolve position ID from address",
+            {
+              signature,
+              error,
+              positionAddress: claimContext.positionAddress,
+            }
+          );
+        }
+      }
+
+      if (!effectivePositionId || !effectivePositionAddress) {
+        logger.error(
+          "[TxConfirmWorker] Insufficient context to process claim fees",
+          {
+            signature,
+            effectivePositionId,
+            effectivePositionAddress,
+          }
+        );
+        return;
+      }
+
+      const connection = this.solana.getConnection();
+      const parsedTransaction = await connection.getParsedTransaction(
+        signature,
+        {
+          maxSupportedTransactionVersion: 0,
+        }
+      );
+
+      if (!parsedTransaction) {
+        logger.error("[TxConfirmWorker] Claim transaction not found", {
+          signature,
+        });
+        return;
+      }
+
+      const meteoraInstructions = parseMeteoraInstructions(parsedTransaction);
+      const claimInstructions = meteoraInstructions.filter(
+        (ix) => ix.instructionType === "claim"
+      );
+
+      if (claimInstructions.length === 0) {
+        logger.warn("[TxConfirmWorker] No claim instructions detected", {
+          signature,
+        });
+        return;
+      }
+
+      const aggregateTransfers = new Map<string, number>();
+      for (const instruction of claimInstructions) {
+        for (const transfer of instruction.tokenTransfers ?? []) {
+          const current = aggregateTransfers.get(transfer.mint) ?? 0;
+          aggregateTransfers.set(transfer.mint, current + transfer.amount);
+        }
+      }
+
+      const tokenAMint = claimContext.tokenAMint ?? "";
+      const tokenBMint = claimContext.tokenBMint ?? "";
+      const tokenADecimals = claimContext.tokenADecimals ?? 0;
+      const tokenBDecimals = claimContext.tokenBDecimals ?? 0;
+
+      const rawAmountA = aggregateTransfers.get(tokenAMint) ?? 0;
+      const rawAmountB = aggregateTransfers.get(tokenBMint) ?? 0;
+
+      const rawToDecimal = (raw: number, decimals: number) =>
+        new Decimal(raw ?? 0).div(Decimal.pow(10, decimals ?? 0));
+
+      const tokenAUiDecimal = rawToDecimal(rawAmountA, tokenADecimals);
+      const tokenBUiDecimal = rawToDecimal(rawAmountB, tokenBDecimals);
+
+      const formatAmount = (value: Decimal, decimals: number) => {
+        if (value.isZero()) return "0";
+        const precision = Math.min(Math.max(decimals, 0), 9);
+        return value
+          .toDecimalPlaces(precision, Decimal.ROUND_DOWN)
+          .toString();
+      };
+
+      const tokenAAmountStr = formatAmount(tokenAUiDecimal, tokenADecimals);
+      const tokenBAmountStr = formatAmount(tokenBUiDecimal, tokenBDecimals);
+
+      const priceMints = Array.from(
+        new Set(
+          [tokenAMint, tokenBMint, solMint].filter((mint) => mint && mint.length)
+        )
+      );
+
+      const priceData = await this.priceService.getPrices(priceMints);
+      const tokenAPriceUsd = priceData[tokenAMint]?.price ?? 0;
+      const tokenBPriceUsd = priceData[tokenBMint]?.price ?? 0;
+      const solPriceUsd = priceData[solMint]?.price ?? 0;
+
+      const claimedUsdDecimal = tokenAUiDecimal
+        .mul(tokenAPriceUsd)
+        .add(tokenBUiDecimal.mul(tokenBPriceUsd));
+      const claimedUsdValue = claimedUsdDecimal.toFixed(2);
+
+      let solReceivedDecimal = new Decimal(0);
+      if (claimContext.convertToSol !== false) {
+        if (tokenAMint === solMint) {
+          solReceivedDecimal = solReceivedDecimal.add(tokenAUiDecimal);
+        } else if (tokenAPriceUsd > 0 && solPriceUsd > 0) {
+          solReceivedDecimal = solReceivedDecimal.add(
+            tokenAUiDecimal.mul(tokenAPriceUsd).div(solPriceUsd)
+          );
+        }
+
+        if (tokenBMint === solMint) {
+          solReceivedDecimal = solReceivedDecimal.add(tokenBUiDecimal);
+        } else if (tokenBPriceUsd > 0 && solPriceUsd > 0) {
+          solReceivedDecimal = solReceivedDecimal.add(
+            tokenBUiDecimal.mul(tokenBPriceUsd).div(solPriceUsd)
+          );
+        }
+      }
+
+      const solReceivedStr = solReceivedDecimal.isZero()
+        ? undefined
+        : solReceivedDecimal
+            .toDecimalPlaces(9, Decimal.ROUND_DOWN)
+            .toString();
+
+      let snapshotData:
+        | {
+            tokenXAmount: string;
+            tokenYAmount: string;
+            currentValueUsd: string;
+            unclaimedFeesX?: string;
+            unclaimedFeesY?: string;
+            unclaimedFeesUsd?: string;
+          }
+        | undefined;
+
+      if (claimContext.poolAddress && claimContext.userAddress) {
+        try {
+          const onchainPosition = await this.meteoraAdapter.getPosition(
+            effectivePositionAddress,
+            {
+              userAddress: claimContext.userAddress,
+              poolAddress: claimContext.poolAddress,
+            }
+          );
+
+          if (onchainPosition) {
+            snapshotData = {
+              tokenXAmount: onchainPosition.tokenAAmount ?? "0",
+              tokenYAmount: onchainPosition.tokenBAmount ?? "0",
+              currentValueUsd: new Decimal(
+                onchainPosition.currentValueUsd ?? 0
+              ).toFixed(2),
+              unclaimedFeesUsd: new Decimal(
+                onchainPosition.unclaimedFeesUsd ?? 0
+              ).toFixed(2),
+              unclaimedFeesX: "0",
+              unclaimedFeesY: "0",
+            };
+          }
+        } catch (error) {
+          logger.warn(
+            "[TxConfirmWorker] Failed to fetch on-chain position for snapshot",
+            {
+              error,
+              signature,
+              positionAddress: effectivePositionAddress,
+            }
+          );
+        }
+      }
+
+      await claimFeesPersistenceService.recordClaim({
+        signature,
+        context: {
+          positionId: effectivePositionId,
+          userId: effectiveUserId,
+        },
+        claimed: {
+          tokenXAmount: tokenAAmountStr,
+          tokenYAmount: tokenBAmountStr,
+          claimedUsdValue,
+          tokenXPriceUsd,
+          tokenYPriceUsd,
+          solReceived: solReceivedStr,
+        },
+        prices: { solUsd: solPriceUsd },
+        claimType: "manual",
+        snapshot: snapshotData,
+      });
+
+      await this.cache.invalidate(
+        CachePatterns.portfolioPattern(effectiveUserId)
+      );
+      await this.cache.invalidate(
+        CachePatterns.positionPattern(effectivePositionId)
+      );
+
+      try {
+        const jobQueue = new JobQueueService({ producerOnly: true });
+        const usdLabel = claimedUsdDecimal.isZero()
+          ? "$0.00"
+          : `$${claimedUsdDecimal.toFixed(2)}`;
+        const solLabel = solReceivedStr
+          ? `${solReceivedDecimal
+              .toDecimalPlaces(6, Decimal.ROUND_DOWN)
+              .toString()} SOL`
+          : "SOL";
+
+        await jobQueue.enqueue(JOB_NOTIFICATION, {
+          userId: effectiveUserId,
+          notification: {
+            type: "general",
+            title: "Fees Claimed",
+            message: `Claim confirmed: ~${usdLabel} converted to ${solLabel}.`,
+          },
+        });
+      } catch (error) {
+        logger.error(
+          "[TxConfirmWorker] Failed to enqueue claim notification",
+          { error, signature }
+        );
+      }
+
+      logger.info("[TxConfirmWorker] CLAIM_FEES handled successfully", {
+        signature,
+        positionId: effectivePositionId,
+        claimedUsdValue,
+        solReceived: solReceivedStr,
+      });
+    } catch (error) {
+      logger.error("[TxConfirmWorker] Failed to handle CLAIM_FEES", {
+        error,
+        signature,
+        userId,
+        positionId,
         positionAddress,
       });
       throw error;
