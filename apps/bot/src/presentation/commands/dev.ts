@@ -10,11 +10,16 @@ export function devCommand(
   _server: FastifyInstance
 ) {
   bot.command("dev", async (ctx) => {
-    init();
-    return ctx.replyWithMarkdown(`Dev command`, DISABLE_LINK_PREVIEW);
+    // init();
+    // return ctx.replyWithMarkdown(`Dev command`, DISABLE_LINK_PREVIEW);
+
     // return ctx.scene.enter(SCENE_IDS.CREATE_POSITION_SCENE, {
     //   poolAddress: "5rCf1DM8LjKTw4YqhnoLcngyZYeNnQqztScTogYHAS6",
     //   dex: "meteora",
     // });
+
+    return ctx.scene.enter(SCENE_IDS.POSITION_DETAIL_SCENE, {
+      positionAddress: "HNpsi26Am2ZsW94sfkAoM8onqkQsXkkCxYDsPLSUECJe",
+    });
   });
 }

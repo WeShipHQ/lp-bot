@@ -591,11 +591,11 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     try {
       this.validateAddress(params.poolAddress);
       this.validateAddress(params.userAddress);
-      this.validateAmount(params.tokenAAmount);
-      this.validateAmount(params.tokenBAmount);
+      // this.validateAmount(params.tokenAAmount);
+      // this.validateAmount(params.tokenBAmount);
 
       const strategy = this.mapStrategy(params.strategy);
-      const rangeInterval = Number(params.metadata?.rangeInterval ?? 10);
+      const rangeInterval = Number(params?.rangeInterval ?? 10);
 
       const res = await this.dlmm.buildCreatePositionIxs(
         params.poolAddress,
@@ -625,12 +625,12 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     try {
       this.validateAddress(params.poolAddress);
       this.validateAddress(params.userAddress);
-      this.validateAmount(params.tokenAAmount);
-      this.validateAmount(params.tokenBAmount);
+      // this.validateAmount(params.tokenAAmount);
+      // this.validateAmount(params.tokenBAmount);
 
       const strategy = this.mapStrategy(params.strategy);
-      const rangeInterval = Number(params.metadata?.rangeInterval ?? 10);
-
+      const rangeInterval = Number(params?.rangeInterval ?? 10);
+      console.log("rangeInterval", strategy, rangeInterval);
       const res = await this.dlmm.buildCreatePositionIxs(
         params.poolAddress,
         params.userAddress,
@@ -646,6 +646,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
         positionKp: res.positionKp,
       };
     } catch (error) {
+      console.log("createPositionIx failed", { error, params });
       return this.handleError(error, "createPosition");
     }
   }
@@ -654,6 +655,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     try {
       this.validateAddress(positionAddress);
       // Expect caller to provide required context via metadata on the call site
+      // @ts-expect-error
       const ctx = (arguments as any)[1] || {};
       if (!ctx.userAddress || !ctx.poolAddress) {
         throw new Error(
@@ -683,6 +685,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
   async claimFees(positionAddress: string): Promise<TransactionResult> {
     try {
       this.validateAddress(positionAddress);
+      // @ts-expect-error
       const ctx = (arguments as any)[1] || {};
       if (!ctx.userAddress || !ctx.poolAddress) {
         throw new Error(
@@ -743,7 +746,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
           close: { instructions: closeRes.instructions },
           create: {
             instructions: createRes.instructions,
-            positionPublicKey: createRes.positionPublicKey.toBase58(),
+            positionKp: createRes.positionKp,
           },
         },
       };

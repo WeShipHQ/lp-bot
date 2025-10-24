@@ -26,11 +26,12 @@ export interface PositionCreationContext {
   // User context
   userId: string;
   walletAddress: string;
-  // walletId?: string;
 
   // Pool context
   dex: DexType;
   poolAddress: string;
+  tokenA: Token;
+  tokenB: Token;
   strategy: string;
 
   // Deposit details
@@ -41,12 +42,6 @@ export interface PositionCreationContext {
   // Token amounts (UI amounts)
   tokenAAmount: string;
   tokenBAmount: string;
-  tokenAMint: string;
-  tokenBMint: string;
-  tokenASymbol?: string;
-  tokenBSymbol?: string;
-  tokenADecimals?: number;
-  tokenBDecimals?: number;
 
   // Price range
   priceRange?: {
@@ -62,11 +57,11 @@ export interface PositionCreationContext {
   tpPercentage?: number;
 
   // Price quotes (for USD conversion)
-  quotes?: {
-    solUsd?: number;
-    tokenAUsd?: number;
-    tokenBUsd?: number;
-  };
+  // quotes?: {
+  //   solUsd?: number;
+  //   tokenAUsd?: number;
+  //   tokenBUsd?: number;
+  // };
 
   // Transaction metadata
   expectedFeesLamports?: number;
@@ -85,12 +80,8 @@ export interface CreatePositionCommand {
   poolAddress: string;
   tokenA: Token;
   tokenB: Token;
-  // userAddress: string; // wallet public key (base58)
-  // walletId?: string; // optional Privy wallet id if a transaction service needs it
 
   // Amounts (UI amounts as strings)
-  // tokenA: Token;
-  // tokenB: Token;
   tokenAAmount: string;
   tokenBAmount: string;
 
@@ -98,7 +89,15 @@ export interface CreatePositionCommand {
   strategy?: string;
   slippage?: number;
   autoRebalance?: boolean;
-  // metadata?: Record<string, any>;
+  depositMethod?: "sol_auto_convert" | "single_sided";
+  depositSource?: "sol_convert" | "token_balance";
+  solAmount?: number;
+
+  priceRange?: {
+    min: number;
+    max: number;
+    rangeInterval: number;
+  };
 }
 
 export interface CreatePositionResult {
@@ -131,13 +130,14 @@ import {
 import { CachePatterns } from "@/infrastructure/cache/cache-keys";
 import { WalletService } from "@/services/wallet.service";
 import { Token } from "@/types/token.types";
+import Decimal from "decimal.js";
 
 export class CreatePositionUseCase {
   private readonly cache: ICacheService;
   constructor(
-    private readonly positionRepository: IPositionRepository,
+    // private readonly positionRepository: IPositionRepository,
     private readonly dexRegistry: DexRegistryLike,
-    private readonly transactionService: ITransactionService,
+    // private readonly transactionService: ITransactionService,
     cacheService?: ICacheService
   ) {
     this.cache = cacheService ?? getCacheService();
@@ -164,46 +164,52 @@ export class CreatePositionUseCase {
       const adapterParams: CreatePositionParams = {
         poolAddress: command.poolAddress,
         userAddress: command.user.walletAddress,
-        tokenAAmount: command.tokenAAmount,
-        tokenBAmount: command.tokenBAmount,
+        tokenAAmount: new Decimal(command.tokenAAmount)
+          .mul(Decimal.pow(10, command.tokenA.decimals))
+          .toString(),
+        tokenBAmount: new Decimal(command.tokenBAmount)
+          .mul(Decimal.pow(10, command.tokenB.decimals))
+          .toString(),
         strategy: command.strategy,
         slippage: command.slippage,
-        // metadata: command.metadata,
       };
 
-      // let txResult: CreatePositionResultType;
-      // try {
-      //   txResult = await adapter.createPositionIx(adapterParams);
-      // } catch (error) {
-      //   logger.error("Adapter.createPositionIx failed", { error, command });
-      //   return {
-      //     success: false,
-      //     error:
-      //       error instanceof Error
-      //         ? error.message
-      //         : "Failed to create position transaction",
-      //   };
-      // }
+      let txResult: CreatePositionResultType;
+      try {
+        txResult = await adapter.createPositionIx(adapterParams);
+      } catch (error) {
+        logger.error("Adapter.createPositionIx failed", { error, command });
+        console.log("Adapter.createPositionIx failed", { error, command });
+        return {
+          success: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Failed to create position transaction",
+        };
+      }
 
-      // if (!txResult?.success) {
-      //   return {
-      //     success: false,
-      //     error: txResult?.error || "Create position failed",
-      //   };
-      // }
+      if (!txResult?.success) {
+        return {
+          success: false,
+          error: txResult?.error || "Create position failed",
+        };
+      }
 
-      let signature = '5jzEkBvsZTMb5xw9ZWQqqvdepSpuNNmHyGuEVKx7A96KJqmkH7KwbvQL1Yp8qytvXT2vEZcbYjv4FarqezJdhdzv';
-      // let signature = "" as string | undefined;
-      // try {
-      //   signature = await WalletService.signAndSendTransactionWithJito(
-      //     command.user,
-      //     txResult.instructions,
-      //     [txResult.positionKp],
-      //     []
-      //   );
-      // } catch (err) {
-      //   logger.error("Transaction submission failed", { err, command });
-      // }
+      // let signature =
+      // "5jzEkBvsZTMb5xw9ZWQqqvdepSpuNNmHyGuEVKx7A96KJqmkH7KwbvQL1Yp8qytvXT2vEZcbYjv4FarqezJdhdzv";
+      let signature = "" as string | undefined;
+      try {
+        signature = await WalletService.signAndSendTransactionWithJito(
+          command.user,
+          txResult.instructions,
+          [txResult.positionKp],
+          []
+        );
+      } catch (err) {
+        console.log("Transaction submission failed", { err, command });
+        logger.error("Transaction submission failed", { err, command });
+      }
 
       if (!signature) {
         return {
@@ -212,8 +218,9 @@ export class CreatePositionUseCase {
         };
       }
 
-      // const adapterPositionAddress = txResult.positionKp.publicKey.toBase58();
-      const adapterPositionAddress = '6qmQZUHMYxPRcH8suHdH27t6CrsTvEtcGK7oH8iyLxLo'
+      const adapterPositionAddress = txResult.positionKp.publicKey.toBase58();
+      // const adapterPositionAddress =
+      // "6qmQZUHMYxPRcH8suHdH27t6CrsTvEtcGK7oH8iyLxLo";
 
       // const rawContext = (command.metadata?.positionContext ??
       //   command.metadata) as PositionCreationContext | undefined;
@@ -221,21 +228,25 @@ export class CreatePositionUseCase {
       const positionContext: PositionCreationContext = {
         userId: command.user.id,
         walletAddress: command.user.walletAddress,
+
         dex: command.dex,
         poolAddress: command.poolAddress,
+        tokenA: command.tokenA,
+        tokenB: command.tokenB,
         strategy: command.strategy ?? "spot",
-        depositMethod: "sol_auto_convert",
+
+        depositMethod: command.depositMethod ?? "sol_auto_convert",
+        depositSource: command.depositSource,
+        solAmount: command.solAmount,
+
         tokenAAmount: command.tokenAAmount,
         tokenBAmount: command.tokenBAmount,
-        tokenAMint: command.tokenA.address,
-        tokenBMint: command.tokenB.address,
-        tokenASymbol: command.tokenA.symbol,
-        tokenBSymbol: command.tokenB.symbol,
-        tokenADecimals: command.tokenA.decimals,
-        tokenBDecimals: command.tokenB.decimals,
+
         autoRebalance: command.autoRebalance ?? false,
         slippage: command.slippage,
+
         positionAddress: adapterPositionAddress,
+        priceRange: command.priceRange,
       };
 
       const pendingMetadata = {
@@ -247,7 +258,6 @@ export class CreatePositionUseCase {
           tokenAAmount: command.tokenAAmount,
           tokenBAmount: command.tokenBAmount,
         },
-        // adapterMetadata: txResult.metadata ?? {},
         positionContext,
       };
 
@@ -257,7 +267,7 @@ export class CreatePositionUseCase {
           operationType: "CREATE_POSITION",
           userId: command.user.id,
           status: "PENDING",
-          metadata: JSON.stringify(pendingMetadata),
+          metadata: pendingMetadata,
           retryCount: 0,
           maxRetries: 3,
           createdAt: new Date(),

@@ -1,5 +1,6 @@
 import { Token } from "@/types/token.types";
 import { Keypair, TransactionInstruction } from "@solana/web3.js";
+import Decimal from "decimal.js";
 
 export type DexType = "meteora" | "saros" | "orca" | "raydium";
 export type PoolType = "DLMM" | "DAMM" | "CLMM" | "AMM";
@@ -107,6 +108,7 @@ export interface CreatePositionParams {
   tokenBAmount: string;
   strategy?: string;
   slippage?: number;
+  rangeInterval?: number;
   // metadata?: Record<string, any>;
 }
 

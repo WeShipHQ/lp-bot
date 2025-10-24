@@ -19,7 +19,10 @@ import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
 import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 import { getCacheService } from "@/infrastructure/cache/cache.service";
 import { CachePatterns } from "@/infrastructure/cache/cache-keys";
-import { parseMeteoraInstructions, MeteoraDlmmInstruction } from "@/utils/tx-parser";
+import {
+  parseMeteoraInstructions,
+  MeteoraDlmmInstruction,
+} from "@/utils/tx-parser";
 
 export class TransactionConfirmWorker
   implements IWorker<TransactionConfirmJobData>
@@ -167,15 +170,21 @@ export class TransactionConfirmWorker
         return;
       }
 
-      logger.info("[TxConfirmWorker] Parsing transaction data from blockchain", {
-        signature,
-        poolAddress: context.poolAddress,
-      });
+      logger.info(
+        "[TxConfirmWorker] Parsing transaction data from blockchain",
+        {
+          signature,
+          poolAddress: context.poolAddress,
+        }
+      );
 
       const connection = this.solana.getConnection();
-      const parsedTransaction = await connection.getParsedTransaction(signature, {
-        maxSupportedTransactionVersion: 0,
-      });
+      const parsedTransaction = await connection.getParsedTransaction(
+        signature,
+        {
+          maxSupportedTransactionVersion: 0,
+        }
+      );
 
       if (!parsedTransaction) {
         logger.error("[TxConfirmWorker] Transaction not found on-chain", {
@@ -187,16 +196,19 @@ export class TransactionConfirmWorker
       const instructions = parseMeteoraInstructions(parsedTransaction);
 
       if (!instructions || instructions.length === 0) {
-        logger.error("[TxConfirmWorker] No Meteora instructions found in transaction", {
-          signature,
-        });
+        logger.error(
+          "[TxConfirmWorker] No Meteora instructions found in transaction",
+          {
+            signature,
+          }
+        );
         return;
       }
 
       logger.info("[TxConfirmWorker] Parsed Meteora instructions", {
         signature,
         instructionCount: instructions.length,
-        instructions: instructions.map(i => ({
+        instructions: instructions.map((i) => ({
           name: i.instructionName,
           type: i.instructionType,
         })),
@@ -223,8 +235,8 @@ export class TransactionConfirmWorker
       }
 
       const effectivePositionAddress =
-        positionAddress ?? 
-        initializeInstruction.accounts.position ?? 
+        positionAddress ??
+        initializeInstruction.accounts.position ??
         context.positionAddress;
 
       if (!effectivePositionAddress) {
@@ -238,8 +250,8 @@ export class TransactionConfirmWorker
       let actualTokenBAmount = context.tokenBAmount;
 
       if (addLiquidityInstruction.tokenTransfers.length > 0) {
-        const tokenAMint = context.tokenAMint;
-        const tokenBMint = context.tokenBMint;
+        const tokenAMint = context.tokenA.address;
+        const tokenBMint = context.tokenB.address;
 
         const tokenATransfer = addLiquidityInstruction.tokenTransfers.find(
           (t) => t.mint === tokenAMint
@@ -249,18 +261,25 @@ export class TransactionConfirmWorker
         );
 
         if (tokenATransfer) {
-          actualTokenAAmount = (tokenATransfer.amount / Math.pow(10, context.tokenADecimals ?? 9)).toString();
+          actualTokenAAmount = (
+            tokenATransfer.amount / Math.pow(10, context.tokenA.decimals ?? 9)
+          ).toString();
         }
         if (tokenBTransfer) {
-          actualTokenBAmount = (tokenBTransfer.amount / Math.pow(10, context.tokenBDecimals ?? 9)).toString();
+          actualTokenBAmount = (
+            tokenBTransfer.amount / Math.pow(10, context.tokenB.decimals ?? 9)
+          ).toString();
         }
 
-        logger.info("[TxConfirmWorker] Extracted token amounts from transfers", {
-          signature,
-          actualTokenAAmount,
-          actualTokenBAmount,
-          tokenTransfers: addLiquidityInstruction.tokenTransfers,
-        });
+        logger.info(
+          "[TxConfirmWorker] Extracted token amounts from transfers",
+          {
+            signature,
+            actualTokenAAmount,
+            actualTokenBAmount,
+            tokenTransfers: addLiquidityInstruction.tokenTransfers,
+          }
+        );
       }
 
       const onChainData = {
@@ -270,7 +289,7 @@ export class TransactionConfirmWorker
         upperBinId: undefined,
       };
 
-      const tokenMints = [context.tokenAMint, context.tokenBMint];
+      const tokenMints = [context.tokenA.address, context.tokenB.address];
       const solMint = "So11111111111111111111111111111111111111112";
       if (!tokenMints.includes(solMint)) {
         tokenMints.push(solMint);
@@ -278,8 +297,8 @@ export class TransactionConfirmWorker
 
       const priceData = await this.priceService.getPrices(tokenMints);
       const prices = {
-        tokenAUsd: priceData[context.tokenAMint]?.price ?? 0,
-        tokenBUsd: priceData[context.tokenBMint]?.price ?? 0,
+        tokenAUsd: priceData[context.tokenA.address]?.price ?? 0,
+        tokenBUsd: priceData[context.tokenB.address]?.price ?? 0,
         solUsd: priceData[solMint]?.price ?? 0,
       };
 
@@ -373,9 +392,10 @@ export class TransactionConfirmWorker
         return;
       }
 
-      const metadata = typeof ptx.metadata === 'string' 
-        ? JSON.parse(ptx.metadata) 
-        : ptx.metadata;
+      const metadata =
+        typeof ptx.metadata === "string"
+          ? JSON.parse(ptx.metadata)
+          : ptx.metadata;
       const rebalanceContext = metadata.rebalanceContext as
         | {
             positionId: string;
@@ -542,9 +562,10 @@ export class TransactionConfirmWorker
         return;
       }
 
-      const metadata = typeof ptx.metadata === 'string' 
-        ? JSON.parse(ptx.metadata) 
-        : ptx.metadata;
+      const metadata =
+        typeof ptx.metadata === "string"
+          ? JSON.parse(ptx.metadata)
+          : ptx.metadata;
       const closeContext = metadata.closeContext as
         | {
             userId: string;

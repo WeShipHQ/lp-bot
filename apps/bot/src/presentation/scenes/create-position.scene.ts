@@ -64,7 +64,7 @@ type WizardState = {
   };
 };
 
-const SKIP_VALIDATE = true;
+const SKIP_VALIDATE = false;
 
 export const createPositionScene = new Scenes.WizardScene<BotContext>(
   SCENE_IDS.CREATE_POSITION_SCENE,
@@ -434,22 +434,6 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       "✅ Auto-Rebalance: Monitor and adjust every 1hr if out of range (fees apply)."
     );
 
-    // if (state.enteredCustomAmount) {
-    //   return ctx.reply(message, {
-    //     parse_mode: "Markdown",
-    //     ...Markup.inlineKeyboard([
-    //       [
-    //         Markup.button.callback("✅ Enable Rebalance", "rebalance:yes"),
-    //         Markup.button.callback("❌ No Rebalance", "rebalance:no"),
-    //       ],
-    //       [
-    //         Markup.button.callback("🔙 Back", "back"),
-    //         Markup.button.callback("❌ Cancel", "cancel"),
-    //       ],
-    //     ]),
-    //   });
-    // }
-
     return ctx.editMessageText(message, {
       parse_mode: "Markdown",
       ...Markup.inlineKeyboard([
@@ -537,7 +521,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     );
 
     const state = ctx.scene.state as WizardState;
-    console.log({ state });
+    // console.log({ state });
     const { strategy, amount, poolData, autoRebalancing, dex, depositMethod } =
       state;
 
@@ -615,21 +599,27 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       const result = await createUC.execute({
         user: ctx.user,
         dex: (dex as DexType) || "meteora",
+
         poolAddress: poolData.address,
         tokenA: poolData.tokenA,
         tokenB: poolData.tokenB,
-        // userAddress: ctx.user.walletAddress!,
-        // walletId: ctx.user.walletId,
+
         tokenAAmount: String(state.tokenAAmountCalculated || 0),
         tokenBAmount: String(state.tokenBAmountCalculated || 0),
         strategy,
         slippage: SLIPPAGE_SMALL,
         autoRebalance: autoRebalancing === "yes",
-        // metadata: {
-        //   rangeInterval: priceRange.rangeInterval,
-        //   autoRebalancing: autoRebalancing === "yes",
-        //   positionContext,
-        // },
+        depositMethod: depositMethod,
+        depositSource: state.depositSource,
+        solAmount: amount,
+
+        priceRange: state.priceRange
+          ? {
+              min: Number(state.priceRange.min),
+              max: Number(state.priceRange.max),
+              rangeInterval: state.priceRange.rangeInterval,
+            }
+          : undefined,
       });
 
       if (!result.success || !result.signature) {

@@ -686,10 +686,116 @@ async function getDynamicTipAmount(): Promise<number> {
   }
 }
 
-export async function sendWithSender(
-  keypair: Keypair,
+export async function createTransactionSender(
+  connection: Connection,
   instructions: TransactionInstruction[],
-  connection: Connection
+  payer: PublicKey,
+  signers: Signer[]
+): Promise<SmartTransactionContext> {
+  // Validate user hasn't included compute budget instructions
+  const hasComputeBudget = instructions.some((ix) =>
+    ix.programId.equals(ComputeBudgetProgram.programId)
+  );
+
+  if (hasComputeBudget) {
+    throw new Error(
+      "Do not include compute budget instructions - they are added automatically"
+    );
+  }
+
+  // Create copy of instructions to avoid modifying the original array
+  const allInstructions = [...instructions];
+
+  // Get dynamic tip amount from Jito API (75th percentile, minimum 0.001 SOL)
+  const tipAmountSOL = await getDynamicTipAmount();
+  const tipAccount = new PublicKey(
+    TIP_ACCOUNTS[Math.floor(Math.random() * TIP_ACCOUNTS.length)]
+  );
+
+  console.log(`Using dynamic tip amount: ${tipAmountSOL} SOL`);
+
+  allInstructions.push(
+    SystemProgram.transfer({
+      fromPubkey: payer,
+      toPubkey: tipAccount,
+      lamports: tipAmountSOL * LAMPORTS_PER_SOL,
+    })
+  );
+
+  // Get recent blockhash with context (Helius best practice)
+  const {
+    value: blockhashInfo,
+    context: { slot: minContextSlot },
+  } = await connection.getLatestBlockhashAndContext("confirmed");
+  const { blockhash, lastValidBlockHeight } = blockhashInfo;
+
+  // Simulate transaction to get compute units
+  const testInstructions = [
+    ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }),
+    ...allInstructions,
+  ];
+
+  const testTransaction = new VersionedTransaction(
+    new TransactionMessage({
+      instructions: testInstructions,
+      payerKey: payer,
+      recentBlockhash: blockhash,
+    }).compileToV0Message()
+  );
+  testTransaction.sign(signers);
+
+  const simulation = await connection.simulateTransaction(testTransaction, {
+    replaceRecentBlockhash: true,
+    sigVerify: false,
+  });
+
+  if (!simulation.value.unitsConsumed) {
+    throw new Error("Simulation failed to return compute units");
+  }
+
+  // Set compute unit limit with minimum 1000 CUs and 10% margin (Helius best practice)
+  const units = simulation.value.unitsConsumed;
+  const computeUnits = units < 1000 ? 1000 : Math.ceil(units * 1.1);
+
+  // Get dynamic priority fee from Helius Priority Fee API
+  const priorityFee = await getPriorityFee(
+    connection,
+    allInstructions,
+    payer,
+    blockhash
+  );
+
+  // Add compute budget instructions at the BEGINNING (must be first)
+  allInstructions.unshift(
+    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: priorityFee })
+  );
+  allInstructions.unshift(
+    ComputeBudgetProgram.setComputeUnitLimit({ units: computeUnits })
+  );
+
+  // Build final optimized transaction
+  const transaction = new VersionedTransaction(
+    new TransactionMessage({
+      instructions: allInstructions,
+      payerKey: payer,
+      recentBlockhash: blockhash,
+    }).compileToV0Message()
+  );
+  transaction.sign(signers);
+
+  // Send via Sender endpoint with retry logic
+  return {
+    transaction,
+    blockhash: { blockhash, lastValidBlockHeight },
+    minContextSlot,
+  };
+}
+
+export async function sendWithSender(
+  connection: Connection,
+  instructions: TransactionInstruction[],
+  payer: PublicKey,
+  signers: Signer[]
 ): Promise<string> {
   // const connection = new Connection(
   //   "https://mainnet.helius-rpc.com/?api-key=YOUR_API_KEY"
@@ -719,7 +825,7 @@ export async function sendWithSender(
 
   allInstructions.push(
     SystemProgram.transfer({
-      fromPubkey: keypair.publicKey,
+      fromPubkey: payer,
       toPubkey: tipAccount,
       lamports: tipAmountSOL * LAMPORTS_PER_SOL,
     })
@@ -739,11 +845,11 @@ export async function sendWithSender(
   const testTransaction = new VersionedTransaction(
     new TransactionMessage({
       instructions: testInstructions,
-      payerKey: keypair.publicKey,
+      payerKey: payer,
       recentBlockhash: blockhash,
     }).compileToV0Message()
   );
-  testTransaction.sign([keypair]);
+  testTransaction.sign(signers);
 
   const simulation = await connection.simulateTransaction(testTransaction, {
     replaceRecentBlockhash: true,
@@ -762,7 +868,7 @@ export async function sendWithSender(
   const priorityFee = await getPriorityFee(
     connection,
     allInstructions,
-    keypair.publicKey,
+    payer,
     blockhash
   );
 
@@ -778,11 +884,11 @@ export async function sendWithSender(
   const transaction = new VersionedTransaction(
     new TransactionMessage({
       instructions: allInstructions,
-      payerKey: keypair.publicKey,
+      payerKey: payer,
       recentBlockhash: blockhash,
     }).compileToV0Message()
   );
-  transaction.sign([keypair]);
+  transaction.sign(signers);
 
   // Send via Sender endpoint with retry logic
   return await sendWithRetry(transaction, connection, lastValidBlockHeight);
@@ -828,8 +934,8 @@ async function getPriorityFee(
   }
 }
 
-async function sendWithRetry(
-  transaction: VersionedTransaction,
+export async function sendWithRetry(
+  transaction: VersionedTransaction | Transaction,
   connection: Connection,
   lastValidBlockHeight: number
 ): Promise<string> {
