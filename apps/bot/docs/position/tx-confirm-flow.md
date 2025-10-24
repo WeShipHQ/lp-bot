@@ -269,24 +269,43 @@ for (const instruction of claimInstructions) {
 ### Step 4: Calculate Claimed Amounts & SOL Conversion
 
 ```typescript
-const tokenAUi = new Decimal(rawAmountA).div(Decimal.pow(10, tokenADecimals));
-const tokenBUi = new Decimal(rawAmountB).div(Decimal.pow(10, tokenBDecimals));
-
+const tokenAUi = decimalFromRaw(rawAmountA, tokenADecimals);
+const tokenBUi = decimalFromRaw(rawAmountB, tokenBDecimals);
 const priceData = await this.priceService.getPrices([tokenAMint, tokenBMint, solMint]);
-const claimedUsd = tokenAUi.mul(priceData[tokenAMint]?.price ?? 0)
-  .add(tokenBUi.mul(priceData[tokenBMint]?.price ?? 0));
 
 let solReceived = new Decimal(0);
-if (convertToSol) {
-  if (tokenAMint === solMint) solReceived = solReceived.add(tokenAUi);
-  else if (priceData[solMint]?.price)
-    solReceived = solReceived.add(tokenAUi.mul(priceData[tokenAMint]?.price ?? 0).div(priceData[solMint]?.price ?? 1));
 
-  if (tokenBMint === solMint) solReceived = solReceived.add(tokenBUi);
-  else if (priceData[solMint]?.price)
-    solReceived = solReceived.add(tokenBUi.mul(priceData[tokenBMint]?.price ?? 0).div(priceData[solMint]?.price ?? 1));
+// Direct SOL proceeds
+if (tokenAMint === solMint) {
+  solReceived = solReceived.add(lamportsToSol(rawAmountA));
 }
+if (tokenBMint === solMint) {
+  solReceived = solReceived.add(lamportsToSol(rawAmountB));
+}
+
+// Jupiter swaps for non-SOL fees
+if (convertToSol && user) {
+  if (tokenAMint !== solMint) {
+    solReceived = solReceived.add(
+      await swapTokenToSol(user, tokenAMint, rawAmountA)
+    );
+  }
+  if (tokenBMint !== solMint) {
+    solReceived = solReceived.add(
+      await swapTokenToSol(user, tokenBMint, rawAmountB)
+    );
+  }
+}
+
+const estimatedUsd = tokenAUi.mul(priceData[tokenAMint]?.price ?? 0)
+  .add(tokenBUi.mul(priceData[tokenBMint]?.price ?? 0));
+const claimedUsd = solReceived.gt(0) && (priceData[solMint]?.price ?? 0) > 0
+  ? solReceived.mul(priceData[solMint]!.price)
+  : estimatedUsd;
 ```
+
+`decimalFromRaw` and `lamportsToSol` are small helpers that convert raw token units to UI amounts.
+`swapTokenToSol` fetches a quote from Jupiter, builds the swap transaction, has the user's Privy wallet sign it, and executes the swap on-chain. If a swap cannot be executed we fall back to price-based valuation for reporting purposes.
 
 ### Step 5: Persist Claim
 

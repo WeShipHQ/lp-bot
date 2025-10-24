@@ -8,7 +8,7 @@ import {
 import type { NotificationMessagePayload } from "../job-definitions";
 import { logger } from "@/utils/logger";
 import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
-import { db, pendingTransactions } from "@/db";
+import { db, pendingTransactions, users, User } from "@/db";
 import { eq } from "drizzle-orm";
 import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
 import { PositionCreationContext } from "@/application/position/create-position.use-case";
@@ -34,6 +34,9 @@ import {
   formatPrice,
 } from "@/presentation/formatters/base.formatter";
 import { claimFeesPersistenceService } from "@/services/claim-fees-persistence.service";
+import { WalletService } from "@/services/wallet.service";
+import { jupiterService } from "@/services/jupiter.service";
+import { SOL_MINT } from "@/config/constants";
 
 type CloseInstructionExtractionResult = {
   positionAddress?: string;
@@ -188,7 +191,10 @@ export class TransactionConfirmWorker
         return;
       }
 
-      const metadata = ptx.metadata as any;
+      const metadata =
+        typeof ptx.metadata === "string"
+          ? JSON.parse(ptx.metadata)
+          : ptx.metadata;
       const context: PositionCreationContext | undefined =
         metadata.positionContext;
 
@@ -323,7 +329,7 @@ export class TransactionConfirmWorker
       };
 
       const tokenMints = [context.tokenA.address, context.tokenB.address];
-      const solMint = "So11111111111111111111111111111111111111112";
+      const solMint = SOL_MINT;
       if (!tokenMints.includes(solMint)) {
         tokenMints.push(solMint);
       }
@@ -450,7 +456,7 @@ export class TransactionConfirmWorker
         return;
       }
 
-      const solMint = "So11111111111111111111111111111111111111112";
+      const solMint = SOL_MINT;
 
       let effectivePositionId =
         positionId ?? claimContext.positionId ?? undefined;
@@ -487,6 +493,12 @@ export class TransactionConfirmWorker
         );
         return;
       }
+
+      const userRecord = effectiveUserId
+        ? await db.query.users.findFirst({
+            where: eq(users.id, effectiveUserId),
+          })
+        : null;
 
       const connection = this.solana.getConnection();
       const parsedTransaction = await connection.getParsedTransaction(
@@ -528,21 +540,28 @@ export class TransactionConfirmWorker
       const tokenADecimals = claimContext.tokenADecimals ?? 0;
       const tokenBDecimals = claimContext.tokenBDecimals ?? 0;
 
-      const rawAmountA = aggregateTransfers.get(tokenAMint) ?? 0;
-      const rawAmountB = aggregateTransfers.get(tokenBMint) ?? 0;
+      const normalizeRawAmount = (value: number) =>
+        Number.isFinite(value) && value > 0 ? BigInt(Math.floor(value)) : 0n;
 
-      const rawToDecimal = (raw: number, decimals: number) =>
-        new Decimal(raw ?? 0).div(Decimal.pow(10, decimals ?? 0));
+      const rawAmountABig = normalizeRawAmount(
+        aggregateTransfers.get(tokenAMint) ?? 0
+      );
+      const rawAmountBBig = normalizeRawAmount(
+        aggregateTransfers.get(tokenBMint) ?? 0
+      );
 
-      const tokenAUiDecimal = rawToDecimal(rawAmountA, tokenADecimals);
-      const tokenBUiDecimal = rawToDecimal(rawAmountB, tokenBDecimals);
+      const computeUiAmount = (raw: bigint, decimals: number) =>
+        raw === 0n
+          ? new Decimal(0)
+          : new Decimal(raw.toString()).div(Decimal.pow(10, decimals ?? 0));
+
+      const tokenAUiDecimal = computeUiAmount(rawAmountABig, tokenADecimals);
+      const tokenBUiDecimal = computeUiAmount(rawAmountBBig, tokenBDecimals);
 
       const formatAmount = (value: Decimal, decimals: number) => {
         if (value.isZero()) return "0";
         const precision = Math.min(Math.max(decimals, 0), 9);
-        return value
-          .toDecimalPlaces(precision, Decimal.ROUND_DOWN)
-          .toString();
+        return value.toDecimalPlaces(precision, Decimal.ROUND_DOWN).toString();
       };
 
       const tokenAAmountStr = formatAmount(tokenAUiDecimal, tokenADecimals);
@@ -550,7 +569,9 @@ export class TransactionConfirmWorker
 
       const priceMints = Array.from(
         new Set(
-          [tokenAMint, tokenBMint, solMint].filter((mint) => mint && mint.length)
+          [tokenAMint, tokenBMint, solMint].filter(
+            (mint) => mint && mint.length
+          )
         )
       );
 
@@ -559,35 +580,67 @@ export class TransactionConfirmWorker
       const tokenBPriceUsd = priceData[tokenBMint]?.price ?? 0;
       const solPriceUsd = priceData[solMint]?.price ?? 0;
 
-      const claimedUsdDecimal = tokenAUiDecimal
+      const estimatedUsdDecimal = tokenAUiDecimal
         .mul(tokenAPriceUsd)
         .add(tokenBUiDecimal.mul(tokenBPriceUsd));
-      const claimedUsdValue = claimedUsdDecimal.toFixed(2);
 
       let solReceivedDecimal = new Decimal(0);
-      if (claimContext.convertToSol !== false) {
-        if (tokenAMint === solMint) {
-          solReceivedDecimal = solReceivedDecimal.add(tokenAUiDecimal);
-        } else if (tokenAPriceUsd > 0 && solPriceUsd > 0) {
-          solReceivedDecimal = solReceivedDecimal.add(
-            tokenAUiDecimal.mul(tokenAPriceUsd).div(solPriceUsd)
+
+      const addSolFromLamports = (raw: bigint) => {
+        if (raw <= 0n) {
+          return new Decimal(0);
+        }
+        return this.lamportsToSol(raw);
+      };
+
+      if (rawAmountABig > 0n && tokenAMint === solMint) {
+        solReceivedDecimal = solReceivedDecimal.add(
+          addSolFromLamports(rawAmountABig)
+        );
+      }
+
+      if (rawAmountBBig > 0n && tokenBMint === solMint) {
+        solReceivedDecimal = solReceivedDecimal.add(
+          addSolFromLamports(rawAmountBBig)
+        );
+      }
+
+      const shouldConvertToSol = claimContext.convertToSol !== false;
+      if (shouldConvertToSol && !userRecord) {
+        logger.warn("[TxConfirmWorker] Unable to load user for claim swap", {
+          signature,
+          userId: effectiveUserId,
+        });
+      }
+      if (shouldConvertToSol && userRecord) {
+        if (rawAmountABig > 0n && tokenAMint && tokenAMint !== solMint) {
+          const solFromA = await this.swapTokenToSol(
+            userRecord,
+            tokenAMint,
+            rawAmountABig
           );
+          solReceivedDecimal = solReceivedDecimal.add(solFromA);
         }
 
-        if (tokenBMint === solMint) {
-          solReceivedDecimal = solReceivedDecimal.add(tokenBUiDecimal);
-        } else if (tokenBPriceUsd > 0 && solPriceUsd > 0) {
-          solReceivedDecimal = solReceivedDecimal.add(
-            tokenBUiDecimal.mul(tokenBPriceUsd).div(solPriceUsd)
+        if (rawAmountBBig > 0n && tokenBMint && tokenBMint !== solMint) {
+          const solFromB = await this.swapTokenToSol(
+            userRecord,
+            tokenBMint,
+            rawAmountBBig
           );
+          solReceivedDecimal = solReceivedDecimal.add(solFromB);
         }
       }
 
-      const solReceivedStr = solReceivedDecimal.isZero()
-        ? undefined
-        : solReceivedDecimal
-            .toDecimalPlaces(9, Decimal.ROUND_DOWN)
-            .toString();
+      let claimedUsdDecimal = estimatedUsdDecimal;
+      if (solReceivedDecimal.gt(0) && solPriceUsd > 0) {
+        claimedUsdDecimal = solReceivedDecimal.mul(solPriceUsd);
+      }
+      const claimedUsdValue = claimedUsdDecimal.toFixed(2);
+
+      const solReceivedStr = solReceivedDecimal.gt(0)
+        ? solReceivedDecimal.toDecimalPlaces(9, Decimal.ROUND_DOWN).toString()
+        : undefined;
 
       let snapshotData:
         | {
@@ -671,7 +724,7 @@ export class TransactionConfirmWorker
           ? `${solReceivedDecimal
               .toDecimalPlaces(6, Decimal.ROUND_DOWN)
               .toString()} SOL`
-          : "SOL";
+          : "0 SOL";
 
         await jobQueue.enqueue(JOB_NOTIFICATION, {
           userId: effectiveUserId,
@@ -682,10 +735,10 @@ export class TransactionConfirmWorker
           },
         });
       } catch (error) {
-        logger.error(
-          "[TxConfirmWorker] Failed to enqueue claim notification",
-          { error, signature }
-        );
+        logger.error("[TxConfirmWorker] Failed to enqueue claim notification", {
+          error,
+          signature,
+        });
       }
 
       logger.info("[TxConfirmWorker] CLAIM_FEES handled successfully", {
@@ -703,6 +756,90 @@ export class TransactionConfirmWorker
         positionAddress,
       });
       throw error;
+    }
+  }
+
+  private lamportsToSol(raw: bigint): Decimal {
+    if (raw <= 0n) {
+      return new Decimal(0);
+    }
+    return new Decimal(raw.toString()).div(1_000_000_000);
+  }
+
+  private async swapTokenToSol(
+    user: User,
+    tokenMint: string,
+    rawAmount: bigint
+  ): Promise<Decimal> {
+    if (!tokenMint || rawAmount <= 0n) {
+      return new Decimal(0);
+    }
+
+    if (tokenMint === SOL_MINT) {
+      return this.lamportsToSol(rawAmount);
+    }
+
+    if (!user.walletAddress || !user.walletId) {
+      logger.warn(
+        "[TxConfirmWorker] User missing wallet information for swap",
+        {
+          userId: user.id,
+        }
+      );
+      return new Decimal(0);
+    }
+
+    try {
+      const amountStr = rawAmount.toString();
+      const order = await jupiterService.getOrder({
+        inputMint: tokenMint,
+        outputMint: SOL_MINT,
+        amount: amountStr,
+        taker: user.walletAddress,
+      });
+
+      if (!order?.transaction) {
+        logger.warn("[TxConfirmWorker] Jupiter order missing transaction", {
+          tokenMint,
+          userId: user.id,
+        });
+        return new Decimal(0);
+      }
+
+      const swapTx = jupiterService.getOrderTransaction(order.transaction);
+      const { signedTransaction } = await WalletService.signTransaction(
+        user,
+        swapTx
+      );
+
+      const executeResult = await jupiterService.executeOrder({
+        requestId: order.requestId,
+        signedTransaction: Buffer.from(signedTransaction.serialize()).toString(
+          "base64"
+        ),
+      });
+
+      if (executeResult.status !== "Success") {
+        logger.warn("[TxConfirmWorker] Jupiter swap execution failed", {
+          tokenMint,
+          userId: user.id,
+          error: executeResult.error,
+        });
+        return new Decimal(0);
+      }
+
+      const outputLamports = new Decimal(
+        executeResult.outputAmountResult ?? "0"
+      );
+
+      return outputLamports.div(1_000_000_000);
+    } catch (error) {
+      logger.warn("[TxConfirmWorker] Jupiter swap failed", {
+        error,
+        tokenMint,
+        userId: user.id,
+      });
+      return new Decimal(0);
     }
   }
 
@@ -814,7 +951,7 @@ export class TransactionConfirmWorker
       }
 
       // Fetch token prices
-      const solMint = "So11111111111111111111111111111111111111112";
+      const solMint = SOL_MINT;
       const priceData = await this.priceService.getPrices([
         rebalanceContext.tokenAMint,
         rebalanceContext.tokenBMint,
@@ -900,7 +1037,11 @@ export class TransactionConfirmWorker
         return;
       }
 
-      const metadata: any = ptx.metadata;
+      const metadata = ptx.metadata as any;
+      // const metadata =
+      //   typeof ptx.metadata === "string"
+      //     ? JSON.parse(ptx.metadata)
+      //     : ptx.metadata;
 
       const closeContext = metadata.closeContext as
         | PositionClosureContext
@@ -994,7 +1135,7 @@ export class TransactionConfirmWorker
         return;
       }
 
-      const solMint = "So11111111111111111111111111111111111111112";
+      const solMint = SOL_MINT;
       const priceData = await this.priceService.getPrices([
         closeContext.tokenA.address,
         closeContext.tokenB.address,
