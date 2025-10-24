@@ -27,6 +27,12 @@ import {
 } from "@/utils/tx-parser";
 import { PositionClosureContext } from "@/application";
 import Decimal from "decimal.js";
+import { lamportsToUi } from "@/utils/math";
+import { Token } from "@/types/token.types";
+import {
+  formatPercentage,
+  formatPrice,
+} from "@/presentation/formatters/base.formatter";
 
 type CloseInstructionExtractionResult = {
   positionAddress?: string;
@@ -261,12 +267,8 @@ export class TransactionConfirmWorker
         return;
       }
 
-      let actualTokenAAmount = new Decimal(context.tokenAAmount).mul(
-        new Decimal(10).pow(context.tokenA.decimals)
-      );
-      let actualTokenBAmount = new Decimal(context.tokenBAmount).mul(
-        new Decimal(10).pow(context.tokenB.decimals)
-      );
+      let actualTokenAAmount = context.tokenAAmount;
+      let actualTokenBAmount = context.tokenBAmount;
 
       console.log("addLiquidityInstruction", addLiquidityInstruction);
 
@@ -282,10 +284,16 @@ export class TransactionConfirmWorker
         );
 
         if (tokenATransfer) {
-          actualTokenAAmount = new Decimal(tokenATransfer.amount);
+          actualTokenAAmount = lamportsToUi(
+            tokenATransfer.amount,
+            context.tokenA.decimals
+          );
         }
         if (tokenBTransfer) {
-          actualTokenBAmount = new Decimal(tokenBTransfer.amount);
+          actualTokenBAmount = lamportsToUi(
+            tokenBTransfer.amount,
+            context.tokenB.decimals
+          );
         }
 
         logger.info(
@@ -300,8 +308,8 @@ export class TransactionConfirmWorker
       }
 
       const onChainData = {
-        actualTokenAAmount: actualTokenAAmount.toString(),
-        actualTokenBAmount: actualTokenBAmount.toString(),
+        actualTokenAAmount,
+        actualTokenBAmount,
         lowerBinId: undefined,
         upperBinId: undefined,
       };
@@ -577,7 +585,7 @@ export class TransactionConfirmWorker
         return;
       }
 
-      let metadata: any = ptx.metadata;
+      const metadata: any = ptx.metadata;
 
       const closeContext = metadata.closeContext as
         | PositionClosureContext
@@ -629,11 +637,11 @@ export class TransactionConfirmWorker
           } else {
             instructionData = this.extractCloseInstructionData(
               instructions,
-              closeContext.tokenAMint,
-              closeContext.tokenBMint,
-              closeContext.tokenADecimals ?? 0,
-              closeContext.tokenBDecimals ?? 0
+              closeContext.tokenA,
+              closeContext.tokenB
             );
+
+            console.log("close instructionData", instructionData);
 
             if (instructionData.positionAddress) {
               effectivePositionAddress = instructionData.positionAddress;
@@ -673,14 +681,14 @@ export class TransactionConfirmWorker
 
       const solMint = "So11111111111111111111111111111111111111112";
       const priceData = await this.priceService.getPrices([
-        closeContext.tokenAMint,
-        closeContext.tokenBMint,
+        closeContext.tokenA.address,
+        closeContext.tokenB.address,
         solMint,
       ]);
 
       const prices = {
-        tokenAUsd: priceData[closeContext.tokenAMint]?.price ?? 0,
-        tokenBUsd: priceData[closeContext.tokenBMint]?.price ?? 0,
+        tokenAUsd: priceData[closeContext.tokenA.address]?.price ?? 0,
+        tokenBUsd: priceData[closeContext.tokenB.address]?.price ?? 0,
         solUsd: priceData[solMint]?.price ?? 0,
       };
 
@@ -707,8 +715,8 @@ export class TransactionConfirmWorker
             positionAddress: effectivePositionAddress,
             poolAddress: closeContext.poolAddress,
             closureReason: closeContext.closureReason ?? "user_close",
-            tokenAMint: closeContext.tokenAMint,
-            tokenBMint: closeContext.tokenBMint,
+            tokenAMint: closeContext.tokenA.address,
+            tokenBMint: closeContext.tokenB.address,
           },
           onChainData,
           prices,
@@ -758,8 +766,8 @@ export class TransactionConfirmWorker
     const pnlUsd = Number(result.totalPnlUSD);
     const pnlPercentage = Number(result.totalPnlPercentage);
 
-    const formattedPnLUsd = this.formatUsd(pnlUsd);
-    const formattedPnlPercentage = this.formatPercentage(pnlPercentage, 3);
+    const formattedPnLUsd = formatPrice(pnlUsd, { maxDecimals: 2 });
+    const formattedPnlPercentage = formatPercentage(pnlPercentage);
     const solscanUrl = `https://solscan.io/tx/${signature}`;
 
     const primaryMessage = [
@@ -782,43 +790,10 @@ export class TransactionConfirmWorker
     ];
   }
 
-  private formatUsd(value: number): string {
-    if (!isFinite(value)) {
-      return "$0.00";
-    }
-
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(value);
-  }
-
-  private formatPercentage(value: number, decimals = 3): string {
-    if (!isFinite(value)) {
-      return "0.000%";
-    }
-
-    const sign = value < 0 ? "-" : "";
-    const formatted = Math.abs(value).toFixed(decimals);
-    return `${sign}${formatted}%`;
-  }
-
-  private convertRawAmountToDecimal(
-    rawAmount: number,
-    decimals: number
-  ): Decimal {
-    const scale = new Decimal(10).pow(decimals);
-    return new Decimal(rawAmount).div(scale);
-  }
-
   private extractCloseInstructionData(
     instructions: MeteoraDlmmInstruction[],
-    tokenAMint: string,
-    tokenBMint: string,
-    tokenADecimals: number,
-    tokenBDecimals: number
+    tokenA: Token,
+    tokenB: Token
   ): CloseInstructionExtractionResult {
     const removeTotals = {
       tokenA: new Decimal(0),
@@ -859,21 +834,15 @@ export class TransactionConfirmWorker
       }
 
       for (const transfer of instruction.tokenTransfers) {
-        if (transfer.mint === tokenAMint) {
-          const amount = this.convertRawAmountToDecimal(
-            transfer.amount,
-            tokenADecimals
-          );
+        if (transfer.mint === tokenA.address) {
+          const amount = new Decimal(transfer.amount);
           if (instruction.instructionType === "remove") {
             removeTotals.tokenA = removeTotals.tokenA.add(amount);
           } else {
             claimTotals.tokenA = claimTotals.tokenA.add(amount);
           }
-        } else if (transfer.mint === tokenBMint) {
-          const amount = this.convertRawAmountToDecimal(
-            transfer.amount,
-            tokenBDecimals
-          );
+        } else if (transfer.mint === tokenB.address) {
+          const amount = new Decimal(transfer.amount);
           if (instruction.instructionType === "remove") {
             removeTotals.tokenB = removeTotals.tokenB.add(amount);
           } else {
@@ -886,13 +855,21 @@ export class TransactionConfirmWorker
     return {
       positionAddress: positionAddr,
       finalTokenAAmount:
-        removeInstructionCount > 0 ? removeTotals.tokenA.toString() : undefined,
+        removeInstructionCount > 0
+          ? lamportsToUi(removeTotals.tokenA.toString(), tokenA.decimals)
+          : undefined,
       finalTokenBAmount:
-        removeInstructionCount > 0 ? removeTotals.tokenB.toString() : undefined,
+        removeInstructionCount > 0
+          ? lamportsToUi(removeTotals.tokenB.toString(), tokenB.decimals)
+          : undefined,
       claimedFeesTokenA:
-        claimInstructionCount > 0 ? claimTotals.tokenA.toString() : undefined,
+        claimInstructionCount > 0
+          ? lamportsToUi(claimTotals.tokenA.toString(), tokenA.decimals)
+          : undefined,
       claimedFeesTokenB:
-        claimInstructionCount > 0 ? claimTotals.tokenB.toString() : undefined,
+        claimInstructionCount > 0
+          ? lamportsToUi(claimTotals.tokenB.toString(), tokenB.decimals)
+          : undefined,
       removeInstructionCount,
       claimInstructionCount,
       closeInstructionCount,

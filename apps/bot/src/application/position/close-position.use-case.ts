@@ -36,12 +36,8 @@ export interface PositionClosureContext {
   positionAddress: string;
   poolAddress: string;
   closureReason: ClosePositionCommand["closureReason"];
-  tokenAMint: string;
-  tokenBMint: string;
-  tokenASymbol: string;
-  tokenBSymbol: string;
-  tokenADecimals: number;
-  tokenBDecimals: number;
+  tokenA: Token;
+  tokenB: Token;
 }
 
 export interface ClosePositionResult {
@@ -56,6 +52,7 @@ import {
 } from "@/infrastructure/cache/cache.service";
 import { CachePatterns, CacheKeys } from "@/infrastructure/cache/cache-keys";
 import { WalletService } from "@/services/wallet.service";
+import { Token } from "@/types/token.types";
 
 export class ClosePositionUseCase {
   private readonly cache: ICacheService;
@@ -149,12 +146,20 @@ export class ClosePositionUseCase {
           positionAddress,
           poolAddress: position.poolAddress,
           closureReason: command.closureReason ?? "user_close",
-          tokenAMint: position.tokenX.address,
-          tokenBMint: position.tokenY.address,
-          tokenASymbol: position.tokenX.symbol,
-          tokenBSymbol: position.tokenY.symbol,
-          tokenADecimals: position.tokenX.decimals,
-          tokenBDecimals: position.tokenY.decimals,
+          tokenA: {
+            address: position.tokenX.address,
+            symbol: position.tokenX.symbol,
+            decimals: position.tokenX.decimals,
+            name: position.tokenX.symbol,
+            logoUri: position.tokenX.logoURI,
+          },
+          tokenB: {
+            address: position.tokenY.address,
+            symbol: position.tokenY.symbol,
+            decimals: position.tokenY.decimals,
+            name: position.tokenY.symbol,
+            logoUri: position.tokenY.logoURI,
+          },
         };
 
         const metadata = {

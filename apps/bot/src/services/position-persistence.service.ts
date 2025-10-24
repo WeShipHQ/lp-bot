@@ -2,7 +2,6 @@ import { db, positions, positionSegments, positionSnapshots } from "@/db";
 import { PositionCreationContext } from "@/application/position/create-position.use-case";
 import { logger } from "@/utils/logger";
 import Decimal from "decimal.js";
-import { Token } from "@/types/token.types";
 import { eq } from "drizzle-orm";
 
 interface CreatePositionInDbParams {
@@ -36,27 +35,18 @@ export class PositionPersistenceService {
     const { signature, positionAddress, context, onChainData, prices } = params;
 
     return await db.transaction(async (tx) => {
-      const tokenAAmountLamport = new Decimal(
-        onChainData?.actualTokenAAmount ?? context.tokenAAmount
-      );
-      const tokenBAmountLamport = new Decimal(
-        onChainData?.actualTokenBAmount ?? context.tokenBAmount
-      );
-
-      const tokenAAmount = tokenAAmountLamport.div(
-        new Decimal(10).pow(context.tokenA.decimals)
-      );
-      const tokenBAmount = tokenBAmountLamport.div(
-        new Decimal(10).pow(context.tokenB.decimals)
-      );
+      const tokenAAmount =
+        onChainData?.actualTokenAAmount ?? context.tokenAAmount;
+      const tokenBAmount =
+        onChainData?.actualTokenBAmount ?? context.tokenBAmount;
 
       const tokenAPriceUsd = prices.tokenAUsd;
       const tokenBPriceUsd = prices.tokenBUsd;
       const solPriceUsd = prices.solUsd;
 
-      const initialValueUSD = tokenAAmount
+      const initialValueUSD = new Decimal(tokenAAmount)
         .mul(tokenAPriceUsd)
-        .add(tokenBAmount.mul(tokenBPriceUsd));
+        .add(new Decimal(tokenBAmount).mul(tokenBPriceUsd));
 
       const initialValueSOL = context.solAmount
         ? new Decimal(context.solAmount).toFixed(9)
@@ -73,14 +63,14 @@ export class PositionPersistenceService {
           tokenX: context.tokenA,
           tokenY: context.tokenB,
           status: "ACTIVE",
-          initialValueUSD: initialValueUSD.toFixed(2),
+          initialValueUSD: initialValueUSD.toFixed(6),
           initialValueSOL: initialValueSOL,
-          initialTokenXAmount: tokenAAmount.toFixed(9),
-          initialTokenYAmount: tokenBAmount.toFixed(9),
+          initialTokenXAmount: tokenAAmount,
+          initialTokenYAmount: tokenBAmount,
           initialTokenXPriceUSD: tokenAPriceUsd.toString(),
           initialTokenYPriceUSD: tokenBPriceUsd.toString(),
           currentSegmentNumber: 1,
-          currentSegmentInitialUSD: initialValueUSD.toFixed(2),
+          currentSegmentInitialUSD: initialValueUSD.toFixed(6),
           currentSegmentStartAt: new Date(),
           totalRealizedPnlUSD: "0",
           totalFeesClaimedUSD: "0",
@@ -124,9 +114,9 @@ export class PositionPersistenceService {
         segmentId: segment.id,
         snapshotType: "creation",
         snapshotTimestamp: new Date(),
-        currentValueUSD: initialValueUSD.toFixed(2),
-        tokenXAmount: tokenAAmount.toFixed(9),
-        tokenYAmount: tokenBAmount.toFixed(9),
+        currentValueUSD: initialValueUSD.toFixed(6),
+        tokenXAmount: tokenAAmount,
+        tokenYAmount: tokenBAmount,
         unclaimedFeesX: "0",
         unclaimedFeesY: "0",
         unclaimedFeesUSD: "0",

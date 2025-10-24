@@ -1,5 +1,6 @@
 import BN from "bn.js";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
+import Decimal from "decimal.js";
 
 export function solToLamports(amount: number): number {
   if (isNaN(amount)) return Number(0);
@@ -27,4 +28,22 @@ export function lamportsToSol(lamports: number | BN | bigint): number {
     "." +
     lamportsString.slice(splitIndex);
   return signMultiplier * parseFloat(solString);
+}
+
+export function lamportsToUi(
+  lamports: bigint | number | string,
+  decimals: number
+): string {
+  const amount = new Decimal(lamports.toString());
+  const divisor = new Decimal(10).pow(decimals);
+  return amount.div(divisor).toFixed(decimals);
+}
+
+export function uiToLamports(
+  uiAmount: string | number,
+  decimals: number
+): bigint {
+  const amount = new Decimal(uiAmount.toString());
+  const multiplier = new Decimal(10).pow(decimals);
+  return BigInt(amount.mul(multiplier).toFixed(0));
 }
