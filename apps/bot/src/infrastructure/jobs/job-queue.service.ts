@@ -109,18 +109,48 @@ export class JobQueueService {
       return handler.process(job);
     }, workerOpts);
 
-    worker.on('failed', (job, err) => logger.error({ jobId: job?.id, name }, '[JobQueue] job failed: ' + (err?.stack || err)));
-    worker.on('error', (err) => logger.error({ name }, '[JobQueue] worker error: ' + (err?.stack || err)));
+    // Enhanced event listeners for better observability
+    worker.on('completed', (job) => {
+      logger.info({ jobId: job.id, name, duration: Date.now() - job.processedOn! }, '[JobQueue] job completed');
+    });
+
+    worker.on('failed', (job, err) => {
+      logger.error(
+        { 
+          jobId: job?.id, 
+          name, 
+          attemptsMade: job?.attemptsMade,
+          data: job?.data,
+          error: err?.message,
+          stack: err?.stack 
+        }, 
+        '[JobQueue] job failed'
+      );
+    });
+
+    worker.on('error', (err) => {
+      logger.error({ name, error: err?.message, stack: err?.stack }, '[JobQueue] worker error');
+    });
+
+    worker.on('stalled', (jobId) => {
+      logger.warn({ jobId, name }, '[JobQueue] job stalled');
+    });
+
+    worker.on('active', (job) => {
+      logger.debug({ jobId: job.id, name }, '[JobQueue] job started');
+    });
 
     this.entries.set(name, { queue, worker, concurrency: w.concurrency });
   }
 
-  async enqueue<N extends KnownJobNames>(queueName: N, data: KnownJobDataMap[N], options?: EnqueueOptions): Promise<void> {
+  async enqueue<N extends KnownJobNames>(queueName: N, data: KnownJobDataMap[N], options?: EnqueueOptions): Promise<void>;
+  async enqueue(queueName: string, data: any, options?: EnqueueOptions): Promise<void>;
+  async enqueue(queueName: any, data: any, options?: EnqueueOptions): Promise<void> {
     let entry = this.entries.get(queueName);
     if (!entry) {
       // In producer-only mode, lazily create a queue without a worker
-      const queue = new Queue<KnownJobDataMap[N]>(queueName, this.qOpts);
-      entry = { queue, worker: undefined as any, concurrency: 0 } as QueueEntry<N>;
+      const queue = new Queue(queueName, this.qOpts);
+      entry = { queue, worker: undefined as any, concurrency: 0 } as QueueEntry<any>;
       this.entries.set(queueName, entry);
     }
     await entry.queue.add(queueName, data, {
@@ -138,8 +168,48 @@ export class JobQueueService {
 
   async getQueueStats() {
     const stats: Record<string, any> = {};
-    for (const [name, entry] of this.entries) stats[name] = await entry.queue.getJobCounts();
+    for (const [name, entry] of Array.from(this.entries)) {
+      stats[name] = await entry.queue.getJobCounts();
+    }
     return stats;
+  }
+
+  async getJob<N extends KnownJobNames>(queueName: N, jobId: string): Promise<Job<KnownJobDataMap[N]> | undefined> {
+    const entry = this.entries.get(queueName);
+    if (!entry) return undefined;
+    return entry.queue.getJob(jobId);
+  }
+
+  async getJobState<N extends KnownJobNames>(queueName: N, jobId: string): Promise<string | undefined> {
+    const job = await this.getJob(queueName, jobId);
+    if (!job) return undefined;
+    return await job.getState();
+  }
+
+  async retryFailedJobs<N extends KnownJobNames>(queueName: N, maxRetries: number = 10): Promise<number> {
+    const entry = this.entries.get(queueName);
+    if (!entry) return 0;
+    
+    const failed = await entry.queue.getFailed(0, maxRetries);
+    let retried = 0;
+    
+    for (const job of failed) {
+      await job.retry();
+      retried++;
+    }
+    
+    logger.info({ queueName, retriedCount: retried }, '[JobQueue] retried failed jobs');
+    return retried;
+  }
+
+  async cleanQueue<N extends KnownJobNames>(queueName: N, grace: number = 1000, limit?: number): Promise<void> {
+    const entry = this.entries.get(queueName);
+    if (!entry) return;
+    
+    await entry.queue.clean(grace, limit || 100, 'completed');
+    await entry.queue.clean(grace, limit || 50, 'failed');
+    
+    logger.info({ queueName, grace, limit }, '[JobQueue] cleaned queue');
   }
 
   async pauseQueues() {
@@ -152,7 +222,23 @@ export class JobQueueService {
 
   async shutdown() {
     logger.info('[JobQueue] shutting down');
-    await Promise.all(Array.from(this.entries.values()).map((e) => e.worker.close()));
+    
+    // Wait for active jobs to complete (with timeout)
+    const shutdownTimeout = 30000; // 30 seconds
+    const startTime = Date.now();
+    
+    for (const [name, entry] of Array.from(this.entries)) {
+      const remaining = shutdownTimeout - (Date.now() - startTime);
+      if (remaining > 0 && entry.worker) {
+        try {
+          await entry.worker.close();
+          logger.debug({ name }, '[JobQueue] worker closed');
+        } catch (err) {
+          logger.error({ name, err }, '[JobQueue] error closing worker');
+        }
+      }
+    }
+    
     await Promise.all(Array.from(this.entries.values()).map((e) => e.queue.close()));
     await this.redis.quit();
     logger.info('[JobQueue] shutdown completed');

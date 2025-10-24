@@ -16,6 +16,7 @@ export class SolanaAdapter {
 
   getPrimaryEndpoint(): string { return this.primary.rpcEndpoint; }
   getSecondaryEndpoint(): string { return this.secondary.rpcEndpoint; }
+  getConnection(): Connection { return this.primary; }
 
   async getBalance(address: string): Promise<number> {
     const pk = new PublicKey(address);

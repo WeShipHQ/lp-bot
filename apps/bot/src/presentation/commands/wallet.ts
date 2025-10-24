@@ -16,7 +16,6 @@ export function walletCommand(
 ) {
   bot.command("wallet", (ctx) => walletHandler(ctx, server));
 
-  // Standardized wallet callback actions using namespaced pattern
   bot.action(WALLET_PATTERNS.any, (ctx) => handleWalletCallback(ctx, server));
 
   bot.on(message("text"), async (ctx, next) => {
