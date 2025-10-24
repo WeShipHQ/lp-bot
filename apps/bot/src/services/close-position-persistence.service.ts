@@ -35,6 +35,22 @@ interface ClosePositionInDbParams {
   };
 }
 
+export interface ClosePositionPersistenceSummary {
+  positionId: string;
+  positionAddress: string;
+  finalValueUSD: string;
+  finalValueSOL: string;
+  totalPnlUSD: string;
+  totalPnlPercentage: string;
+  segmentPnlUSD: string;
+  segmentPnlPercentage: string;
+  feesClaimedUSD: string;
+  claimedTokenXAmount: string;
+  claimedTokenYAmount: string;
+  finalTokenXAmount: string;
+  finalTokenYAmount: string;
+}
+
 /**
  * ClosePositionPersistenceService
  *
@@ -50,10 +66,12 @@ export class ClosePositionPersistenceService {
   /**
    * Close position and persist to database
    */
-  async closePosition(params: ClosePositionInDbParams): Promise<void> {
+  async closePosition(
+    params: ClosePositionInDbParams
+  ): Promise<ClosePositionPersistenceSummary> {
     const { signature, context, onChainData, prices } = params;
 
-    await db.transaction(async (tx) => {
+    return await db.transaction(async (tx) => {
       // 1. Fetch current position and segment
       const [position] = await tx
         .select()
@@ -84,20 +102,32 @@ export class ClosePositionPersistenceService {
       const finalTokenBAmount =
         onChainData?.finalTokenBAmount ?? position.initialTokenYAmount;
 
-      const finalTokenAAmountNum = parseFloat(finalTokenAAmount.toString());
-      const finalTokenBAmountNum = parseFloat(finalTokenBAmount.toString());
+      const finalTokenAAmountDecimal = new Decimal(
+        finalTokenAAmount.toString()
+      );
 
-      const finalValueUSD = new Decimal(finalTokenAAmountNum)
+      const finalTokenBAmountDecimal = new Decimal(
+        finalTokenBAmount.toString()
+      );
+
+      const finalValueUSD = finalTokenAAmountDecimal
         .mul(prices.tokenAUsd)
-        .add(new Decimal(finalTokenBAmountNum).mul(prices.tokenBUsd));
+        .add(finalTokenBAmountDecimal.mul(prices.tokenBUsd));
 
       // 3. Calculate and claim remaining fees
       const claimedFeesX = onChainData?.claimedFeesX ?? "0";
       const claimedFeesY = onChainData?.claimedFeesY ?? "0";
 
-      const feesClaimedUSD = new Decimal(parseFloat(claimedFeesX))
+      const feesClaimedUSD = new Decimal(claimedFeesX)
         .mul(prices.tokenAUsd)
-        .add(new Decimal(parseFloat(claimedFeesY)).mul(prices.tokenBUsd));
+        .add(new Decimal(claimedFeesY).mul(prices.tokenBUsd));
+
+      console.log("finalTokenAAmount", finalTokenAAmount);
+      console.log("finalTokenBAmount", finalTokenBAmount);
+      console.log("finalValueUSD", finalValueUSD);
+      console.log("claimedFeesX", claimedFeesX);
+      console.log("claimedFeesY", claimedFeesY);
+      console.log("feesClaimedUSD", feesClaimedUSD);
 
       if (feesClaimedUSD.greaterThan(0)) {
         await tx.insert(claimHistory).values({
@@ -107,7 +137,7 @@ export class ClosePositionPersistenceService {
           claimType: "closure",
           claimedTokenXAmount: claimedFeesX,
           claimedTokenYAmount: claimedFeesY,
-          claimedUSDValue: feesClaimedUSD.toFixed(2),
+          claimedUSDValue: feesClaimedUSD.toFixed(6),
           tokenXPriceUSD: prices.tokenAUsd.toString(),
           tokenYPriceUSD: prices.tokenBUsd.toString(),
           transactionSignature: signature,
@@ -117,7 +147,7 @@ export class ClosePositionPersistenceService {
 
         logger.info("Fees claimed during position closure", {
           positionId: context.positionId,
-          feesClaimedUSD: feesClaimedUSD.toFixed(2),
+          feesClaimedUSD: feesClaimedUSD.toFixed(6),
         });
       }
 
@@ -136,7 +166,7 @@ export class ClosePositionPersistenceService {
         .update(positionSegments)
         .set({
           endTimestamp: new Date(),
-          finalValueUSD: finalValueUSD.toFixed(2),
+          finalValueUSD: finalValueUSD.toFixed(6),
           realizedPnlUSD: segmentPnlUSD,
           realizedPnlPercentage: segmentPnlPercentage,
           closureReason: context.closureReason,
@@ -151,18 +181,16 @@ export class ClosePositionPersistenceService {
       });
 
       // 6. Calculate total position PnL
-      const newTotalRealizedPnl = new Decimal(position.totalRealizedPnlUSD)
-        .add(segmentPnlUSD)
-        .toFixed(2);
-
-      const newTotalFeesClaimed = new Decimal(position.totalFeesClaimedUSD)
-        .add(feesClaimedUSD)
-        .toFixed(2);
-
+      const newTotalRealizedPnl = new Decimal(position.totalRealizedPnlUSD).add(
+        segmentPnlUSD
+      );
+      const newTotalFeesClaimed = new Decimal(position.totalFeesClaimedUSD).add(
+        feesClaimedUSD
+      );
       // Total PnL = Position Value Gain + All Fees
       // Position Value Gain = (finalValueUSD - initialValueUSD)
       const positionValueGain = finalValueUSD.sub(position.initialValueUSD);
-      const totalPnlUSD = positionValueGain.add(newTotalFeesClaimed).toFixed(2);
+      const totalPnlUSD = positionValueGain.add(newTotalFeesClaimed);
 
       const totalPnlPercentage = new Decimal(totalPnlUSD)
         .div(position.initialValueUSD)
@@ -177,14 +205,14 @@ export class ClosePositionPersistenceService {
         .set({
           status: "CLOSED",
           closedAt: new Date(),
-          finalValueUSD: finalValueUSD.toFixed(2),
+          finalValueUSD: finalValueUSD.toFixed(6),
           finalValueSOL,
           finalTokenXAmount: finalTokenAAmount.toString(),
           finalTokenYAmount: finalTokenBAmount.toString(),
           finalTokenXPriceUSD: prices.tokenAUsd.toString(),
           finalTokenYPriceUSD: prices.tokenBUsd.toString(),
-          totalRealizedPnlUSD: newTotalRealizedPnl,
-          totalFeesClaimedUSD: newTotalFeesClaimed,
+          totalRealizedPnlUSD: newTotalRealizedPnl.toFixed(6),
+          totalFeesClaimedUSD: newTotalFeesClaimed.toFixed(6),
           closureSignature: signature,
           updatedAt: new Date(),
         })
@@ -205,7 +233,7 @@ export class ClosePositionPersistenceService {
         segmentId: currentSegment.id,
         snapshotType: "closure",
         snapshotTimestamp: new Date(),
-        currentValueUSD: finalValueUSD.toFixed(2),
+        currentValueUSD: finalValueUSD.toFixed(6),
         tokenXAmount: finalTokenAAmount.toString(),
         tokenYAmount: finalTokenBAmount.toString(),
         unclaimedFeesX: "0",
@@ -213,7 +241,7 @@ export class ClosePositionPersistenceService {
         unclaimedFeesUSD: "0",
         unrealizedPnlUSD: "0",
         unrealizedPnlPercentage: "0",
-        totalPnlUSD,
+        totalPnlUSD: totalPnlUSD.toFixed(6),
         totalPnlPercentage,
         tokenXPriceUSD: prices.tokenAUsd.toString(),
         tokenYPriceUSD: prices.tokenBUsd.toString(),
@@ -226,6 +254,22 @@ export class ClosePositionPersistenceService {
         segmentId: currentSegment.id,
         closureReason: context.closureReason,
       });
+
+      return {
+        positionId: context.positionId,
+        positionAddress: context.positionAddress,
+        finalValueUSD: finalValueUSD.toFixed(2),
+        finalValueSOL,
+        totalPnlUSD: totalPnlUSD.toFixed(6),
+        totalPnlPercentage,
+        segmentPnlUSD,
+        segmentPnlPercentage,
+        feesClaimedUSD: feesClaimedUSD.toFixed(6),
+        claimedTokenXAmount: claimedFeesX,
+        claimedTokenYAmount: claimedFeesY,
+        finalTokenXAmount: finalTokenAAmount.toString(),
+        finalTokenYAmount: finalTokenBAmount.toString(),
+      };
     });
   }
 }

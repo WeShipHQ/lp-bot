@@ -19,8 +19,8 @@ export function devCommand(
     // });
 
     // return ctx.scene.enter(SCENE_IDS.POSITION_DETAIL_SCENE, {
-    //   positionId: "05709532-31cf-4d47-b360-de90d9db8b8e",
-    //   positionAddress: "HNpsi26Am2ZsW94sfkAoM8onqkQsXkkCxYDsPLSUECJe",
+    //   positionId: "44c66c3a-7c87-4a4c-aabb-535a98e8996e",
+    //   // positionAddress: "HNpsi26Am2ZsW94sfkAoM8onqkQsXkkCxYDsPLSUECJe",
     // });
   });
 }

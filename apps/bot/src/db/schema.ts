@@ -133,7 +133,7 @@ export const positions = pgTable("Position", {
   // Initial investment tracking
   initialValueUSD: decimal("initialValueUSD", {
     precision: 18,
-    scale: 2,
+    scale: 6,
   }).notNull(),
   initialValueSOL: decimal("initialValueSOL", {
     precision: 18,
@@ -181,7 +181,7 @@ export const positions = pgTable("Position", {
     .default("0"),
 
   // Final values (populated when closed)
-  finalValueUSD: decimal("finalValueUSD", { precision: 18, scale: 2 }),
+  finalValueUSD: decimal("finalValueUSD", { precision: 18, scale: 6 }),
   finalValueSOL: decimal("finalValueSOL", { precision: 18, scale: 9 }),
   finalTokenXAmount: decimal("finalTokenXAmount", { precision: 28, scale: 9 }),
   finalTokenYAmount: decimal("finalTokenYAmount", { precision: 28, scale: 9 }),
@@ -225,12 +225,12 @@ export const positionSegments = pgTable("PositionSegment", {
   // Segment values
   initialValueUSD: decimal("initialValueUSD", {
     precision: 18,
-    scale: 2,
+    scale: 6,
   }).notNull(),
-  finalValueUSD: decimal("finalValueUSD", { precision: 18, scale: 2 }),
+  finalValueUSD: decimal("finalValueUSD", { precision: 18, scale: 6 }),
 
   // Segment PnL
-  realizedPnlUSD: decimal("realizedPnlUSD", { precision: 18, scale: 2 }),
+  realizedPnlUSD: decimal("realizedPnlUSD", { precision: 18, scale: 6 }),
   realizedPnlPercentage: decimal("realizedPnlPercentage", {
     precision: 10,
     scale: 4,
@@ -239,7 +239,7 @@ export const positionSegments = pgTable("PositionSegment", {
   // Fees claimed during this segment
   feesClaimedUSD: decimal("feesClaimedUSD", {
     precision: 18,
-    scale: 2,
+    scale: 6,
   }).default("0"),
 
   // Closure reason
@@ -279,7 +279,7 @@ export const claimHistory = pgTable("ClaimHistory", {
   // USD values at claim time
   claimedUSDValue: decimal("claimedUSDValue", {
     precision: 18,
-    scale: 2,
+    scale: 6,
   }).notNull(),
   tokenXPriceUSD: decimal("tokenXPriceUSD", {
     precision: 18,
@@ -325,15 +325,15 @@ export const rebalanceEvents = pgTable("RebalanceEvent", {
   ),
   segmentInitialUSD: decimal("segmentInitialUSD", {
     precision: 18,
-    scale: 2,
+    scale: 6,
   }).notNull(),
   segmentFinalUSD: decimal("segmentFinalUSD", {
     precision: 18,
-    scale: 2,
+    scale: 6,
   }).notNull(),
   segmentPnlUSD: decimal("segmentPnlUSD", {
     precision: 18,
-    scale: 2,
+    scale: 6,
   }).notNull(),
   segmentPnlPercentage: decimal("segmentPnlPercentage", {
     precision: 10,
@@ -343,14 +343,14 @@ export const rebalanceEvents = pgTable("RebalanceEvent", {
   // Fees collected during rebalance
   feesCollectedUSD: decimal("feesCollectedUSD", {
     precision: 18,
-    scale: 2,
+    scale: 6,
   }).default("0"),
 
   // New segment data
   newSegmentId: uuid("newSegmentId").references(() => positionSegments.id),
   newSegmentInitialUSD: decimal("newSegmentInitialUSD", {
     precision: 18,
-    scale: 2,
+    scale: 6,
   }).notNull(),
 
   // Transaction references
@@ -359,7 +359,7 @@ export const rebalanceEvents = pgTable("RebalanceEvent", {
 
   // Gas and slippage costs
   totalGasCostSOL: decimal("totalGasCostSOL", { precision: 18, scale: 9 }),
-  slippageCostUSD: decimal("slippageCostUSD", { precision: 18, scale: 2 }),
+  slippageCostUSD: decimal("slippageCostUSD", { precision: 18, scale: 6 }),
 
   notes: text("notes"),
   createdAt: timestamp("createdAt").notNull().defaultNow(),
@@ -380,7 +380,7 @@ export const positionSnapshots = pgTable("PositionSnapshot", {
   // Current position value
   currentValueUSD: decimal("currentValueUSD", {
     precision: 18,
-    scale: 2,
+    scale: 6,
   }).notNull(),
   tokenXAmount: decimal("tokenXAmount", { precision: 28, scale: 9 }).notNull(),
   tokenYAmount: decimal("tokenYAmount", { precision: 28, scale: 9 }).notNull(),
@@ -396,19 +396,19 @@ export const positionSnapshots = pgTable("PositionSnapshot", {
   }).notNull(),
   unclaimedFeesUSD: decimal("unclaimedFeesUSD", {
     precision: 18,
-    scale: 2,
+    scale: 6,
   }).notNull(),
 
   // PnL at snapshot time
   unrealizedPnlUSD: decimal("unrealizedPnlUSD", {
     precision: 18,
-    scale: 2,
+    scale: 6,
   }).notNull(),
   unrealizedPnlPercentage: decimal("unrealizedPnlPercentage", {
     precision: 10,
     scale: 4,
   }).notNull(),
-  totalPnlUSD: decimal("totalPnlUSD", { precision: 18, scale: 2 }).notNull(),
+  totalPnlUSD: decimal("totalPnlUSD", { precision: 18, scale: 6 }).notNull(),
   totalPnlPercentage: decimal("totalPnlPercentage", {
     precision: 10,
     scale: 4,

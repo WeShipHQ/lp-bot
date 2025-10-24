@@ -28,6 +28,7 @@ import { PublicKey } from "@solana/web3.js";
 import Decimal from "decimal.js";
 import { MeteoraDlmmPoolResponse } from "@/types/meteora.types";
 import { StrategyType } from "@meteora-ag/dlmm";
+import { JupiterService } from "@/services/jupiter.service";
 
 /**
  * MeteoraAdapter
@@ -41,6 +42,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
 
   private readonly dlmm: MeteoraDlmmService;
   private readonly api: MeteoraApiClient;
+  private readonly jupiter: JupiterService;
   private readonly prices: TokenPriceService;
 
   private readonly urlPatterns = {
@@ -68,6 +70,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
           return new TokenPriceService();
         }
       })();
+    this.jupiter = new JupiterService();
   }
 
   async getPool(poolId: string): Promise<UnifiedPool> {
@@ -96,8 +99,8 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
         hide_low_tvl: params?.minTvl ?? 0,
       });
 
-      const pools: UnifiedPool[] = (res.pairs || []).map((p) =>
-        this.transformPoolToUnified(p)
+      const pools: UnifiedPool[] = await Promise.all(
+        (res.pairs || []).map((p) => this.transformPoolToUnified(p))
       );
 
       const totalPages = limit > 0 ? Math.ceil((res.total || 0) / limit) : 1;
@@ -125,7 +128,10 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
           p.mint_x.toLowerCase().includes(lowered) ||
           p.mint_y.toLowerCase().includes(lowered)
       );
-      return filtered.map((p) => this.transformPoolToUnified(p));
+
+      return await Promise.all(
+        filtered.map((p) => this.transformPoolToUnified(p))
+      );
     } catch (error) {
       return this.handleError(error, "searchPools");
     }
@@ -684,7 +690,9 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     }
   }
 
-  async closePositionIx(params: ClosePositionParams): Promise<ClosePositionResult> {
+  async closePositionIx(
+    params: ClosePositionParams
+  ): Promise<ClosePositionResult> {
     try {
       this.validateAddress(params.poolAddress);
       this.validateAddress(params.userAddress);
@@ -819,24 +827,13 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     return null;
   }
 
-  private transformPoolToUnified(p: MeteoraDlmmPoolResponse): UnifiedPool {
-    const [symA, symB] = (p.name || "")
-      .split("-")
-      .map((s) => s?.trim().toUpperCase());
-
-    const tokenA: Token = {
-      address: p.mint_x,
-      symbol: symA || p.mint_x.slice(0, 4),
-      name: symA || p.mint_x,
-      decimals: 6,
-    };
-
-    const tokenB: Token = {
-      address: p.mint_y,
-      symbol: symB || p.mint_y.slice(0, 4),
-      name: symB || p.mint_y,
-      decimals: 6,
-    };
+  private async transformPoolToUnified(
+    p: MeteoraDlmmPoolResponse
+  ): Promise<UnifiedPool> {
+    const { tokenX, tokenY } = await this.jupiter.getTokenPairInfo(
+      p.mint_x,
+      p.mint_y
+    );
 
     const volume24h = Number(p.trade_volume_24h ?? 0);
     const fees24h = Number(p.fees_24h ?? 0);
@@ -852,8 +849,20 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       name: p.name,
       dex: this.dexType,
       type: "DLMM",
-      tokenA,
-      tokenB,
+      tokenA: {
+        address: tokenX.id,
+        symbol: tokenX.symbol,
+        name: tokenX.name,
+        decimals: tokenX.decimals,
+        logoUri: tokenX.icon,
+      },
+      tokenB: {
+        address: tokenY.id,
+        symbol: tokenY.symbol,
+        name: tokenY.name,
+        decimals: tokenY.decimals,
+        logoUri: tokenY.icon,
+      },
       liquidity: String(p.liquidity ?? "0"),
       tvl: String(p.liquidity ?? "0"),
       apr: Number((p as any).apr ?? 0),

@@ -1,12 +1,19 @@
 import { ITelegramClient } from "./telegram-client";
+import type { SendOptions } from "./telegram-client";
 import { IUserRepository } from "@/domain/user/user.repository";
 import type { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
-import { JOB_NOTIFICATION, NotificationJobData } from "@/infrastructure/jobs/job-definitions";
+import {
+  JOB_NOTIFICATION,
+  NotificationJobData,
+  NotificationMessagePayload,
+  NotificationType,
+} from "@/infrastructure/jobs/job-definitions";
 
 export interface Notification {
-  type: "price" | "rebalance" | "general";
-  title: string;
-  message: string;
+  type: NotificationType;
+  title?: string;
+  message?: string;
+  messages?: NotificationMessagePayload[];
 }
 
 export class NotificationService {
@@ -23,8 +30,33 @@ export class NotificationService {
     if (!user.hasNotificationEnabled(notification.type)) return;
 
     const chatId = Number(user.telegramId);
+
+    if (notification.messages && notification.messages.length > 0) {
+      for (const message of notification.messages) {
+        const options: SendOptions = {};
+
+        if (message.parseMode) {
+          options.parse_mode = message.parseMode;
+        }
+
+        if (message.disableLinkPreview) {
+          options.link_preview_options = { is_disabled: true };
+        }
+
+        await this.telegramClient.sendMessage(chatId, message.text, options);
+      }
+      return;
+    }
+
+    if (!notification.title || !notification.message) {
+      return;
+    }
+
     const text = `📣 ${notification.title}\n\n${notification.message}`;
-    await this.telegramClient.sendMessage(chatId, text, { parse_mode: "Markdown", link_preview_options: { is_disabled: true } });
+    await this.telegramClient.sendMessage(chatId, text, {
+      parse_mode: "Markdown",
+      link_preview_options: { is_disabled: true },
+    });
   }
 
   async scheduleNotification(

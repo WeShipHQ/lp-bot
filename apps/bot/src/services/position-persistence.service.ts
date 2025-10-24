@@ -1,17 +1,16 @@
-import { db, positions, positionSegments, positionSnapshots } from '@/db';
-import { PositionCreationContext } from '@/application/position/create-position.use-case';
-import { logger } from '@/utils/logger';
-import Decimal from 'decimal.js';
-import { Token } from '@/types/token.types';
-import { eq } from 'drizzle-orm';
+import { db, positions, positionSegments, positionSnapshots } from "@/db";
+import { PositionCreationContext } from "@/application/position/create-position.use-case";
+import { logger } from "@/utils/logger";
+import Decimal from "decimal.js";
+import { eq } from "drizzle-orm";
 
 interface CreatePositionInDbParams {
   signature: string;
   positionAddress: string;
   context: PositionCreationContext;
   onChainData?: {
-    actualTokenAAmount?: string;
-    actualTokenBAmount?: string;
+    actualTokenAAmount: string;
+    actualTokenBAmount: string;
     lowerBinId?: number;
     upperBinId?: number;
   };
@@ -24,7 +23,7 @@ interface CreatePositionInDbParams {
 
 /**
  * PositionPersistenceService
- * 
+ *
  * Handles database persistence for positions after transaction confirmation.
  * Creates Position, PositionSegment, and PositionSnapshot records.
  */
@@ -41,35 +40,17 @@ export class PositionPersistenceService {
       const tokenBAmount =
         onChainData?.actualTokenBAmount ?? context.tokenBAmount;
 
-      const tokenAAmountNum = parseFloat(tokenAAmount);
-      const tokenBAmountNum = parseFloat(tokenBAmount);
+      const tokenAPriceUsd = prices.tokenAUsd;
+      const tokenBPriceUsd = prices.tokenBUsd;
+      const solPriceUsd = prices.solUsd;
 
-      const tokenAPriceUsd = context.quotes?.tokenAUsd ?? prices.tokenAUsd;
-      const tokenBPriceUsd = context.quotes?.tokenBUsd ?? prices.tokenBUsd;
-      const solPriceUsd = context.quotes?.solUsd ?? prices.solUsd;
-
-      const initialValueUSD = new Decimal(tokenAAmountNum)
+      const initialValueUSD = new Decimal(tokenAAmount)
         .mul(tokenAPriceUsd)
-        .add(new Decimal(tokenBAmountNum).mul(tokenBPriceUsd))
-        .toFixed(2);
+        .add(new Decimal(tokenBAmount).mul(tokenBPriceUsd));
 
       const initialValueSOL = context.solAmount
         ? new Decimal(context.solAmount).toFixed(9)
         : new Decimal(initialValueUSD).div(solPriceUsd).toFixed(9);
-
-      const tokenX: Token = {
-        address: context.tokenAMint,
-        symbol: context.tokenASymbol ?? 'UNKNOWN',
-        name: context.tokenASymbol ?? 'Unknown Token',
-        decimals: context.tokenADecimals ?? 9,
-      };
-
-      const tokenY: Token = {
-        address: context.tokenBMint,
-        symbol: context.tokenBSymbol ?? 'UNKNOWN',
-        name: context.tokenBSymbol ?? 'Unknown Token',
-        decimals: context.tokenBDecimals ?? 9,
-      };
 
       const [position] = await tx
         .insert(positions)
@@ -78,23 +59,23 @@ export class PositionPersistenceService {
           positionAddress,
           poolAddress: context.poolAddress,
           dex: context.dex,
-          strategyType: 'DLMM',
-          tokenX,
-          tokenY,
-          status: 'ACTIVE',
-          initialValueUSD,
-          initialValueSOL,
+          strategyType: "DLMM",
+          tokenX: context.tokenA,
+          tokenY: context.tokenB,
+          status: "ACTIVE",
+          initialValueUSD: initialValueUSD.toFixed(6),
+          initialValueSOL: initialValueSOL,
           initialTokenXAmount: tokenAAmount,
           initialTokenYAmount: tokenBAmount,
           initialTokenXPriceUSD: tokenAPriceUsd.toString(),
           initialTokenYPriceUSD: tokenBPriceUsd.toString(),
           currentSegmentNumber: 1,
-          currentSegmentInitialUSD: initialValueUSD,
+          currentSegmentInitialUSD: initialValueUSD.toFixed(6),
           currentSegmentStartAt: new Date(),
-          totalRealizedPnlUSD: '0',
-          totalFeesClaimedUSD: '0',
+          totalRealizedPnlUSD: "0",
+          totalFeesClaimedUSD: "0",
           isRebalancingEnabled: context.autoRebalance,
-          rebalanceThreshold: context.rebalanceThreshold?.toString() ?? '20.0',
+          rebalanceThreshold: context.rebalanceThreshold?.toString() ?? "20.0",
           slPercentage: context.slPercentage?.toString(),
           tpPercentage: context.tpPercentage?.toString(),
           creationSignature: signature,
@@ -103,7 +84,7 @@ export class PositionPersistenceService {
         })
         .returning();
 
-      logger.info('Position created in DB', {
+      logger.info("Position created in DB", {
         positionId: position.id,
         positionAddress,
         signature,
@@ -116,13 +97,13 @@ export class PositionPersistenceService {
           positionId: position.id,
           segmentNumber: 1,
           startTimestamp: new Date(),
-          initialValueUSD,
+          initialValueUSD: initialValueUSD.toFixed(2),
           startPositionAddress: positionAddress,
           createdAt: new Date(),
         })
         .returning();
 
-      logger.info('Position segment created', {
+      logger.info("Position segment created", {
         segmentId: segment.id,
         positionId: position.id,
         segmentNumber: 1,
@@ -131,28 +112,28 @@ export class PositionPersistenceService {
       await tx.insert(positionSnapshots).values({
         positionId: position.id,
         segmentId: segment.id,
-        snapshotType: 'creation',
+        snapshotType: "creation",
         snapshotTimestamp: new Date(),
-        currentValueUSD: initialValueUSD,
+        currentValueUSD: initialValueUSD.toFixed(6),
         tokenXAmount: tokenAAmount,
         tokenYAmount: tokenBAmount,
-        unclaimedFeesX: '0',
-        unclaimedFeesY: '0',
-        unclaimedFeesUSD: '0',
-        unrealizedPnlUSD: '0',
-        unrealizedPnlPercentage: '0',
-        totalPnlUSD: '0',
-        totalPnlPercentage: '0',
+        unclaimedFeesX: "0",
+        unclaimedFeesY: "0",
+        unclaimedFeesUSD: "0",
+        unrealizedPnlUSD: "0",
+        unrealizedPnlPercentage: "0",
+        totalPnlUSD: "0",
+        totalPnlPercentage: "0",
         tokenXPriceUSD: tokenAPriceUsd.toString(),
         tokenYPriceUSD: tokenBPriceUsd.toString(),
         solPriceUSD: solPriceUsd.toString(),
         createdAt: new Date(),
       });
 
-      logger.info('Position snapshot created', {
+      logger.info("Position snapshot created", {
         positionId: position.id,
         segmentId: segment.id,
-        snapshotType: 'creation',
+        snapshotType: "creation",
       });
 
       return position.id;
@@ -171,7 +152,7 @@ export class PositionPersistenceService {
       })
       .where(eq(positions.id, positionId));
 
-    logger.info('Position enriched', { positionId, enrichmentData });
+    logger.info("Position enriched", { positionId, enrichmentData });
   }
 }
 

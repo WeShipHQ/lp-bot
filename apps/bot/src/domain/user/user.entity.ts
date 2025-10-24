@@ -84,7 +84,9 @@ export class User {
     );
   }
 
-  hasNotificationEnabled(type: 'price' | 'rebalance' | 'general'): boolean {
+  hasNotificationEnabled(
+    type: 'price' | 'rebalance' | 'general' | 'position'
+  ): boolean {
     if (!this.preferences.notificationsEnabled) {
       return false;
     }
@@ -95,6 +97,7 @@ export class User {
       case 'rebalance':
         return this.preferences.rebalanceAlertsEnabled;
       case 'general':
+      case 'position':
         return true;
       default:
         return false;
