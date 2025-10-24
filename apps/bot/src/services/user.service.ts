@@ -19,10 +19,17 @@ export class UserService {
         return null;
       }
 
-      const walletAddress = user.customMetadata.walletAddress as string;
-      const twoFactorEnabled = user.customMetadata.twoFactorEnabled as boolean || false;
-      const twoFactorSecret = user.customMetadata.twoFactorSecret as string;
-      const hasExportedPrivateKey = user.customMetadata.hasExportedPrivateKey as boolean || false;
+      const metadata = (user.customMetadata || {}) as Record<string, unknown>;
+      const walletAddress =
+        typeof metadata.walletAddress === "string"
+          ? (metadata.walletAddress as string)
+          : undefined;
+      const twoFactorEnabled = Boolean(metadata.twoFactorEnabled);
+      const twoFactorSecret =
+        typeof metadata.twoFactorSecret === "string"
+          ? (metadata.twoFactorSecret as string)
+          : undefined;
+      const hasExportedPrivateKey = Boolean(metadata.hasExportedPrivateKey);
 
       const result = {
         id: user.id,
@@ -74,19 +81,37 @@ export class UserService {
   /**
    * Mark user as having exported private key
    */
-  async markPrivateKeyExported(userId: string): Promise<boolean> {
+  async markPrivateKeyExported(params: {
+    privyUserId?: string;
+    telegramId?: string;
+  }): Promise<boolean> {
     try {
-      // Get current user data to preserve existing metadata
-      const currentUser = await privy.getUser(userId);
+      let privyUserId = params.privyUserId;
+      let currentUser;
+
+      if (privyUserId) {
+        currentUser = await privy.getUser(privyUserId);
+      } else if (params.telegramId) {
+        currentUser = await privy.getUserByTelegramUserId(params.telegramId);
+        privyUserId = currentUser?.id;
+      } else {
+        throw new Error("Missing Privy identifier");
+      }
+
+      if (!currentUser || !privyUserId) {
+        throw new Error("Privy user not found");
+      }
+
       const currentMetadata = currentUser.customMetadata || {};
-      
-      // Merge with existing metadata to preserve wallet info
-      const updatedMetadata = {
+      if (currentMetadata.hasExportedPrivateKey === true) {
+        return true;
+      }
+
+      await privy.setCustomMetadata(privyUserId, {
         ...currentMetadata,
-        hasExportedPrivateKey: true
-      };
-      
-      await privy.setCustomMetadata(userId, updatedMetadata);
+        hasExportedPrivateKey: true,
+      });
+
       return true;
     } catch (error) {
       console.error("Error marking private key as exported:", error);

@@ -1,8 +1,12 @@
-import { eq, sql } from 'drizzle-orm';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import * as schema from '../../../db/schema';
-import { User, UserPreferences, RebalanceStrategy } from '../../../domain/user/user.entity';
-import { IUserRepository } from '../../../domain/user/user.repository';
+import { eq, sql } from "drizzle-orm";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import * as schema from "../../../db/schema";
+import {
+  User,
+  UserPreferences,
+  RebalanceStrategy,
+} from "../../../domain/user/user.entity";
+import { IUserRepository } from "../../../domain/user/user.repository";
 
 export class UserRepository implements IUserRepository {
   constructor(private readonly db: PostgresJsDatabase<typeof schema>) {}
@@ -65,17 +69,19 @@ export class UserRepository implements IUserRepository {
 
   async save(user: User): Promise<void> {
     const persistenceData = this.toPersistence(user);
-    
+
     await this.db.insert(schema.users).values(persistenceData);
   }
 
   async update(user: User): Promise<void> {
     const persistenceData = this.toPersistence(user);
-    
+
     await this.db
       .update(schema.users)
       .set({
         username: persistenceData.username,
+        walletId: persistenceData.walletId,
+        walletAddress: persistenceData.walletAddress,
         autoRebalanceEnabled: persistenceData.autoRebalanceEnabled,
         rebalanceThreshold: persistenceData.rebalanceThreshold,
         rebalanceStrategy: persistenceData.rebalanceStrategy,
