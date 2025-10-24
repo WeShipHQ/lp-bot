@@ -84,6 +84,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         poolAddress,
         dex: dex as DexType,
       });
+      console.log("poolData", poolData);
       if (!poolData) {
         await ctx.reply("Pool not found");
         return ctx.scene.leave();

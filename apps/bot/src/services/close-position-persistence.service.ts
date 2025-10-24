@@ -102,8 +102,12 @@ export class ClosePositionPersistenceService {
       const finalTokenBAmount =
         onChainData?.finalTokenBAmount ?? position.initialTokenYAmount;
 
-      const finalTokenAAmountDecimal = new Decimal(finalTokenAAmount.toString());
-      const finalTokenBAmountDecimal = new Decimal(finalTokenBAmount.toString());
+      const finalTokenAAmountDecimal = new Decimal(
+        finalTokenAAmount.toString()
+      );
+      const finalTokenBAmountDecimal = new Decimal(
+        finalTokenBAmount.toString()
+      );
 
       const finalValueUSD = finalTokenAAmountDecimal
         .mul(prices.tokenAUsd)
@@ -118,6 +122,13 @@ export class ClosePositionPersistenceService {
         .add(new Decimal(claimedFeesY).mul(prices.tokenBUsd));
 
       const feesClaimedUSDValue = feesClaimedUSD.toFixed(2);
+
+      console.log("finalTokenAAmount", finalTokenAAmount);
+      console.log("finalTokenBAmount", finalTokenBAmount);
+      console.log("finalValueUSD", finalValueUSD);
+      console.log("claimedFeesX", claimedFeesX);
+      console.log("claimedFeesY", claimedFeesY);
+      console.log("feesClaimedUSD", feesClaimedUSDValue);
 
       if (feesClaimedUSD.greaterThan(0)) {
         await tx.insert(claimHistory).values({

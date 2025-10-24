@@ -299,6 +299,7 @@ positionDetailScene.action(
     try {
       const uc = container.get(ClosePositionUseCase);
       const res = await uc.execute({
+        user: ctx.user,
         userId: ctx.user.id,
         positionId: state.positionId,
         userAddress: ctx.user.walletAddress,

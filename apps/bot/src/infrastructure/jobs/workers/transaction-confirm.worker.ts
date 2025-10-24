@@ -15,7 +15,7 @@ import { PositionCreationContext } from "@/application/position/create-position.
 import { positionPersistenceService } from "@/services/position-persistence.service";
 import { rebalancePersistenceService } from "@/services/rebalance-persistence.service";
 import { closePositionPersistenceService } from "@/services/close-position-persistence.service";
-import type { ClosePositionPersistenceSummary } from "@/services/close-position-persistence.service";
+// import type { ClosePositionPersistenceSummary } from "@/services/close-position-persistence.service";
 import { getTokenPriceService } from "@/services/token-price.service";
 import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
 import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
@@ -261,8 +261,14 @@ export class TransactionConfirmWorker
         return;
       }
 
-      let actualTokenAAmount = context.tokenAAmount;
-      let actualTokenBAmount = context.tokenBAmount;
+      let actualTokenAAmount = new Decimal(context.tokenAAmount).mul(
+        new Decimal(10).pow(context.tokenA.decimals)
+      );
+      let actualTokenBAmount = new Decimal(context.tokenBAmount).mul(
+        new Decimal(10).pow(context.tokenB.decimals)
+      );
+
+      console.log("addLiquidityInstruction", addLiquidityInstruction);
 
       if (addLiquidityInstruction.tokenTransfers.length > 0) {
         const tokenAMint = context.tokenA.address;
@@ -276,14 +282,10 @@ export class TransactionConfirmWorker
         );
 
         if (tokenATransfer) {
-          actualTokenAAmount = (
-            tokenATransfer.amount / Math.pow(10, context.tokenA.decimals ?? 9)
-          ).toString();
+          actualTokenAAmount = new Decimal(tokenATransfer.amount);
         }
         if (tokenBTransfer) {
-          actualTokenBAmount = (
-            tokenBTransfer.amount / Math.pow(10, context.tokenB.decimals ?? 9)
-          ).toString();
+          actualTokenBAmount = new Decimal(tokenBTransfer.amount);
         }
 
         logger.info(
@@ -298,8 +300,8 @@ export class TransactionConfirmWorker
       }
 
       const onChainData = {
-        actualTokenAAmount,
-        actualTokenBAmount,
+        actualTokenAAmount: actualTokenAAmount.toString(),
+        actualTokenBAmount: actualTokenBAmount.toString(),
         lowerBinId: undefined,
         upperBinId: undefined,
       };
@@ -575,18 +577,7 @@ export class TransactionConfirmWorker
         return;
       }
 
-      let metadata: any = {};
-      try {
-        metadata =
-          typeof ptx.metadata === "string"
-            ? JSON.parse(ptx.metadata)
-            : ptx.metadata;
-      } catch (parseError) {
-        logger.error(
-          { signature, parseError },
-          "[TxConfirmWorker] Failed to parse pending transaction metadata (close)"
-        );
-      }
+      let metadata: any = ptx.metadata;
 
       const closeContext = metadata.closeContext as
         | PositionClosureContext
@@ -605,13 +596,10 @@ export class TransactionConfirmWorker
       const targetUserId = closeContext.userId ?? userId;
 
       if (!effectivePositionId) {
-        logger.error(
-          "[TxConfirmWorker] Insufficient data to handle close",
-          {
-            signature,
-            closeContext,
-          }
-        );
+        logger.error("[TxConfirmWorker] Insufficient data to handle close", {
+          signature,
+          closeContext,
+        });
         return;
       }
 
@@ -726,6 +714,8 @@ export class TransactionConfirmWorker
           prices,
         });
 
+      console.log("persistenceResult", persistenceResult);
+
       await this.cache.invalidate(CachePatterns.portfolioPattern(targetUserId));
       await this.cache.invalidate(
         CachePatterns.positionPattern(effectivePositionId)
@@ -763,7 +753,7 @@ export class TransactionConfirmWorker
 
   private buildClosePositionNotifications(
     signature: string,
-    result: ClosePositionPersistenceSummary
+    result: any
   ): NotificationMessagePayload[] {
     const pnlUsd = Number(result.totalPnlUSD);
     const pnlPercentage = Number(result.totalPnlPercentage);

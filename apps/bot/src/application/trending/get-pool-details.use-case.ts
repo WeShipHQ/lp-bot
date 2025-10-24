@@ -1,6 +1,9 @@
 import { dexRegistry } from "@/services/dex-registry.service";
 import { DexType, UnifiedPool } from "@/types/core.types";
-import { getCacheService, ICacheService } from "@/infrastructure/cache/cache.service";
+import {
+  getCacheService,
+  ICacheService,
+} from "@/infrastructure/cache/cache.service";
 import { CacheKeys } from "@/infrastructure/cache/cache-keys";
 
 export interface GetPoolDetailsParams {
@@ -28,8 +31,8 @@ export class GetPoolDetailsUseCase {
     }
 
     const cacheKey = CacheKeys.poolKey(dex, poolAddress);
-    const cached = await this.cache.get<UnifiedPool>(cacheKey);
-    if (cached) return cached;
+    // const cached = await this.cache.get<UnifiedPool>(cacheKey);
+    // if (cached) return cached;
 
     const adapter = dexRegistry.get(dex);
     const pool = await adapter.getPool(poolAddress);

@@ -125,11 +125,6 @@ export class ClosePositionUseCase {
 
       let signature = "" as string | undefined;
       try {
-        // signature = await this.transactionService.submit(txResult.metadata ?? {}, {
-        //   userId: command.userId,
-        //   walletId: command.walletId,
-        //   userAddress: command.userAddress,
-        // });
         signature = await WalletService.signAndSendTransactionWithJito(
           command.user,
           txResult.instructions,
@@ -147,7 +142,6 @@ export class ClosePositionUseCase {
         };
       }
 
-      // Record pending transaction for async processing/observability
       try {
         const closeContext: PositionClosureContext = {
           userId: command.userId,
@@ -155,10 +149,8 @@ export class ClosePositionUseCase {
           positionAddress,
           poolAddress: position.poolAddress,
           closureReason: command.closureReason ?? "user_close",
-          tokenAMint:
-            (position.tokenX as any).mint || (position.tokenX as any).address,
-          tokenBMint:
-            (position.tokenY as any).mint || (position.tokenY as any).address,
+          tokenAMint: position.tokenX.address,
+          tokenBMint: position.tokenY.address,
           tokenASymbol: position.tokenX.symbol,
           tokenBSymbol: position.tokenY.symbol,
           tokenADecimals: position.tokenX.decimals,
@@ -174,7 +166,6 @@ export class ClosePositionUseCase {
             poolAddress: position.poolAddress,
             closureReason: command.closureReason ?? "user_close",
           },
-          // adapterMetadata: txResult.metadata ?? {},
           closeContext,
         };
 
@@ -183,7 +174,7 @@ export class ClosePositionUseCase {
           operationType: "CLOSE_POSITION",
           userId: command.userId,
           status: "PENDING",
-          metadata: JSON.stringify(metadata),
+          metadata: metadata,
           retryCount: 0,
           maxRetries: 3,
           createdAt: new Date(),

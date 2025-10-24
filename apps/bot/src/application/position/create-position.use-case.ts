@@ -1,4 +1,3 @@
-import { IPositionRepository } from "@/domain/position/position.repository";
 import {
   validatePoolAddress,
   validateWalletAddress,
@@ -26,6 +25,7 @@ export interface PositionCreationContext {
   // User context
   userId: string;
   walletAddress: string;
+  walletId?: string;
 
   // Pool context
   dex: DexType;
@@ -135,9 +135,7 @@ import Decimal from "decimal.js";
 export class CreatePositionUseCase {
   private readonly cache: ICacheService;
   constructor(
-    // private readonly positionRepository: IPositionRepository,
     private readonly dexRegistry: DexRegistryLike,
-    // private readonly transactionService: ITransactionService,
     cacheService?: ICacheService
   ) {
     this.cache = cacheService ?? getCacheService();
@@ -217,14 +215,10 @@ export class CreatePositionUseCase {
       }
 
       const adapterPositionAddress = txResult.positionKp.publicKey.toBase58();
-      // const adapterPositionAddress =
-      // "6qmQZUHMYxPRcH8suHdH27t6CrsTvEtcGK7oH8iyLxLo";
-
-      // const rawContext = (command.metadata?.positionContext ??
-      //   command.metadata) as PositionCreationContext | undefined;
 
       const positionContext: PositionCreationContext = {
         userId: command.user.id,
+        walletId: command.user.walletId,
         walletAddress: command.user.walletAddress,
 
         dex: command.dex,
