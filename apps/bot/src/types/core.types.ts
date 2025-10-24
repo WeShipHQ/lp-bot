@@ -186,3 +186,15 @@ export interface ClosePositionResult {
   instructions: TransactionInstruction[];
   error?: string;
 }
+
+export interface ClaimFeesParams {
+  poolAddress: string;
+  userAddress: string;
+  positionAddress: string;
+}
+
+export interface ClaimFeesResult {
+  success: boolean;
+  instructions: TransactionInstruction[];
+  error?: string;
+}

@@ -13,6 +13,8 @@ import {
   UrlParseResult,
   ClosePositionResult,
   ClosePositionParams,
+  ClaimFeesParams,
+  ClaimFeesResult,
 } from "@/types/core.types";
 import { MeteoraApiClient, meteoraApiClient } from "./meteora-api.client";
 import { Token } from "@/types/token.types";
@@ -721,30 +723,24 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     }
   }
 
-  async claimFees(positionAddress: string): Promise<TransactionResult> {
+  async claimFeesIx(params: ClaimFeesParams): Promise<ClaimFeesResult> {
     try {
-      this.validateAddress(positionAddress);
-      // @ts-expect-error
-      const ctx = (arguments as any)[1] || {};
-      if (!ctx.userAddress || !ctx.poolAddress) {
-        throw new Error(
-          "Missing userAddress or poolAddress in metadata for claimFees"
-        );
-      }
-      const owner = new PublicKey(ctx.userAddress);
-      const pool = new PublicKey(ctx.poolAddress);
+      this.validateAddress(params.poolAddress);
+      this.validateAddress(params.positionAddress);
+      this.validateAddress(params.userAddress);
+
+      const owner = new PublicKey(params.userAddress);
+      const pool = new PublicKey(params.poolAddress);
 
       const res = await this.dlmm.buildClaimFeesTx(
         owner,
         pool,
-        new PublicKey(positionAddress)
+        new PublicKey(params.positionAddress)
       );
 
       return {
         success: true,
-        metadata: {
-          instructions: res.instructions,
-        },
+        instructions: res.instructions,
       };
     } catch (error) {
       return this.handleError(error, "claimFees");

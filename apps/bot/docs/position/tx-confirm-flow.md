@@ -197,6 +197,161 @@ await jobQueue.enqueue(JOB_NOTIFICATION, {
 });
 ```
 
+## Claim Fees Flow
+
+### Step 1: Pending Transaction Storage
+
+```
+await db.insert(pendingTransactions).values({
+  signature,
+  operationType: "CLAIM_FEES",
+  userId: command.user.id,
+  status: "PENDING",
+  metadata: {
+    command: { /* basic command data */ },
+    claimContext: {
+      userId,
+      positionId,
+      positionAddress,
+      poolAddress,
+      userAddress,
+      tokenAMint,
+      tokenBMint,
+      tokenASymbol,
+      tokenBSymbol,
+      tokenADecimals,
+      tokenBDecimals,
+      convertToSol: true,
+      estimatedFeesUsd,
+    }
+  },
+  retryCount: 0,
+  maxRetries: 3,
+});
+```
+
+### Step 2: Job Enqueue
+
+```
+await jobQueue.enqueue(
+  JOB_TX_CONFIRM,
+  {
+    signature,
+    operationType: "CLAIM_FEES",
+    userId,
+    positionId,
+    positionAddress,
+    submittedAt: Date.now(),
+  },
+  { delay: 500 }
+);
+```
+
+### Step 3: Parse Claim Instructions
+
+```typescript
+const parsedTransaction = await connection.getParsedTransaction(signature, {
+  maxSupportedTransactionVersion: 0,
+});
+
+const instructions = parseMeteoraInstructions(parsedTransaction);
+const claimInstructions = instructions.filter(ix => ix.instructionType === "claim");
+
+const aggregateTransfers = new Map<string, number>();
+for (const instruction of claimInstructions) {
+  for (const transfer of instruction.tokenTransfers ?? []) {
+    const current = aggregateTransfers.get(transfer.mint) ?? 0;
+    aggregateTransfers.set(transfer.mint, current + transfer.amount);
+  }
+}
+```
+
+### Step 4: Calculate Claimed Amounts & SOL Conversion
+
+```typescript
+const tokenAUi = decimalFromRaw(rawAmountA, tokenADecimals);
+const tokenBUi = decimalFromRaw(rawAmountB, tokenBDecimals);
+const priceData = await this.priceService.getPrices([tokenAMint, tokenBMint, solMint]);
+
+let solReceived = new Decimal(0);
+
+// Direct SOL proceeds
+if (tokenAMint === solMint) {
+  solReceived = solReceived.add(lamportsToSol(rawAmountA));
+}
+if (tokenBMint === solMint) {
+  solReceived = solReceived.add(lamportsToSol(rawAmountB));
+}
+
+// Jupiter swaps for non-SOL fees
+if (convertToSol && user) {
+  if (tokenAMint !== solMint) {
+    solReceived = solReceived.add(
+      await swapTokenToSol(user, tokenAMint, rawAmountA)
+    );
+  }
+  if (tokenBMint !== solMint) {
+    solReceived = solReceived.add(
+      await swapTokenToSol(user, tokenBMint, rawAmountB)
+    );
+  }
+}
+
+const estimatedUsd = tokenAUi.mul(priceData[tokenAMint]?.price ?? 0)
+  .add(tokenBUi.mul(priceData[tokenBMint]?.price ?? 0));
+const claimedUsd = solReceived.gt(0) && (priceData[solMint]?.price ?? 0) > 0
+  ? solReceived.mul(priceData[solMint]!.price)
+  : estimatedUsd;
+```
+
+`decimalFromRaw` and `lamportsToSol` are small helpers that convert raw token units to UI amounts.
+`swapTokenToSol` fetches a quote from Jupiter, builds the swap transaction, has the user's Privy wallet sign it, and executes the swap on-chain. If a swap cannot be executed we fall back to price-based valuation for reporting purposes.
+
+### Step 5: Persist Claim
+
+```typescript
+await claimFeesPersistenceService.recordClaim({
+  signature,
+  context: { positionId, userId },
+  claimed: {
+    tokenXAmount: tokenAUi.toDecimalPlaces(tokenADecimals, Decimal.ROUND_DOWN).toString(),
+    tokenYAmount: tokenBUi.toDecimalPlaces(tokenBDecimals, Decimal.ROUND_DOWN).toString(),
+    claimedUsdValue: claimedUsd.toFixed(2),
+    tokenXPriceUsd: priceData[tokenAMint]?.price ?? 0,
+    tokenYPriceUsd: priceData[tokenBMint]?.price ?? 0,
+    solReceived: solReceived.isZero() ? undefined : solReceived.toDecimalPlaces(9).toString(),
+  },
+  prices: { solUsd: priceData[solMint]?.price ?? 0 },
+  claimType: "manual",
+  snapshot: {/* optional snapshot data from on-chain position */},
+});
+```
+
+The persistence layer:
+
+- Inserts a `ClaimHistory` record with USD and SOL-equivalent values
+- Updates `positions.totalFeesClaimedUSD`
+- Updates the active segment's `feesClaimedUSD`
+- Optionally creates a `PositionSnapshot` (type `claim`) when on-chain data is available
+
+### Step 6: Post-Claim Actions
+
+```typescript
+await this.cache.invalidate(CachePatterns.portfolioPattern(userId));
+await this.cache.invalidate(CachePatterns.positionPattern(positionId));
+
+await jobQueue.enqueue(JOB_NOTIFICATION, {
+  userId,
+  notification: {
+    type: "general",
+    title: "Fees Claimed",
+    message: `Claim confirmed: ~${claimedUsd.toFixed(2)} converted to ${solReceivedLabel}.`,
+  },
+});
+```
+
+This ensures users receive a confirmation once the claim is finalized and the claimed fees are converted to SOL using Jupiter price data.
+
 ## Job Queue Enhancements
 
 ### Enhanced Event Listeners

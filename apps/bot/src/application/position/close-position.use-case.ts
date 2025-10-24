@@ -179,7 +179,7 @@ export class ClosePositionUseCase {
           operationType: "CLOSE_POSITION",
           userId: command.userId,
           status: "PENDING",
-          metadata: metadata,
+          metadata,
           retryCount: 0,
           maxRetries: 3,
           createdAt: new Date(),

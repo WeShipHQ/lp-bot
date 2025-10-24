@@ -14,6 +14,8 @@ import {
   CreatePositionResult,
   ClosePositionParams,
   ClosePositionResult,
+  ClaimFeesParams,
+  ClaimFeesResult,
 } from "../types/core.types";
 
 export abstract class BaseDexAdapter implements IDexAdapter {
@@ -41,7 +43,7 @@ export abstract class BaseDexAdapter implements IDexAdapter {
   abstract closePositionIx(
     params: ClosePositionParams
   ): Promise<ClosePositionResult>;
-  abstract claimFees(positionAddress: string): Promise<TransactionResult>;
+  abstract claimFeesIx(params: ClaimFeesParams): Promise<ClaimFeesResult>;
   abstract rebalancePosition(
     positionAddress: string,
     params: RebalanceParams

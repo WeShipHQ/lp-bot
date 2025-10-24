@@ -8,14 +8,13 @@ import {
 import type { NotificationMessagePayload } from "../job-definitions";
 import { logger } from "@/utils/logger";
 import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
-import { db, pendingTransactions } from "@/db";
+import { db, pendingTransactions, users, User } from "@/db";
 import { eq } from "drizzle-orm";
 import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
 import { PositionCreationContext } from "@/application/position/create-position.use-case";
 import { positionPersistenceService } from "@/services/position-persistence.service";
 import { rebalancePersistenceService } from "@/services/rebalance-persistence.service";
 import { closePositionPersistenceService } from "@/services/close-position-persistence.service";
-// import type { ClosePositionPersistenceSummary } from "@/services/close-position-persistence.service";
 import { getTokenPriceService } from "@/services/token-price.service";
 import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
 import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
@@ -25,7 +24,7 @@ import {
   parseMeteoraInstructions,
   MeteoraDlmmInstruction,
 } from "@/utils/tx-parser";
-import { PositionClosureContext } from "@/application";
+import { ClaimFeesContext, PositionClosureContext } from "@/application";
 import Decimal from "decimal.js";
 import { lamportsToUi } from "@/utils/math";
 import { Token } from "@/types/token.types";
@@ -33,6 +32,10 @@ import {
   formatPercentage,
   formatPrice,
 } from "@/presentation/formatters/base.formatter";
+import { claimFeesPersistenceService } from "@/services/claim-fees-persistence.service";
+import { WalletService } from "@/services/wallet.service";
+import { jupiterService } from "@/services/jupiter.service";
+import { SOL_MINT } from "@/config/constants";
 
 type CloseInstructionExtractionResult = {
   positionAddress?: string;
@@ -138,6 +141,13 @@ export class TransactionConfirmWorker
             positionId,
             positionAddress
           );
+        } else if (operationType === "CLAIM_FEES") {
+          await this.handleClaimFees(
+            signature,
+            userId,
+            positionId,
+            positionAddress
+          );
         }
       } catch (err) {
         logger.warn(
@@ -180,7 +190,10 @@ export class TransactionConfirmWorker
         return;
       }
 
-      const metadata = ptx.metadata as any;
+      const metadata =
+        typeof ptx.metadata === "string"
+          ? JSON.parse(ptx.metadata)
+          : ptx.metadata;
       const context: PositionCreationContext | undefined =
         metadata.positionContext;
 
@@ -315,7 +328,7 @@ export class TransactionConfirmWorker
       };
 
       const tokenMints = [context.tokenA.address, context.tokenB.address];
-      const solMint = "So11111111111111111111111111111111111111112";
+      const solMint = SOL_MINT;
       if (!tokenMints.includes(solMint)) {
         tokenMints.push(solMint);
       }
@@ -390,6 +403,392 @@ export class TransactionConfirmWorker
       throw error;
     }
   }
+
+  private async handleClaimFees(
+    signature: string,
+    userId: string,
+    positionId?: string,
+    positionAddress?: string
+  ): Promise<void> {
+    try {
+      const ptx = await db.query.pendingTransactions.findFirst({
+        where: eq(pendingTransactions.signature, signature),
+      });
+
+      if (!ptx || !ptx.metadata) {
+        logger.error(
+          "[TxConfirmWorker] No pending transaction metadata for claim fees",
+          { signature }
+        );
+        return;
+      }
+
+      const metadata =
+        typeof ptx.metadata === "string"
+          ? JSON.parse(ptx.metadata)
+          : ptx.metadata;
+
+      const claimContext = metadata?.claimContext as
+        | ClaimFeesContext
+        | undefined;
+
+      if (!claimContext) {
+        logger.error("[TxConfirmWorker] Missing claim context", {
+          signature,
+        });
+        return;
+      }
+
+      const solMint = SOL_MINT;
+
+      let effectivePositionId: string | undefined =
+        positionId ?? claimContext.positionId ?? undefined;
+      const effectiveUserId = claimContext.userId ?? userId;
+      const effectivePositionAddress =
+        positionAddress ?? claimContext.positionAddress ?? undefined;
+
+      if (!effectivePositionId && claimContext.positionAddress) {
+        try {
+          const found = await this.positionRepository.findByPositionAddress(
+            claimContext.positionAddress
+          );
+          effectivePositionId = found?.id;
+        } catch (error) {
+          logger.warn(
+            "[TxConfirmWorker] Failed to resolve position ID from address",
+            {
+              signature,
+              error,
+              positionAddress: claimContext.positionAddress,
+            }
+          );
+        }
+      }
+
+      if (!effectivePositionId || !effectivePositionAddress) {
+        logger.error(
+          "[TxConfirmWorker] Insufficient context to process claim fees",
+          {
+            signature,
+            effectivePositionId,
+            effectivePositionAddress,
+          }
+        );
+        return;
+      }
+
+      const userRecord = effectiveUserId
+        ? await db.query.users.findFirst({
+            where: eq(users.id, effectiveUserId),
+          })
+        : null;
+
+      const connection = this.solana.getConnection();
+      const parsedTransaction = await connection.getParsedTransaction(
+        signature,
+        {
+          maxSupportedTransactionVersion: 0,
+        }
+      );
+
+      if (!parsedTransaction) {
+        logger.error("[TxConfirmWorker] Claim transaction not found", {
+          signature,
+        });
+        return;
+      }
+
+      const meteoraInstructions = parseMeteoraInstructions(parsedTransaction);
+
+      if (meteoraInstructions.length === 0) {
+        logger.warn("[TxConfirmWorker] No claim instructions detected", {
+          signature,
+        });
+        return;
+      }
+
+      const {
+        positionAddress: onChainPositionAddress,
+        claimedFeesTokenA,
+        claimedFeesTokenB,
+      } = this.extractClaimFeesInstructionData(
+        meteoraInstructions,
+        claimContext.tokenA,
+        claimContext.tokenB
+      );
+
+      console.log("claimedFeesTokenA", claimedFeesTokenA);
+      console.log("claimedFeesTokenB", claimedFeesTokenB);
+
+      if (onChainPositionAddress) {
+        positionAddress = onChainPositionAddress;
+      }
+
+      const claimedFeesTokenADecimal = new Decimal(claimedFeesTokenA);
+      const claimedFeesTokenBDecimal = new Decimal(claimedFeesTokenB);
+
+      const priceMints = Array.from(
+        new Set(
+          [
+            claimContext.tokenA.address,
+            claimContext.tokenB.address,
+            solMint,
+          ].filter((mint) => mint && mint.length)
+        )
+      );
+
+      const priceData = await this.priceService.getPrices(priceMints);
+      const tokenAPriceUsd = priceData[claimContext.tokenA.address]?.price ?? 0;
+      const tokenBPriceUsd = priceData[claimContext.tokenB.address]?.price ?? 0;
+      const solPriceUsd = priceData[solMint]?.price ?? 0;
+
+      console.log("tokenAPriceUsd", tokenAPriceUsd);
+      console.log("tokenBPriceUsd", tokenBPriceUsd);
+      console.log("solPriceUsd", solPriceUsd);
+
+      const claimedUsdValue = claimedFeesTokenADecimal
+        .mul(tokenAPriceUsd)
+        .add(claimedFeesTokenBDecimal.mul(tokenBPriceUsd));
+      console.log("claimedUsdValue", claimedUsdValue);
+
+      let solReceivedDecimal = new Decimal(0);
+
+      const shouldConvertToSol = claimContext.convertToSol !== false;
+      if (shouldConvertToSol && !userRecord) {
+        logger.warn("[TxConfirmWorker] Unable to load user for claim swap", {
+          signature,
+          userId: effectiveUserId,
+        });
+      }
+
+      // if (shouldConvertToSol && userRecord) {
+      //   if (rawAmountABig > 0n && tokenAMint && tokenAMint !== solMint) {
+      //     const solFromA = await this.swapTokenToSol(
+      //       userRecord,
+      //       tokenAMint,
+      //       rawAmountABig
+      //     );
+      //     solReceivedDecimal = solReceivedDecimal.add(solFromA);
+      //   }
+
+      //   if (rawAmountBBig > 0n && tokenBMint && tokenBMint !== solMint) {
+      //     const solFromB = await this.swapTokenToSol(
+      //       userRecord,
+      //       tokenBMint,
+      //       rawAmountBBig
+      //     );
+      //     solReceivedDecimal = solReceivedDecimal.add(solFromB);
+      //   }
+      // }
+
+      // let claimedUsdDecimal = estimatedUsdDecimal;
+      // if (solReceivedDecimal.gt(0) && solPriceUsd > 0) {
+      //   claimedUsdDecimal = solReceivedDecimal.mul(solPriceUsd);
+      // }
+      // const claimedUsdValue = claimedUsdDecimal.toFixed(2);
+
+      const solReceivedStr = solReceivedDecimal.gt(0)
+        ? solReceivedDecimal.toDecimalPlaces(9, Decimal.ROUND_DOWN).toString()
+        : undefined;
+      console.log("solReceivedStr", solReceivedStr);
+
+      let snapshotData:
+        | {
+            tokenXAmount: string;
+            tokenYAmount: string;
+            currentValueUsd: string;
+            unclaimedFeesX?: string;
+            unclaimedFeesY?: string;
+            unclaimedFeesUsd?: string;
+          }
+        | undefined;
+
+      if (claimContext.poolAddress && claimContext.userAddress) {
+        try {
+          const onchainPosition = await this.meteoraAdapter.getPosition(
+            effectivePositionAddress,
+            {
+              userAddress: claimContext.userAddress,
+              poolAddress: claimContext.poolAddress,
+            }
+          );
+
+          // console.log("onchainPosition", onchainPosition);
+
+          if (onchainPosition) {
+            snapshotData = {
+              tokenXAmount: onchainPosition.tokenAAmount ?? "0",
+              tokenYAmount: onchainPosition.tokenBAmount ?? "0",
+              currentValueUsd: new Decimal(
+                onchainPosition.currentValueUsd ?? 0
+              ).toFixed(6),
+              unclaimedFeesUsd: new Decimal(
+                onchainPosition.unclaimedFeesUsd ?? 0
+              ).toFixed(2),
+              unclaimedFeesX: "0",
+              unclaimedFeesY: "0",
+            };
+          }
+        } catch (error) {
+          logger.warn(
+            "[TxConfirmWorker] Failed to fetch on-chain position for snapshot",
+            {
+              error,
+              signature,
+              positionAddress: effectivePositionAddress,
+            }
+          );
+        }
+      }
+
+      await claimFeesPersistenceService.recordClaim({
+        signature,
+        context: {
+          positionId: effectivePositionId,
+          userId: effectiveUserId,
+        },
+        claimed: {
+          tokenXAmount: claimedFeesTokenADecimal.toFixed(6),
+          tokenYAmount: claimedFeesTokenBDecimal.toFixed(6),
+          claimedUsdValue: claimedUsdValue.toFixed(6),
+          solReceived: solReceivedStr,
+        },
+        prices: {
+          tokenXPriceUsd: tokenAPriceUsd,
+          tokenYPriceUsd: tokenBPriceUsd,
+          solUsd: solPriceUsd,
+        },
+        claimType: "manual",
+        snapshot: snapshotData,
+      });
+
+      await this.cache.invalidate(
+        CachePatterns.portfolioPattern(effectiveUserId)
+      );
+      await this.cache.invalidate(
+        CachePatterns.positionPattern(effectivePositionId)
+      );
+
+      try {
+        const jobQueue = new JobQueueService({ producerOnly: true });
+        const usdLabel = claimedUsdValue.isZero()
+          ? "$0.00"
+          : `$${claimedUsdValue.toFixed(2)}`;
+        const solLabel = solReceivedStr
+          ? `${solReceivedDecimal
+              .toDecimalPlaces(6, Decimal.ROUND_DOWN)
+              .toString()} SOL`
+          : "0 SOL";
+
+        await jobQueue.enqueue(JOB_NOTIFICATION, {
+          userId: effectiveUserId,
+          notification: {
+            type: "general",
+            title: "Fees Claimed",
+            message: `Claim confirmed: ~${usdLabel} converted to ${solLabel}.`,
+          },
+        });
+      } catch (error) {
+        logger.error("[TxConfirmWorker] Failed to enqueue claim notification", {
+          error,
+          signature,
+        });
+      }
+
+      logger.info("[TxConfirmWorker] CLAIM_FEES handled successfully", {
+        signature,
+        positionId: effectivePositionId,
+        claimedUsdValue,
+        solReceived: solReceivedStr,
+      });
+    } catch (error) {
+      logger.error("[TxConfirmWorker] Failed to handle CLAIM_FEES", {
+        error,
+        signature,
+        userId,
+        positionId,
+        positionAddress,
+      });
+      throw error;
+    }
+  }
+
+  // private async swapTokenToSol(
+  //   user: User,
+  //   tokenMint: string,
+  //   rawAmount: bigint
+  // ): Promise<Decimal> {
+  //   if (!tokenMint || rawAmount <= 0n) {
+  //     return new Decimal(0);
+  //   }
+
+  //   if (tokenMint === SOL_MINT) {
+  //     return this.lamportsToSol(rawAmount);
+  //   }
+
+  //   if (!user.walletAddress || !user.walletId) {
+  //     logger.warn(
+  //       "[TxConfirmWorker] User missing wallet information for swap",
+  //       {
+  //         userId: user.id,
+  //       }
+  //     );
+  //     return new Decimal(0);
+  //   }
+
+  //   try {
+  //     const amountStr = rawAmount.toString();
+  //     const order = await jupiterService.getOrder({
+  //       inputMint: tokenMint,
+  //       outputMint: SOL_MINT,
+  //       amount: amountStr,
+  //       taker: user.walletAddress,
+  //     });
+
+  //     if (!order?.transaction) {
+  //       logger.warn("[TxConfirmWorker] Jupiter order missing transaction", {
+  //         tokenMint,
+  //         userId: user.id,
+  //       });
+  //       return new Decimal(0);
+  //     }
+
+  //     const swapTx = jupiterService.getOrderTransaction(order.transaction);
+  //     const { signedTransaction } = await WalletService.signTransaction(
+  //       user,
+  //       swapTx
+  //     );
+
+  //     const executeResult = await jupiterService.executeOrder({
+  //       requestId: order.requestId,
+  //       signedTransaction: Buffer.from(signedTransaction.serialize()).toString(
+  //         "base64"
+  //       ),
+  //     });
+
+  //     if (executeResult.status !== "Success") {
+  //       logger.warn("[TxConfirmWorker] Jupiter swap execution failed", {
+  //         tokenMint,
+  //         userId: user.id,
+  //         error: executeResult.error,
+  //       });
+  //       return new Decimal(0);
+  //     }
+
+  //     const outputLamports = new Decimal(
+  //       executeResult.outputAmountResult ?? "0"
+  //     );
+
+  //     return outputLamports.div(1_000_000_000);
+  //   } catch (error) {
+  //     logger.warn("[TxConfirmWorker] Jupiter swap failed", {
+  //       error,
+  //       tokenMint,
+  //       userId: user.id,
+  //     });
+  //     return new Decimal(0);
+  //   }
+  // }
 
   /**
    * Handle REBALANCE confirmation
@@ -499,7 +898,7 @@ export class TransactionConfirmWorker
       }
 
       // Fetch token prices
-      const solMint = "So11111111111111111111111111111111111111112";
+      const solMint = SOL_MINT;
       const priceData = await this.priceService.getPrices([
         rebalanceContext.tokenAMint,
         rebalanceContext.tokenBMint,
@@ -585,7 +984,7 @@ export class TransactionConfirmWorker
         return;
       }
 
-      const metadata: any = ptx.metadata;
+      const metadata = ptx.metadata as any;
 
       const closeContext = metadata.closeContext as
         | PositionClosureContext
@@ -679,7 +1078,7 @@ export class TransactionConfirmWorker
         return;
       }
 
-      const solMint = "So11111111111111111111111111111111111111112";
+      const solMint = SOL_MINT;
       const priceData = await this.priceService.getPrices([
         closeContext.tokenA.address,
         closeContext.tokenB.address,
@@ -873,6 +1272,46 @@ export class TransactionConfirmWorker
       removeInstructionCount,
       claimInstructionCount,
       closeInstructionCount,
+    };
+  }
+
+  private extractClaimFeesInstructionData(
+    instructions: MeteoraDlmmInstruction[],
+    tokenA: Token,
+    tokenB: Token
+  ) {
+    const claimTotals = {
+      tokenA: new Decimal(0),
+      tokenB: new Decimal(0),
+    };
+
+    let positionAddr: string | undefined;
+
+    for (const instruction of instructions) {
+      if (!positionAddr && instruction.accounts?.position) {
+        positionAddr = instruction.accounts.position;
+      }
+
+      if (
+        instruction.instructionType === "claim" ||
+        instruction.tokenTransfers?.length
+      ) {
+        for (const transfer of instruction.tokenTransfers) {
+          if (transfer.mint === tokenA.address) {
+            const amount = new Decimal(transfer.amount);
+            claimTotals.tokenA = claimTotals.tokenA.add(amount);
+          } else if (transfer.mint === tokenB.address) {
+            const amount = new Decimal(transfer.amount);
+            claimTotals.tokenB = claimTotals.tokenB.add(amount);
+          }
+        }
+      }
+    }
+
+    return {
+      positionAddress: positionAddr,
+      claimedFeesTokenA: lamportsToUi(claimTotals.tokenA.toString(), 9),
+      claimedFeesTokenB: lamportsToUi(claimTotals.tokenB.toString(), 9),
     };
   }
 }
