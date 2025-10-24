@@ -111,6 +111,7 @@ async function loadPositionDetail(
   if (!result.success || !result.position) {
     throw new Error(result.error ?? "Position not found");
   }
+  console.log("result", result);
 
   const view = PositionDetailFormatter.format({
     position: result.position,
@@ -233,153 +234,167 @@ positionDetailScene.enter(async (ctx) => {
   }
 });
 
-positionDetailScene.action(PositionDetailCallbacks.CLOSE_CONFIRM, async (ctx) => {
-  const state = getSceneState(ctx);
-  if (state.positionStatus && state.positionStatus !== "ACTIVE") {
-    await ctx.answerCbQuery("Position is not active", { show_alert: true });
-    return;
-  }
+positionDetailScene.action(
+  PositionDetailCallbacks.CLOSE_CONFIRM,
+  async (ctx) => {
+    const state = getSceneState(ctx);
+    if (state.positionStatus && state.positionStatus !== "ACTIVE") {
+      await ctx.answerCbQuery("Position is not active", { show_alert: true });
+      return;
+    }
 
-  await ctx.answerCbQuery();
+    await ctx.answerCbQuery();
 
-  if (!state.positionId) {
-    await ctx.reply("Position not loaded. Please reopen details.");
-    return ctx.scene.leave();
-  }
+    if (!state.positionId) {
+      await ctx.reply("Position not loaded. Please reopen details.");
+      return ctx.scene.leave();
+    }
 
-  const pairLabel = state.pairLabel ?? "this position";
-  const addressLine = state.positionAddress
-    ? `Position address: \`${state.positionAddress}\`\n\n`
-    : "\n";
+    const pairLabel = state.pairLabel ?? "this position";
+    const addressLine = state.positionAddress
+      ? `Position address: \`${state.positionAddress}\`\n\n`
+      : "\n";
 
-  const confirmationMessage =
-    `🔍 *Confirm Position Closure*\n\n` +
-    `Are you sure you want to close position "${pairLabel}"?\n` +
-    addressLine +
-    `This action cannot be undone.`;
+    const confirmationMessage =
+      `🔍 *Confirm Position Closure*\n\n` +
+      `Are you sure you want to close position "${pairLabel}"?\n` +
+      addressLine +
+      `This action cannot be undone.`;
 
-  await ctx.reply(confirmationMessage, {
-    parse_mode: "Markdown",
-    reply_markup: getPositionCloseConfirmKeyboard(),
-  });
-});
-
-positionDetailScene.action(PositionDetailCallbacks.CLOSE_APPROVE, async (ctx) => {
-  await ctx.answerCbQuery();
-  const state = getSceneState(ctx);
-
-  if (!state.positionId) {
-    await ctx.reply("Position not loaded. Please reopen details.");
-    return ctx.scene.leave();
-  }
-
-  if (!ctx.user.walletAddress) {
-    await ctx.reply("Wallet not connected. Please connect your wallet first.");
-    return;
-  }
-
-  try {
-    await ctx.deleteMessage();
-  } catch (error) {
-    console.warn("Could not delete confirmation message", error);
-  }
-
-  const loadingMsg = await ctx.reply("⏳ *Closing position...*", {
-    parse_mode: "Markdown",
-  });
-
-  try {
-    const uc = container.get(ClosePositionUseCase);
-    const res = await uc.execute({
-      userId: ctx.user.id,
-      positionId: state.positionId,
-      userAddress: ctx.user.walletAddress,
-      walletId: ctx.user.walletId ?? undefined,
-      closureReason: "user_close",
+    await ctx.reply(confirmationMessage, {
+      parse_mode: "Markdown",
+      reply_markup: getPositionCloseConfirmKeyboard(),
     });
+  }
+);
 
-    if (!res.success) {
-      await ctx.telegram.editMessageText(
-        loadingMsg.chat.id,
-        loadingMsg.message_id,
-        undefined,
-        res.error ?? "Failed to close position",
-        { parse_mode: "Markdown" }
+positionDetailScene.action(
+  PositionDetailCallbacks.CLOSE_APPROVE,
+  async (ctx) => {
+    await ctx.answerCbQuery();
+    const state = getSceneState(ctx);
+
+    if (!state.positionId) {
+      await ctx.reply("Position not loaded. Please reopen details.");
+      return ctx.scene.leave();
+    }
+
+    if (!ctx.user.walletAddress) {
+      await ctx.reply(
+        "Wallet not connected. Please connect your wallet first."
       );
       return;
     }
 
-    const successMessage =
-      `✅ *Position Close Initiated*\n\n` +
-      `${state.pairLabel ?? "Your position"} close transaction has been submitted to the blockchain.\n\n` +
-      `Transaction: [View on Solscan](${getSolscanLink("tx", res.signature ?? "")})\n\n` +
-      `⏳ You'll receive a notification with final PnL after confirmation.`;
+    try {
+      await ctx.deleteMessage();
+    } catch (error) {
+      console.warn("Could not delete confirmation message", error);
+    }
 
-    await ctx.telegram.editMessageText(
-      loadingMsg.chat.id,
-      loadingMsg.message_id,
-      undefined,
-      successMessage,
-      {
-        parse_mode: "Markdown",
-        ...DISABLE_LINK_PREVIEW,
+    const loadingMsg = await ctx.reply("⏳ *Closing position...*", {
+      parse_mode: "Markdown",
+    });
+
+    try {
+      const uc = container.get(ClosePositionUseCase);
+      const res = await uc.execute({
+        userId: ctx.user.id,
+        positionId: state.positionId,
+        userAddress: ctx.user.walletAddress,
+        walletId: ctx.user.walletId ?? undefined,
+        closureReason: "user_close",
+      });
+
+      if (!res.success) {
+        await ctx.telegram.editMessageText(
+          loadingMsg.chat.id,
+          loadingMsg.message_id,
+          undefined,
+          res.error ?? "Failed to close position",
+          { parse_mode: "Markdown" }
+        );
+        return;
       }
-    );
 
-    const nextState = getSceneState(ctx);
-    nextState.positionStatus = "CLOSED";
-    await updateMainMessage(ctx);
-  } catch (error) {
-    console.error("Error closing position", error);
-    await ctx.telegram.editMessageText(
-      loadingMsg.chat.id,
-      loadingMsg.message_id,
-      undefined,
-      "Failed to close position",
-      { parse_mode: "Markdown" }
-    );
+      const successMessage =
+        `✅ *Position Close Initiated*\n\n` +
+        `${state.pairLabel ?? "Your position"} close transaction has been submitted to the blockchain.\n\n` +
+        `Transaction: [View on Solscan](${getSolscanLink("tx", res.signature ?? "")})\n\n` +
+        `⏳ You'll receive a notification with final PnL after confirmation.`;
+
+      await ctx.telegram.editMessageText(
+        loadingMsg.chat.id,
+        loadingMsg.message_id,
+        undefined,
+        successMessage,
+        {
+          parse_mode: "Markdown",
+          ...DISABLE_LINK_PREVIEW,
+        }
+      );
+
+      const nextState = getSceneState(ctx);
+      nextState.positionStatus = "CLOSED";
+      await updateMainMessage(ctx);
+    } catch (error) {
+      console.error("Error closing position", error);
+      await ctx.telegram.editMessageText(
+        loadingMsg.chat.id,
+        loadingMsg.message_id,
+        undefined,
+        "Failed to close position",
+        { parse_mode: "Markdown" }
+      );
+    }
   }
-});
+);
 
-positionDetailScene.action(PositionDetailCallbacks.CLOSE_DECLINE, async (ctx) => {
-  await ctx.answerCbQuery();
-  try {
-    await ctx.deleteMessage();
-  } catch (error) {
-    console.warn("Could not delete confirmation message", error);
+positionDetailScene.action(
+  PositionDetailCallbacks.CLOSE_DECLINE,
+  async (ctx) => {
+    await ctx.answerCbQuery();
+    try {
+      await ctx.deleteMessage();
+    } catch (error) {
+      console.warn("Could not delete confirmation message", error);
+    }
   }
-});
+);
 
-positionDetailScene.action(PositionDetailCallbacks.CLAIM_CONFIRM, async (ctx) => {
-  const state = getSceneState(ctx);
-  if (state.positionStatus && state.positionStatus !== "ACTIVE") {
-    await ctx.answerCbQuery("Position is not active", { show_alert: true });
-    return;
+positionDetailScene.action(
+  PositionDetailCallbacks.CLAIM_CONFIRM,
+  async (ctx) => {
+    const state = getSceneState(ctx);
+    if (state.positionStatus && state.positionStatus !== "ACTIVE") {
+      await ctx.answerCbQuery("Position is not active", { show_alert: true });
+      return;
+    }
+
+    await ctx.answerCbQuery();
+
+    if (!state.positionId) {
+      await ctx.reply("Position not loaded. Please reopen details.");
+      return ctx.scene.leave();
+    }
+
+    const pairLabel = state.pairLabel ?? "this position";
+    const addressLine = state.positionAddress
+      ? `Position address: \`${state.positionAddress}\`\n\n`
+      : "\n";
+
+    const confirmationMessage =
+      `💰 *Claim LP Fees*\n\n` +
+      `Claim all available fees for "${pairLabel}" and swap to SOL?\n` +
+      addressLine +
+      `This action will claim all available fees and convert them to SOL.`;
+
+    await ctx.reply(confirmationMessage, {
+      parse_mode: "Markdown",
+      reply_markup: getClaimFeesConfirmKeyboard(state.positionId),
+    });
   }
-
-  await ctx.answerCbQuery();
-
-  if (!state.positionId) {
-    await ctx.reply("Position not loaded. Please reopen details.");
-    return ctx.scene.leave();
-  }
-
-  const pairLabel = state.pairLabel ?? "this position";
-  const addressLine = state.positionAddress
-    ? `Position address: \`${state.positionAddress}\`\n\n`
-    : "\n";
-
-  const confirmationMessage =
-    `💰 *Claim LP Fees*\n\n` +
-    `Claim all available fees for "${pairLabel}" and swap to SOL?\n` +
-    addressLine +
-    `This action will claim all available fees and convert them to SOL.`;
-
-  await ctx.reply(confirmationMessage, {
-    parse_mode: "Markdown",
-    reply_markup: getClaimFeesConfirmKeyboard(state.positionId),
-  });
-});
+);
 
 positionDetailScene.action(
   PositionDetailCallbackPatterns.CLAIM_APPROVE,
@@ -390,7 +405,9 @@ positionDetailScene.action(
     state.positionId = positionId;
 
     if (!ctx.user.walletAddress) {
-      await ctx.reply("Wallet not connected. Please connect your wallet first.");
+      await ctx.reply(
+        "Wallet not connected. Please connect your wallet first."
+      );
       return;
     }
 
@@ -459,45 +476,51 @@ positionDetailScene.action(
   }
 );
 
-positionDetailScene.action(PositionDetailCallbacks.CLAIM_DECLINE, async (ctx) => {
-  await ctx.answerCbQuery();
-  try {
-    await ctx.deleteMessage();
-  } catch (error) {
-    console.warn("Could not delete confirmation message", error);
+positionDetailScene.action(
+  PositionDetailCallbacks.CLAIM_DECLINE,
+  async (ctx) => {
+    await ctx.answerCbQuery();
+    try {
+      await ctx.deleteMessage();
+    } catch (error) {
+      console.warn("Could not delete confirmation message", error);
+    }
   }
-});
+);
 
-positionDetailScene.action(PositionDetailCallbacks.REBALANCE_CONFIRM, async (ctx) => {
-  const state = getSceneState(ctx);
-  if (state.positionStatus && state.positionStatus !== "ACTIVE") {
-    await ctx.answerCbQuery("Position is not active", { show_alert: true });
-    return;
+positionDetailScene.action(
+  PositionDetailCallbacks.REBALANCE_CONFIRM,
+  async (ctx) => {
+    const state = getSceneState(ctx);
+    if (state.positionStatus && state.positionStatus !== "ACTIVE") {
+      await ctx.answerCbQuery("Position is not active", { show_alert: true });
+      return;
+    }
+
+    await ctx.answerCbQuery();
+
+    if (!state.positionId) {
+      await ctx.reply("Position not loaded. Please reopen details.");
+      return ctx.scene.leave();
+    }
+
+    const pairLabel = state.pairLabel ?? "this position";
+    const addressLine = state.positionAddress
+      ? `Position address: \`${state.positionAddress}\`\n\n`
+      : "\n";
+
+    const confirmationMessage =
+      `⚖️ *Rebalance Position*\n\n` +
+      `Rebalance "${pairLabel}" now?\n` +
+      addressLine +
+      `This action will rebalance liquidity distribution.`;
+
+    await ctx.reply(confirmationMessage, {
+      parse_mode: "Markdown",
+      reply_markup: getRebalanceConfirmKeyboard(state.positionId),
+    });
   }
-
-  await ctx.answerCbQuery();
-
-  if (!state.positionId) {
-    await ctx.reply("Position not loaded. Please reopen details.");
-    return ctx.scene.leave();
-  }
-
-  const pairLabel = state.pairLabel ?? "this position";
-  const addressLine = state.positionAddress
-    ? `Position address: \`${state.positionAddress}\`\n\n`
-    : "\n";
-
-  const confirmationMessage =
-    `⚖️ *Rebalance Position*\n\n` +
-    `Rebalance "${pairLabel}" now?\n` +
-    addressLine +
-    `This action will rebalance liquidity distribution.`;
-
-  await ctx.reply(confirmationMessage, {
-    parse_mode: "Markdown",
-    reply_markup: getRebalanceConfirmKeyboard(state.positionId),
-  });
-});
+);
 
 positionDetailScene.action(
   PositionDetailCallbackPatterns.REBALANCE_APPROVE,
@@ -508,7 +531,9 @@ positionDetailScene.action(
     state.positionId = positionId;
 
     if (!ctx.user.walletAddress) {
-      await ctx.reply("Wallet not connected. Please connect your wallet first.");
+      await ctx.reply(
+        "Wallet not connected. Please connect your wallet first."
+      );
       return;
     }
 
@@ -583,14 +608,17 @@ positionDetailScene.action(
   }
 );
 
-positionDetailScene.action(PositionDetailCallbacks.REBALANCE_DECLINE, async (ctx) => {
-  await ctx.answerCbQuery();
-  try {
-    await ctx.deleteMessage();
-  } catch (error) {
-    console.warn("Could not delete confirmation message", error);
+positionDetailScene.action(
+  PositionDetailCallbacks.REBALANCE_DECLINE,
+  async (ctx) => {
+    await ctx.answerCbQuery();
+    try {
+      await ctx.deleteMessage();
+    } catch (error) {
+      console.warn("Could not delete confirmation message", error);
+    }
   }
-});
+);
 
 positionDetailScene.action(
   PositionDetailCallbackPatterns.SETTINGS,
