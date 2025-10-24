@@ -21,12 +21,21 @@ export interface RebalanceJobData {
 
 // Notification job: sends a notification to a user via Telegram
 export const JOB_NOTIFICATION = "notification" as const;
+export type NotificationType = "price" | "rebalance" | "general" | "position";
+
+export interface NotificationMessagePayload {
+  text: string;
+  parseMode?: "Markdown" | "MarkdownV2" | "HTML";
+  disableLinkPreview?: boolean;
+}
+
 export interface NotificationJobData {
   userId: string;
   notification: {
-    type: "price" | "rebalance" | "general";
-    title: string;
-    message: string;
+    type: NotificationType;
+    title?: string;
+    message?: string;
+    messages?: NotificationMessagePayload[];
   };
 }
 

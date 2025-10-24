@@ -5,6 +5,7 @@ import {
   JOB_POSITION_MONITOR,
   JOB_NOTIFICATION,
 } from "../job-definitions";
+import type { NotificationMessagePayload } from "../job-definitions";
 import { logger } from "@/utils/logger";
 import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
 import { db, pendingTransactions } from "@/db";
@@ -14,6 +15,7 @@ import { PositionCreationContext } from "@/application/position/create-position.
 import { positionPersistenceService } from "@/services/position-persistence.service";
 import { rebalancePersistenceService } from "@/services/rebalance-persistence.service";
 import { closePositionPersistenceService } from "@/services/close-position-persistence.service";
+import type { ClosePositionPersistenceSummary } from "@/services/close-position-persistence.service";
 import { getTokenPriceService } from "@/services/token-price.service";
 import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
 import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
@@ -24,6 +26,18 @@ import {
   MeteoraDlmmInstruction,
 } from "@/utils/tx-parser";
 import { PositionClosureContext } from "@/application";
+import Decimal from "decimal.js";
+
+type CloseInstructionExtractionResult = {
+  positionAddress?: string;
+  finalTokenAAmount?: string;
+  finalTokenBAmount?: string;
+  claimedFeesTokenA?: string;
+  claimedFeesTokenB?: string;
+  removeInstructionCount: number;
+  claimInstructionCount: number;
+  closeInstructionCount: number;
+};
 
 export class TransactionConfirmWorker
   implements IWorker<TransactionConfirmJobData>
@@ -561,7 +575,18 @@ export class TransactionConfirmWorker
         return;
       }
 
-      const metadata = ptx.metadata as any;
+      let metadata: any = {};
+      try {
+        metadata =
+          typeof ptx.metadata === "string"
+            ? JSON.parse(ptx.metadata)
+            : ptx.metadata;
+      } catch (parseError) {
+        logger.error(
+          { signature, parseError },
+          "[TxConfirmWorker] Failed to parse pending transaction metadata (close)"
+        );
+      }
 
       const closeContext = metadata.closeContext as
         | PositionClosureContext
@@ -575,14 +600,86 @@ export class TransactionConfirmWorker
       }
 
       const effectivePositionId = positionId ?? closeContext.positionId;
-      const effectivePositionAddress =
+      let effectivePositionAddress =
         closeContext.positionAddress ?? positionAddress;
+      const targetUserId = closeContext.userId ?? userId;
 
-      if (!effectivePositionId || !effectivePositionAddress) {
-        logger.error("[TxConfirmWorker] Insufficient data to handle close", {
+      if (!effectivePositionId) {
+        logger.error(
+          "[TxConfirmWorker] Insufficient data to handle close",
+          {
+            signature,
+            closeContext,
+          }
+        );
+        return;
+      }
+
+      let instructionData: CloseInstructionExtractionResult | undefined;
+      try {
+        const connection = this.solana.getConnection();
+        const parsedTransaction = await connection.getParsedTransaction(
           signature,
-          closeContext,
-        });
+          {
+            maxSupportedTransactionVersion: 0,
+          }
+        );
+
+        if (!parsedTransaction) {
+          logger.error(
+            "[TxConfirmWorker] Transaction not found on-chain for close",
+            { signature }
+          );
+        } else {
+          const instructions = parseMeteoraInstructions(parsedTransaction);
+
+          if (!instructions || instructions.length === 0) {
+            logger.error(
+              "[TxConfirmWorker] No Meteora instructions found in close transaction",
+              { signature }
+            );
+          } else {
+            instructionData = this.extractCloseInstructionData(
+              instructions,
+              closeContext.tokenAMint,
+              closeContext.tokenBMint,
+              closeContext.tokenADecimals ?? 0,
+              closeContext.tokenBDecimals ?? 0
+            );
+
+            if (instructionData.positionAddress) {
+              effectivePositionAddress = instructionData.positionAddress;
+            }
+
+            logger.info("[TxConfirmWorker] Parsed Meteora close instructions", {
+              signature,
+              instructionCounts: {
+                remove: instructionData.removeInstructionCount,
+                claim: instructionData.claimInstructionCount,
+                close: instructionData.closeInstructionCount,
+              },
+              finalTokenAAmount: instructionData.finalTokenAAmount,
+              finalTokenBAmount: instructionData.finalTokenBAmount,
+              claimedFeesTokenA: instructionData.claimedFeesTokenA,
+              claimedFeesTokenB: instructionData.claimedFeesTokenB,
+            });
+          }
+        }
+      } catch (parseError) {
+        logger.warn(
+          { signature, error: parseError },
+          "[TxConfirmWorker] Failed to parse close position transaction"
+        );
+      }
+
+      if (!effectivePositionAddress) {
+        logger.error(
+          "[TxConfirmWorker] Unable to determine position address for close",
+          {
+            signature,
+            closeContext,
+          }
+        );
         return;
       }
 
@@ -599,44 +696,58 @@ export class TransactionConfirmWorker
         solUsd: priceData[solMint]?.price ?? 0,
       };
 
-      await closePositionPersistenceService.closePosition({
-        signature,
-        context: {
-          userId: closeContext.userId ?? userId,
-          positionId: effectivePositionId,
-          positionAddress: effectivePositionAddress,
-          poolAddress: closeContext.poolAddress,
-          closureReason: closeContext.closureReason ?? "user_close",
-          tokenAMint: closeContext.tokenAMint,
-          tokenBMint: closeContext.tokenBMint,
-        },
-        onChainData: {
-          finalTokenAAmount: closeContext.finalTokenAAmount ?? "0",
-          finalTokenBAmount: closeContext.finalTokenBAmount ?? "0",
-          claimedFeesX: closeContext.unclaimedFeeXAmount ?? "0",
-          claimedFeesY: closeContext.unclaimedFeeYAmount ?? "0",
-        },
-        prices,
-      });
+      const onChainData =
+        instructionData &&
+        (instructionData.finalTokenAAmount !== undefined ||
+          instructionData.finalTokenBAmount !== undefined ||
+          instructionData.claimedFeesTokenA !== undefined ||
+          instructionData.claimedFeesTokenB !== undefined)
+          ? {
+              finalTokenAAmount: instructionData.finalTokenAAmount,
+              finalTokenBAmount: instructionData.finalTokenBAmount,
+              claimedFeesX: instructionData.claimedFeesTokenA,
+              claimedFeesY: instructionData.claimedFeesTokenB,
+            }
+          : undefined;
 
-      await this.cache.invalidate(CachePatterns.portfolioPattern(userId));
+      const persistenceResult =
+        await closePositionPersistenceService.closePosition({
+          signature,
+          context: {
+            userId: targetUserId,
+            positionId: effectivePositionId,
+            positionAddress: effectivePositionAddress,
+            poolAddress: closeContext.poolAddress,
+            closureReason: closeContext.closureReason ?? "user_close",
+            tokenAMint: closeContext.tokenAMint,
+            tokenBMint: closeContext.tokenBMint,
+          },
+          onChainData,
+          prices,
+        });
+
+      await this.cache.invalidate(CachePatterns.portfolioPattern(targetUserId));
       await this.cache.invalidate(
         CachePatterns.positionPattern(effectivePositionId)
       );
 
       const jobQueue = new JobQueueService({ producerOnly: true });
+      const notificationMessages = this.buildClosePositionNotifications(
+        signature,
+        persistenceResult
+      );
       await jobQueue.enqueue(JOB_NOTIFICATION, {
-        userId,
+        userId: targetUserId,
         notification: {
-          type: "general",
-          title: "Position Closed",
-          message: `Position ${effectivePositionAddress} has been closed successfully.`,
+          type: "position",
+          messages: notificationMessages,
         },
       });
 
       logger.info("[TxConfirmWorker] CLOSE_POSITION handled successfully", {
         signature,
         positionId: effectivePositionId,
+        positionAddress: effectivePositionAddress,
       });
     } catch (error) {
       logger.error("[TxConfirmWorker] Failed to handle CLOSE_POSITION", {
@@ -648,5 +759,153 @@ export class TransactionConfirmWorker
       });
       throw error;
     }
+  }
+
+  private buildClosePositionNotifications(
+    signature: string,
+    result: ClosePositionPersistenceSummary
+  ): NotificationMessagePayload[] {
+    const pnlUsd = Number(result.totalPnlUSD);
+    const pnlPercentage = Number(result.totalPnlPercentage);
+
+    const formattedPnLUsd = this.formatUsd(pnlUsd);
+    const formattedPnlPercentage = this.formatPercentage(pnlPercentage, 3);
+    const solscanUrl = `https://solscan.io/tx/${signature}`;
+
+    const primaryMessage = [
+      "✅ Position Closed",
+      "",
+      `PnL: ${formattedPnLUsd} (${formattedPnlPercentage})`,
+      `Transaction: [View on Solscan](${solscanUrl})`,
+    ].join("\n");
+
+    return [
+      {
+        text: primaryMessage,
+        parseMode: "Markdown",
+        disableLinkPreview: true,
+      },
+      {
+        text: "🖼️ Position summary image will be available soon.",
+        disableLinkPreview: true,
+      },
+    ];
+  }
+
+  private formatUsd(value: number): string {
+    if (!isFinite(value)) {
+      return "$0.00";
+    }
+
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(value);
+  }
+
+  private formatPercentage(value: number, decimals = 3): string {
+    if (!isFinite(value)) {
+      return "0.000%";
+    }
+
+    const sign = value < 0 ? "-" : "";
+    const formatted = Math.abs(value).toFixed(decimals);
+    return `${sign}${formatted}%`;
+  }
+
+  private convertRawAmountToDecimal(
+    rawAmount: number,
+    decimals: number
+  ): Decimal {
+    const scale = new Decimal(10).pow(decimals);
+    return new Decimal(rawAmount).div(scale);
+  }
+
+  private extractCloseInstructionData(
+    instructions: MeteoraDlmmInstruction[],
+    tokenAMint: string,
+    tokenBMint: string,
+    tokenADecimals: number,
+    tokenBDecimals: number
+  ): CloseInstructionExtractionResult {
+    const removeTotals = {
+      tokenA: new Decimal(0),
+      tokenB: new Decimal(0),
+    };
+    const claimTotals = {
+      tokenA: new Decimal(0),
+      tokenB: new Decimal(0),
+    };
+
+    let removeInstructionCount = 0;
+    let claimInstructionCount = 0;
+    let closeInstructionCount = 0;
+    let positionAddr: string | undefined;
+
+    for (const instruction of instructions) {
+      if (!positionAddr && instruction.accounts?.position) {
+        positionAddr = instruction.accounts.position;
+      }
+
+      if (instruction.instructionType === "remove") {
+        removeInstructionCount += 1;
+      } else if (instruction.instructionType === "claim") {
+        claimInstructionCount += 1;
+      } else if (instruction.instructionType === "close") {
+        closeInstructionCount += 1;
+      }
+
+      if (
+        instruction.instructionType !== "remove" &&
+        instruction.instructionType !== "claim"
+      ) {
+        continue;
+      }
+
+      if (!instruction.tokenTransfers?.length) {
+        continue;
+      }
+
+      for (const transfer of instruction.tokenTransfers) {
+        if (transfer.mint === tokenAMint) {
+          const amount = this.convertRawAmountToDecimal(
+            transfer.amount,
+            tokenADecimals
+          );
+          if (instruction.instructionType === "remove") {
+            removeTotals.tokenA = removeTotals.tokenA.add(amount);
+          } else {
+            claimTotals.tokenA = claimTotals.tokenA.add(amount);
+          }
+        } else if (transfer.mint === tokenBMint) {
+          const amount = this.convertRawAmountToDecimal(
+            transfer.amount,
+            tokenBDecimals
+          );
+          if (instruction.instructionType === "remove") {
+            removeTotals.tokenB = removeTotals.tokenB.add(amount);
+          } else {
+            claimTotals.tokenB = claimTotals.tokenB.add(amount);
+          }
+        }
+      }
+    }
+
+    return {
+      positionAddress: positionAddr,
+      finalTokenAAmount:
+        removeInstructionCount > 0 ? removeTotals.tokenA.toString() : undefined,
+      finalTokenBAmount:
+        removeInstructionCount > 0 ? removeTotals.tokenB.toString() : undefined,
+      claimedFeesTokenA:
+        claimInstructionCount > 0 ? claimTotals.tokenA.toString() : undefined,
+      claimedFeesTokenB:
+        claimInstructionCount > 0 ? claimTotals.tokenB.toString() : undefined,
+      removeInstructionCount,
+      claimInstructionCount,
+      closeInstructionCount,
+    };
   }
 }
