@@ -1,6 +1,9 @@
 import { IPositionRepository } from "@/domain/position/position.repository";
 import { validateWalletAddress } from "@/domain/position/position.validators";
-import { DexType, TransactionResult } from "@/types/core.types";
+import {
+  DexType,
+  ClaimFeesResult as ClaimFeesResultType,
+} from "@/types/core.types";
 import { IDexAdapter } from "@/types/dex-adapter.interface";
 import { logger } from "@/utils/logger";
 import { db, pendingTransactions, User } from "@/db";
@@ -8,6 +11,7 @@ import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 import { JOB_TX_CONFIRM } from "@/infrastructure/jobs/job-definitions";
 import { DexRegistryLike } from "./create-position.use-case";
 import { WalletService } from "@/services/wallet.service";
+import { Token } from "@/types/token.types";
 
 export interface ClaimFeesCommand {
   user: User;
@@ -20,6 +24,18 @@ export interface ClaimFeesResult {
   claimedFeesUsd?: number;
   error?: string;
 }
+
+export type ClaimFeesContext = {
+  userId: string;
+  positionId: string;
+  positionAddress: string;
+  poolAddress: string;
+  userAddress: string;
+  tokenA: Token;
+  tokenB: Token;
+  convertToSol?: boolean;
+  estimatedFeesUsd?: number;
+};
 
 export class ClaimFeesUseCase {
   constructor(
@@ -43,7 +59,9 @@ export class ClaimFeesUseCase {
 
       validateWalletAddress(user.walletAddress);
 
-      const position = await this.positionRepository.findById(command.positionId);
+      const position = await this.positionRepository.findById(
+        command.positionId
+      );
       if (!position) {
         return { success: false, error: "Position not found" };
       }
@@ -71,12 +89,13 @@ export class ClaimFeesUseCase {
         });
       }
 
-      let txResult: TransactionResult;
+      let txResult: ClaimFeesResultType;
       try {
-        txResult = await adapter.claimFees(position.positionAddress, {
-          userAddress: user.walletAddress,
+        txResult = await adapter.claimFeesIx({
           poolAddress: position.poolAddress,
-        } as any);
+          userAddress: user.walletAddress,
+          positionAddress: position.positionAddress,
+        });
       } catch (error) {
         logger.error("adapter.claimFees failed", {
           error,
@@ -98,10 +117,14 @@ export class ClaimFeesUseCase {
         };
       }
 
-      const instructions =
-        (txResult.metadata?.instructions as any) ?? (txResult as any).instructions;
+      // const instructions =
+      //   (txResult.metadata?.instructions as any) ??
+      //   (txResult as any).instructions;
 
-      if (!Array.isArray(instructions) || instructions.length === 0) {
+      if (
+        !Array.isArray(txResult.instructions) ||
+        txResult.instructions.length === 0
+      ) {
         logger.error("No instructions returned from adapter.claimFees", {
           positionAddress: position.positionAddress,
         });
@@ -111,19 +134,31 @@ export class ClaimFeesUseCase {
         };
       }
 
-      let signature: string | undefined;
+      // let signature: string | undefined;
+      // try {
+      //   signature = await WalletService.signAndSendTransactionWithJito(
+      //     user,
+      //     instructions,
+      //     [],
+      //     []
+      //   );
+      // } catch (error) {
+      //   logger.error("Transaction submission failed", {
+      //     error,
+      //     userId: user.id,
+      //   });
+      // }
+
+      let signature = "" as string | undefined;
       try {
         signature = await WalletService.signAndSendTransactionWithJito(
-          user,
-          instructions,
+          command.user,
+          txResult.instructions,
           [],
           []
         );
-      } catch (error) {
-        logger.error("Transaction submission failed", {
-          error,
-          userId: user.id,
-        });
+      } catch (err) {
+        logger.error("Transaction submission failed", { err });
       }
 
       if (!signature) {
@@ -133,8 +168,30 @@ export class ClaimFeesUseCase {
         };
       }
 
-      const tokenXData = position.tokenX as any;
-      const tokenYData = position.tokenY as any;
+      // const tokenXData = position.tokenX;
+      // const tokenYData = position.tokenY;
+
+      const context: ClaimFeesContext = {
+        userId: user.id,
+        positionId: position.id,
+        positionAddress: position.positionAddress,
+        poolAddress: position.poolAddress,
+        userAddress: user.walletAddress,
+        tokenA: {
+          address: position.tokenX.address,
+          symbol: position.tokenX.symbol,
+          name: position.tokenX.symbol,
+          decimals: position.tokenX.decimals,
+        },
+        tokenB: {
+          address: position.tokenY.address,
+          symbol: position.tokenY.symbol,
+          name: position.tokenY.symbol,
+          decimals: position.tokenY.decimals,
+        },
+        convertToSol: true,
+        estimatedFeesUsd: estimatedUnclaimedFeesUsd,
+      };
 
       const metadata = {
         command: {
@@ -143,23 +200,8 @@ export class ClaimFeesUseCase {
           dex: dexType,
           poolAddress: position.poolAddress,
         },
-        claimContext: {
-          userId: user.id,
-          positionId: position.id,
-          positionAddress: position.positionAddress,
-          poolAddress: position.poolAddress,
-          userAddress: user.walletAddress,
-          dex: dexType,
-          tokenAMint: tokenXData?.mint ?? tokenXData?.address,
-          tokenBMint: tokenYData?.mint ?? tokenYData?.address,
-          tokenASymbol: tokenXData?.symbol,
-          tokenBSymbol: tokenYData?.symbol,
-          tokenADecimals: tokenXData?.decimals ?? 0,
-          tokenBDecimals: tokenYData?.decimals ?? 0,
-          convertToSol: true,
-          estimatedFeesUsd: estimatedUnclaimedFeesUsd,
-        },
-        adapterMetadata: txResult.metadata ?? {},
+        claimContext: context,
+        // adapterMetadata: txResult.metadata ?? {},
       };
 
       try {

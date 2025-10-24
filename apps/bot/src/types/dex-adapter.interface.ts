@@ -12,6 +12,8 @@ import {
   UrlParseResult,
   ClosePositionResult,
   ClosePositionParams,
+  ClaimFeesParams,
+  ClaimFeesResult,
 } from "./core.types";
 
 export interface PositionContext {
@@ -39,7 +41,7 @@ export interface IDexAdapter {
   createPositionIx(params: CreatePositionParams): Promise<CreatePositionResult>;
   closePosition(positionAddress: string): Promise<TransactionResult>;
   closePositionIx(params: ClosePositionParams): Promise<ClosePositionResult>;
-  claimFees(positionAddress: string): Promise<TransactionResult>;
+  claimFeesIx(params: ClaimFeesParams): Promise<ClaimFeesResult>;
   rebalancePosition(
     positionAddress: string,
     params: RebalanceParams

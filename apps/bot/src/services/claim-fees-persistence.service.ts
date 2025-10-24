@@ -18,12 +18,12 @@ interface ClaimedAmounts {
   tokenXAmount: string;
   tokenYAmount: string;
   claimedUsdValue: string;
-  tokenXPriceUsd: number;
-  tokenYPriceUsd: number;
   solReceived?: string;
 }
 
 interface ClaimPrices {
+  tokenXPriceUsd: number;
+  tokenYPriceUsd: number;
   solUsd: number;
 }
 
@@ -47,15 +47,14 @@ interface RecordClaimParams {
 
 export class ClaimFeesPersistenceService {
   async recordClaim(params: RecordClaimParams): Promise<void> {
+    console.log("recordClaim params", params);
     const { signature, context, claimed, prices, snapshot } = params;
     const claimType = params.claimType ?? "manual";
 
     await db.transaction(async (tx) => {
-      const [position] = await tx
-        .select()
-        .from(positions)
-        .where(eq(positions.id, context.positionId))
-        .limit(1);
+      const position = await tx.query.positions.findFirst({
+        where: eq(positions.id, context.positionId),
+      });
 
       if (!position) {
         throw new Error(`Position not found: ${context.positionId}`);
@@ -80,8 +79,8 @@ export class ClaimFeesPersistenceService {
         claimedTokenXAmount: claimed.tokenXAmount,
         claimedTokenYAmount: claimed.tokenYAmount,
         claimedUSDValue: claimed.claimedUsdValue,
-        tokenXPriceUSD: claimed.tokenXPriceUsd.toString(),
-        tokenYPriceUSD: claimed.tokenYPriceUsd.toString(),
+        tokenXPriceUSD: prices.tokenXPriceUsd.toString(),
+        tokenYPriceUSD: prices.tokenYPriceUsd.toString(),
         solReceived: claimed.solReceived,
         solPriceUSD: prices.solUsd.toString(),
         transactionSignature: signature,
@@ -90,7 +89,7 @@ export class ClaimFeesPersistenceService {
       });
 
       const currentTotalFees = new Decimal(position.totalFeesClaimedUSD ?? "0");
-      const newTotalFees = currentTotalFees.add(claimedUsdDecimal).toFixed(2);
+      const newTotalFees = currentTotalFees.add(claimedUsdDecimal).toFixed(6);
 
       await tx
         .update(positions)
@@ -102,7 +101,7 @@ export class ClaimFeesPersistenceService {
 
       if (segmentId) {
         const segmentFees = new Decimal(segment?.feesClaimedUSD ?? "0");
-        const newSegmentFees = segmentFees.add(claimedUsdDecimal).toFixed(2);
+        const newSegmentFees = segmentFees.add(claimedUsdDecimal).toFixed(6);
 
         await tx
           .update(positionSegments)
@@ -111,19 +110,20 @@ export class ClaimFeesPersistenceService {
       }
 
       if (snapshot) {
-        const currentValueDecimal = new Decimal(snapshot.currentValueUsd ?? "0");
+        const currentValueDecimal = new Decimal(
+          snapshot.currentValueUsd ?? "0"
+        );
         const segmentInitialDecimal = new Decimal(
           segment?.initialValueUSD ?? position.currentSegmentInitialUSD ?? "0"
         );
 
-        const unrealizedPnlDecimal = currentValueDecimal.sub(segmentInitialDecimal);
+        const unrealizedPnlDecimal = currentValueDecimal.sub(
+          segmentInitialDecimal
+        );
         const unrealizedPnlUsd = unrealizedPnlDecimal.toFixed(2);
         const unrealizedPnlPercentage = segmentInitialDecimal.equals(0)
           ? "0"
-          : unrealizedPnlDecimal
-              .div(segmentInitialDecimal)
-              .mul(100)
-              .toFixed(4);
+          : unrealizedPnlDecimal.div(segmentInitialDecimal).mul(100).toFixed(4);
 
         const totalRealizedPnlDecimal = new Decimal(
           position.totalRealizedPnlUSD ?? "0"
@@ -134,7 +134,9 @@ export class ClaimFeesPersistenceService {
           .add(totalFeesDecimal);
 
         const totalPnlUsd = totalPnlDecimal.toFixed(2);
-        const totalPnlPercentage = new Decimal(position.initialValueUSD ?? "0").equals(0)
+        const totalPnlPercentage = new Decimal(
+          position.initialValueUSD ?? "0"
+        ).equals(0)
           ? "0"
           : totalPnlDecimal
               .div(new Decimal(position.initialValueUSD))
@@ -156,8 +158,8 @@ export class ClaimFeesPersistenceService {
           unrealizedPnlPercentage,
           totalPnlUSD: totalPnlUsd,
           totalPnlPercentage,
-          tokenXPriceUSD: claimed.tokenXPriceUsd.toString(),
-          tokenYPriceUSD: claimed.tokenYPriceUsd.toString(),
+          tokenXPriceUSD: prices.tokenXPriceUsd.toString(),
+          tokenYPriceUSD: prices.tokenYPriceUsd.toString(),
           solPriceUSD: prices.solUsd.toString(),
           createdAt: new Date(),
         });
