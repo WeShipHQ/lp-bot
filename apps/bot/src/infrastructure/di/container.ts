@@ -63,6 +63,7 @@ import {
   dexRegistry,
   DexRegistryService,
 } from "@/services/dex-registry.service";
+import { SwapService } from "@/services/swap.service";
 
 // DB
 import { db } from "@/db";
@@ -149,6 +150,11 @@ function registerBase() {
     .toDynamicValue(() => new PrivyTransactionService())
     .inSingletonScope();
 
+  container
+    .bind(SwapService)
+    .toDynamicValue(() => new SwapService())
+    .inSingletonScope();
+
   // Use-cases (transient by default)
   container
     .bind(CreatePositionUseCase)
@@ -201,8 +207,7 @@ function registerBase() {
       (c) =>
         new RebalancePositionUseCase(
           c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
-          c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
-          c.container.get(DI_TOKENS.TransactionService) as any
+          c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry)
         )
     );
 

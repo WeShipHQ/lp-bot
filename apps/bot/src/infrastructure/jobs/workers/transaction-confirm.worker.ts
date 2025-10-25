@@ -11,7 +11,7 @@ import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
 import { db, pendingTransactions, users, User } from "@/db";
 import { eq } from "drizzle-orm";
 import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
-import { PositionCreationContext } from "@/application/position/create-position.use-case";
+// import { PositionCreationContext } from "@/application/position/create-position.use-case";
 import { positionPersistenceService } from "@/services/position-persistence.service";
 import { rebalancePersistenceService } from "@/services/rebalance-persistence.service";
 import { closePositionPersistenceService } from "@/services/close-position-persistence.service";
@@ -34,13 +34,24 @@ import {
 } from "@/presentation/formatters/base.formatter";
 import { claimFeesPersistenceService } from "@/services/claim-fees-persistence.service";
 import { SOL_MINT } from "@/config/constants";
+import { SwapService } from "@/services/swap.service";
+import { RebalanceSessionMetadata } from "@/types/rebalance.types";
+import { container } from "@/infrastructure/di/container";
+import {
+  CreatePositionUseCase,
+  PositionCreationContext,
+} from "@/application/position/create-position.use-case";
 
 type CloseInstructionExtractionResult = {
   positionAddress?: string;
   finalTokenAAmount?: string;
   finalTokenBAmount?: string;
+  finalTokenAAmountLamports?: string;
+  finalTokenBAmountLamports?: string;
   claimedFeesTokenA?: string;
   claimedFeesTokenB?: string;
+  claimedFeesTokenALamports?: string;
+  claimedFeesTokenBLamports?: string;
   removeInstructionCount: number;
   claimInstructionCount: number;
   closeInstructionCount: number;
@@ -52,6 +63,7 @@ export class TransactionConfirmWorker
   private readonly priceService = getTokenPriceService();
   private readonly meteoraAdapter = new MeteoraAdapter();
   private readonly cache = getCacheService();
+  private readonly swapService = new SwapService();
 
   constructor(
     private readonly solana: SolanaAdapter,
@@ -126,12 +138,7 @@ export class TransactionConfirmWorker
         if (operationType === "CREATE_POSITION") {
           await this.handleCreatePosition(signature, userId, positionAddress);
         } else if (operationType === "REBALANCE") {
-          await this.handleRebalance(
-            signature,
-            userId,
-            positionId,
-            positionAddress
-          );
+          await this.handleRebalance(signature, userId);
         } else if (operationType === "CLOSE_POSITION") {
           await this.handleClosePosition(
             signature,
@@ -194,6 +201,8 @@ export class TransactionConfirmWorker
           : ptx.metadata;
       const context: PositionCreationContext | undefined =
         metadata.positionContext;
+      const rebalanceSession: RebalanceSessionMetadata | undefined =
+        metadata.rebalanceSession;
 
       if (!context) {
         logger.error("[TxConfirmWorker] No position context in metadata", {
@@ -340,15 +349,28 @@ export class TransactionConfirmWorker
 
       logger.info("[TxConfirmWorker] Fetched token prices", { prices });
 
-      const createdPositionId = await positionPersistenceService.createPosition(
-        {
+      if (rebalanceSession) {
+        await this.finalizeRebalanceCreation({
           signature,
-          positionAddress: effectivePositionAddress,
-          context,
-          onChainData,
+          session: rebalanceSession,
+          metadata,
+          positionContext: context,
+          effectivePositionAddress,
+          actualTokenAAmount,
+          actualTokenBAmount,
           prices,
-        }
-      );
+          userId,
+        });
+        return;
+      }
+
+      const createdPositionId = await positionPersistenceService.createPosition({
+        signature,
+        positionAddress: effectivePositionAddress,
+        context,
+        onChainData,
+        prices,
+      });
 
       logger.info("[TxConfirmWorker] Position created in database", {
         positionId: createdPositionId,
@@ -793,169 +815,476 @@ export class TransactionConfirmWorker
    */
   private async handleRebalance(
     signature: string,
-    userId: string,
-    positionId?: string,
-    positionAddress?: string
+    userId: string
   ): Promise<void> {
     try {
-      const [ptx] = await db
-        .select()
-        .from(pendingTransactions)
-        .where(eq(pendingTransactions.signature, signature))
-        .limit(1);
+      const pendingTx = await db.query.pendingTransactions.findFirst({
+        where: eq(pendingTransactions.signature, signature),
+      });
 
-      if (!ptx || !ptx.metadata) {
+      if (!pendingTx || !pendingTx.metadata) {
         logger.error(
           "[TxConfirmWorker] No pending transaction metadata for rebalance",
-          {
-            signature,
-          }
+          { signature }
         );
         return;
       }
 
       const metadata =
-        typeof ptx.metadata === "string"
-          ? JSON.parse(ptx.metadata)
-          : ptx.metadata;
-      const rebalanceContext = metadata.rebalanceContext as
-        | {
-            positionId: string;
-            userId: string;
-            userAddress: string;
-            poolAddress: string;
-            dex: string;
-            oldPositionAddress: string;
-            tokenAMint: string;
-            tokenBMint: string;
-            tokenASymbol?: string;
-            tokenBSymbol?: string;
-            tokenADecimals?: number;
-            tokenBDecimals?: number;
-            triggerReason?: string;
-          }
+        typeof pendingTx.metadata === "string"
+          ? JSON.parse(pendingTx.metadata)
+          : pendingTx.metadata;
+
+      const session = metadata?.rebalanceSession as
+        | RebalanceSessionMetadata
         | undefined;
 
-      if (!rebalanceContext) {
-        logger.error("[TxConfirmWorker] Missing rebalance context", {
+      if (!session) {
+        logger.error("[TxConfirmWorker] Missing rebalance session metadata", {
           signature,
         });
         return;
       }
 
-      const effectivePositionId = positionId ?? rebalanceContext.positionId;
-      const effectiveOldAddress = rebalanceContext.oldPositionAddress;
-      const adapterMetadata = metadata.adapterMetadata ?? {};
-
-      const newPositionAddress =
-        (adapterMetadata.create?.positionPublicKey as string | undefined) ||
-        (adapterMetadata.newPositionAddress as string | undefined) ||
-        positionAddress;
-
-      if (!newPositionAddress) {
-        logger.error(
-          "[TxConfirmWorker] Unable to determine new position address after rebalance",
-          {
-            signature,
-            rebalanceContext,
-          }
+      if ((session.stage ?? "close") !== "close") {
+        logger.info(
+          "[TxConfirmWorker] Rebalance session not in close stage, skipping",
+          { signature, stage: session.stage }
         );
         return;
       }
 
-      logger.info("[TxConfirmWorker] Processing rebalance confirmation", {
+      await this.handleRebalanceClose({
         signature,
-        positionId: effectivePositionId,
-        oldPositionAddress: effectiveOldAddress,
-        newPositionAddress,
-      });
-
-      // Fetch on-chain data for new position
-      let actualTokenAAmount = "0";
-      let actualTokenBAmount = "0";
-      try {
-        const position = await this.meteoraAdapter.getPosition(
-          newPositionAddress,
-          {
-            userAddress: rebalanceContext.userAddress,
-            poolAddress: rebalanceContext.poolAddress,
-          }
-        );
-        if (position) {
-          actualTokenAAmount = position.tokenAAmount;
-          actualTokenBAmount = position.tokenBAmount;
-        }
-      } catch (err) {
-        logger.warn(
-          "[TxConfirmWorker] Failed to fetch new position data after rebalance",
-          {
-            err,
-            newPositionAddress,
-          }
-        );
-      }
-
-      // Fetch token prices
-      const solMint = SOL_MINT;
-      const priceData = await this.priceService.getPrices([
-        rebalanceContext.tokenAMint,
-        rebalanceContext.tokenBMint,
-        solMint,
-      ]);
-
-      const prices = {
-        tokenAUsd: priceData[rebalanceContext.tokenAMint]?.price ?? 0,
-        tokenBUsd: priceData[rebalanceContext.tokenBMint]?.price ?? 0,
-        solUsd: priceData[solMint]?.price ?? 0,
-      };
-
-      await rebalancePersistenceService.rebalancePosition({
-        signature,
-        context: {
-          userId: rebalanceContext.userId,
-          positionId: effectivePositionId,
-          oldPositionAddress: effectiveOldAddress,
-          newPositionAddress,
-          triggerReason: rebalanceContext.triggerReason ?? "rebalance",
-          tokenAAmount: actualTokenAAmount,
-          tokenBAmount: actualTokenBAmount,
-          tokenAMint: rebalanceContext.tokenAMint,
-          tokenBMint: rebalanceContext.tokenBMint,
-          poolAddress: rebalanceContext.poolAddress,
-        },
-        prices,
-      });
-
-      logger.info("[TxConfirmWorker] Rebalance persisted", {
-        signature,
-        positionId: effectivePositionId,
-        newPositionAddress,
-      });
-
-      await this.cache.invalidate(CachePatterns.portfolioPattern(userId));
-      await this.cache.invalidate(
-        CachePatterns.positionPattern(effectivePositionId)
-      );
-
-      const jobQueue = new JobQueueService({ producerOnly: true });
-      await jobQueue.enqueue(JOB_NOTIFICATION, {
+        pendingTxId: pendingTx.id,
+        metadata,
+        session,
         userId,
-        notification: {
-          type: "rebalance",
-          title: "Position Rebalanced",
-          message: `Rebalance completed successfully for position ${effectivePositionId}.`,
-        },
       });
     } catch (error) {
       logger.error("[TxConfirmWorker] Failed to handle REBALANCE", {
         error,
         signature,
         userId,
-        positionId,
-        positionAddress,
       });
       throw error;
     }
+  }
+
+  private async handleRebalanceClose(params: {
+    signature: string;
+    pendingTxId: string;
+    metadata: any;
+    session: RebalanceSessionMetadata;
+    userId: string;
+  }): Promise<void> {
+    const { signature, pendingTxId, metadata, session, userId } = params;
+
+    const connection = this.solana.getConnection();
+    const parsedTransaction = await connection.getParsedTransaction(signature, {
+      maxSupportedTransactionVersion: 0,
+    });
+
+    if (!parsedTransaction) {
+      logger.error(
+        "[TxConfirmWorker] Rebalance close transaction not found on-chain",
+        { signature }
+      );
+      throw new Error("Rebalance close transaction not found");
+    }
+
+    const instructions = parseMeteoraInstructions(parsedTransaction);
+    if (!instructions || instructions.length === 0) {
+      logger.error(
+        "[TxConfirmWorker] No Meteora instructions found in rebalance close transaction",
+        { signature }
+      );
+      throw new Error("Missing Meteora instructions in rebalance close transaction");
+    }
+
+    const closeExtraction = this.extractCloseInstructionData(
+      instructions,
+      session.tokenA,
+      session.tokenB
+    );
+
+    const withdrawnTokenALamports = new Decimal(
+      closeExtraction.finalTokenAAmountLamports ?? "0"
+    );
+    const withdrawnTokenBLamports = new Decimal(
+      closeExtraction.finalTokenBAmountLamports ?? "0"
+    );
+    const claimedTokenALamports = new Decimal(
+      closeExtraction.claimedFeesTokenALamports ?? "0"
+    );
+    const claimedTokenBLamports = new Decimal(
+      closeExtraction.claimedFeesTokenBLamports ?? "0"
+    );
+
+    const totalTokenALamports = withdrawnTokenALamports.add(
+      claimedTokenALamports
+    );
+    const totalTokenBLamports = withdrawnTokenBLamports.add(
+      claimedTokenBLamports
+    );
+
+    const userRecord = await db.query.users.findFirst({
+      where: eq(users.id, session.userId),
+    });
+    if (!userRecord) {
+      logger.error("[TxConfirmWorker] Unable to load user for rebalance", {
+        userId: session.userId,
+      });
+      throw new Error("User not found for rebalance");
+    }
+
+    const closeSummary = {
+      withdrawnTokenA: withdrawnTokenALamports.toFixed(0),
+      withdrawnTokenB: withdrawnTokenBLamports.toFixed(0),
+      claimedFeesTokenA: claimedTokenALamports.toFixed(0),
+      claimedFeesTokenB: claimedTokenBLamports.toFixed(0),
+      totalTokenA: totalTokenALamports.toFixed(0),
+      totalTokenB: totalTokenBLamports.toFixed(0),
+      solFromTokenA: "0",
+      solFromTokenB: "0",
+      swapSignaturesToSol: {
+        tokenA: undefined as string | undefined,
+        tokenB: undefined as string | undefined,
+      },
+    };
+
+    let solFromALamports = new Decimal(0);
+    let solFromBLamports = new Decimal(0);
+
+    if (totalTokenALamports.gt(0)) {
+      const { result, solReceived } = await this.swapService.swapTokenToSol(
+        userRecord,
+        session.tokenA.address,
+        totalTokenALamports.toFixed(0)
+      );
+      if (!result.success) {
+        throw new Error(
+          `Failed to convert ${session.tokenA.symbol ?? "Token A"} to SOL: ${
+            result.error ?? "unknown error"
+          }`
+        );
+      }
+      const solLamports = solReceived
+        .mul(1_000_000_000)
+        .toDecimalPlaces(0, Decimal.ROUND_DOWN);
+      closeSummary.solFromTokenA = solLamports.toFixed(0);
+      closeSummary.swapSignaturesToSol.tokenA = result.signature;
+      solFromALamports = solLamports;
+    }
+
+    if (totalTokenBLamports.gt(0)) {
+      const { result, solReceived } = await this.swapService.swapTokenToSol(
+        userRecord,
+        session.tokenB.address,
+        totalTokenBLamports.toFixed(0)
+      );
+      if (!result.success) {
+        throw new Error(
+          `Failed to convert ${session.tokenB.symbol ?? "Token B"} to SOL: ${
+            result.error ?? "unknown error"
+          }`
+        );
+      }
+      const solLamports = solReceived
+        .mul(1_000_000_000)
+        .toDecimalPlaces(0, Decimal.ROUND_DOWN);
+      closeSummary.solFromTokenB = solLamports.toFixed(0);
+      closeSummary.swapSignaturesToSol.tokenB = result.signature;
+      solFromBLamports = solLamports;
+    }
+
+    const totalSolLamports = solFromALamports
+      .add(solFromBLamports)
+      .toDecimalPlaces(0, Decimal.ROUND_DOWN);
+    if (totalSolLamports.lte(0)) {
+      throw new Error(
+        "No SOL recovered from rebalance close; cannot recreate position"
+      );
+    }
+
+    const reserveLamports = Decimal.min(
+      totalSolLamports,
+      new Decimal(2_000_000)
+    ).toDecimalPlaces(0, Decimal.ROUND_DOWN);
+    const usableLamportsRaw = totalSolLamports.sub(reserveLamports);
+    if (usableLamportsRaw.lte(0)) {
+      throw new Error(
+        "Insufficient SOL available after reserve to recreate position"
+      );
+    }
+
+    const usableLamports = usableLamportsRaw.toDecimalPlaces(
+      0,
+      Decimal.ROUND_DOWN
+    );
+
+    const halfLamports = usableLamports.dividedToIntegerBy(2);
+    const otherHalfLamports = usableLamports.sub(halfLamports);
+
+    const conversions = {
+      solBudgetLamports: usableLamports.toFixed(0),
+      reserveLamports: reserveLamports.toFixed(0),
+      solForTokenALamports: halfLamports.toFixed(0),
+      solForTokenBLamports: otherHalfLamports.toFixed(0),
+      solToTokenSignatures: {
+        tokenA: undefined as string | undefined,
+        tokenB: undefined as string | undefined,
+      },
+    };
+
+    let purchasedTokenALamports: Decimal;
+    if (session.tokenA.address === SOL_MINT) {
+      purchasedTokenALamports = halfLamports;
+    } else {
+      const solInput = halfLamports
+        .div(1_000_000_000)
+        .toDecimalPlaces(9, Decimal.ROUND_DOWN)
+        .toString();
+      const { result, tokenAmountLamports } = await this.swapService.swapSolToToken(
+        userRecord,
+        session.tokenA.address,
+        solInput
+      );
+      if (!result.success) {
+        throw new Error(
+          `Failed to convert SOL to ${session.tokenA.symbol ?? "Token A"}: ${
+            result.error ?? "unknown error"
+          }`
+        );
+      }
+      purchasedTokenALamports = tokenAmountLamports;
+      conversions.solToTokenSignatures.tokenA = result.signature;
+    }
+
+    let purchasedTokenBLamports: Decimal;
+    if (session.tokenB.address === SOL_MINT) {
+      purchasedTokenBLamports = otherHalfLamports;
+    } else {
+      const solInput = otherHalfLamports
+        .div(1_000_000_000)
+        .toDecimalPlaces(9, Decimal.ROUND_DOWN)
+        .toString();
+      const { result, tokenAmountLamports } = await this.swapService.swapSolToToken(
+        userRecord,
+        session.tokenB.address,
+        solInput
+      );
+      if (!result.success) {
+        throw new Error(
+          `Failed to convert SOL to ${session.tokenB.symbol ?? "Token B"}: ${
+            result.error ?? "unknown error"
+          }`
+        );
+      }
+      purchasedTokenBLamports = tokenAmountLamports;
+      conversions.solToTokenSignatures.tokenB = result.signature;
+    }
+
+    if (purchasedTokenALamports.lte(0) || purchasedTokenBLamports.lte(0)) {
+      throw new Error("Insufficient token amounts after SOL conversions to recreate position");
+    }
+
+    const purchases = {
+      tokenALamports: purchasedTokenALamports.toFixed(0),
+      tokenBLamports: purchasedTokenBLamports.toFixed(0),
+    };
+
+    const tokenADecimals = session.tokenA.decimals ?? 6;
+    const tokenBDecimals = session.tokenB.decimals ?? 6;
+
+    const tokenAUi = purchasedTokenALamports
+      .div(new Decimal(10).pow(tokenADecimals))
+      .toDecimalPlaces(tokenADecimals, Decimal.ROUND_DOWN)
+      .toString();
+    const tokenBUi = purchasedTokenBLamports
+      .div(new Decimal(10).pow(tokenBDecimals))
+      .toDecimalPlaces(tokenBDecimals, Decimal.ROUND_DOWN)
+      .toString();
+
+    const createUseCase = container.get(CreatePositionUseCase);
+    const createResult = await createUseCase.execute({
+      user: userRecord,
+      dex: session.dex,
+      poolAddress: session.poolAddress,
+      tokenA: session.tokenA,
+      tokenB: session.tokenB,
+      tokenAAmount: tokenAUi,
+      tokenBAmount: tokenBUi,
+      strategy: session.strategy,
+      autoRebalance: session.autoRebalance,
+      depositMethod: "single_sided",
+      rebalanceSession: {
+        ...session,
+        stage: "creating",
+        closeSignature: session.closeSignature ?? signature,
+        closeSummary: {
+          ...closeSummary,
+          totalSol: totalSolLamports.toFixed(0),
+        },
+        conversions,
+        purchases,
+      },
+    });
+
+    if (!createResult.success || !createResult.signature) {
+      throw new Error(
+        createResult.error ||
+          "Failed to submit rebalance creation transaction"
+      );
+    }
+
+    const updatedMetadata = {
+      ...metadata,
+      rebalanceSession: {
+        ...session,
+        stage: "creating",
+        closeSignature: session.closeSignature ?? signature,
+        closeSummary: {
+          ...closeSummary,
+          totalSol: totalSolLamports.toFixed(0),
+        },
+        conversions,
+        purchases,
+        createSignature: createResult.signature,
+      },
+    };
+
+    await db
+      .update(pendingTransactions)
+      .set({ metadata: updatedMetadata, updatedAt: new Date() })
+      .where(eq(pendingTransactions.id, pendingTxId));
+
+    logger.info("[TxConfirmWorker] Rebalance close processed; creation submitted", {
+      signature,
+      sessionId: session.sessionId,
+      createSignature: createResult.signature,
+    });
+  }
+
+  private async finalizeRebalanceCreation(params: {
+    signature: string;
+    session: RebalanceSessionMetadata;
+    metadata: any;
+    positionContext: PositionCreationContext;
+    effectivePositionAddress: string;
+    actualTokenAAmount: string;
+    actualTokenBAmount: string;
+    prices: { tokenAUsd: number; tokenBUsd: number; solUsd: number };
+    userId: string;
+  }): Promise<void> {
+    const {
+      signature,
+      session,
+      metadata,
+      positionContext,
+      effectivePositionAddress,
+      actualTokenAAmount,
+      actualTokenBAmount,
+      prices,
+      userId,
+    } = params;
+
+    const positionId = session.positionId;
+    const oldPositionAddress =
+      session.oldPositionAddress || positionContext.positionAddress;
+
+    if (!positionId || !oldPositionAddress) {
+      throw new Error("Rebalance session missing position identifiers");
+    }
+
+    const claimedFeesXUi = session.closeSummary?.claimedFeesTokenA
+      ? lamportsToUi(
+          session.closeSummary.claimedFeesTokenA,
+          session.tokenA.decimals ?? 6
+        )
+      : undefined;
+    const claimedFeesYUi = session.closeSummary?.claimedFeesTokenB
+      ? lamportsToUi(
+          session.closeSummary.claimedFeesTokenB,
+          session.tokenB.decimals ?? 6
+        )
+      : undefined;
+
+    const onChainData = {
+      actualTokenAAmount,
+      actualTokenBAmount,
+      claimedFeesX: claimedFeesXUi,
+      claimedFeesY: claimedFeesYUi,
+    };
+
+    await rebalancePersistenceService.rebalancePosition({
+      signature,
+      context: {
+        userId: session.userId,
+        positionId,
+        oldPositionAddress,
+        newPositionAddress: effectivePositionAddress,
+        triggerReason: session.triggerReason ?? "rebalance",
+        tokenAAmount: actualTokenAAmount,
+        tokenBAmount: actualTokenBAmount,
+        tokenAMint: session.tokenA.address,
+        tokenBMint: session.tokenB.address,
+        poolAddress: session.poolAddress,
+      },
+      onChainData,
+      prices,
+    });
+
+    await this.cache.invalidate(CachePatterns.portfolioPattern(userId));
+    await this.cache.invalidate(CachePatterns.positionPattern(positionId));
+
+    const jobQueue = new JobQueueService({ producerOnly: true });
+
+    if (session.autoRebalance) {
+      await jobQueue.enqueue(
+        JOB_POSITION_MONITOR,
+        {
+          userId: session.userId,
+          positionId,
+        },
+        {
+          repeat: {
+            every: 60 * 60 * 1000,
+          },
+        }
+      );
+    }
+
+    await jobQueue.enqueue(JOB_NOTIFICATION, {
+      userId,
+      notification: {
+        type: "rebalance",
+        title: "Position Rebalanced",
+        message: `Your position has been rebalanced successfully. New position address: \`${effectivePositionAddress}\`.`,
+        parseMode: "Markdown",
+      },
+    });
+
+    const updatedMetadata = {
+      ...metadata,
+      rebalanceSession: {
+        ...session,
+        stage: "completed",
+        newPositionAddress: effectivePositionAddress,
+        createSignature: signature,
+      },
+    };
+
+    await db
+      .update(pendingTransactions)
+      .set({ metadata: updatedMetadata, updatedAt: new Date() })
+      .where(eq(pendingTransactions.signature, signature));
+
+    logger.info("[TxConfirmWorker] Rebalance creation finalized", {
+      positionId,
+      newPositionAddress: effectivePositionAddress,
+      signature,
+    });
   }
 
   /**
@@ -1196,7 +1525,15 @@ export class TransactionConfirmWorker
       tokenA: new Decimal(0),
       tokenB: new Decimal(0),
     };
+    const removeTotalsLamports = {
+      tokenA: new Decimal(0),
+      tokenB: new Decimal(0),
+    };
     const claimTotals = {
+      tokenA: new Decimal(0),
+      tokenB: new Decimal(0),
+    };
+    const claimTotalsLamports = {
       tokenA: new Decimal(0),
       tokenB: new Decimal(0),
     };
@@ -1232,18 +1569,30 @@ export class TransactionConfirmWorker
 
       for (const transfer of instruction.tokenTransfers) {
         if (transfer.mint === tokenA.address) {
-          const amount = new Decimal(transfer.amount);
+          const amountLamports = new Decimal(transfer.amount);
           if (instruction.instructionType === "remove") {
-            removeTotals.tokenA = removeTotals.tokenA.add(amount);
+            removeTotals.tokenA = removeTotals.tokenA.add(amountLamports);
+            removeTotalsLamports.tokenA = removeTotalsLamports.tokenA.add(
+              amountLamports
+            );
           } else {
-            claimTotals.tokenA = claimTotals.tokenA.add(amount);
+            claimTotals.tokenA = claimTotals.tokenA.add(amountLamports);
+            claimTotalsLamports.tokenA = claimTotalsLamports.tokenA.add(
+              amountLamports
+            );
           }
         } else if (transfer.mint === tokenB.address) {
-          const amount = new Decimal(transfer.amount);
+          const amountLamports = new Decimal(transfer.amount);
           if (instruction.instructionType === "remove") {
-            removeTotals.tokenB = removeTotals.tokenB.add(amount);
+            removeTotals.tokenB = removeTotals.tokenB.add(amountLamports);
+            removeTotalsLamports.tokenB = removeTotalsLamports.tokenB.add(
+              amountLamports
+            );
           } else {
-            claimTotals.tokenB = claimTotals.tokenB.add(amount);
+            claimTotals.tokenB = claimTotals.tokenB.add(amountLamports);
+            claimTotalsLamports.tokenB = claimTotalsLamports.tokenB.add(
+              amountLamports
+            );
           }
         }
       }
@@ -1259,6 +1608,14 @@ export class TransactionConfirmWorker
         removeInstructionCount > 0
           ? lamportsToUi(removeTotals.tokenB.toString(), tokenB.decimals)
           : undefined,
+      finalTokenAAmountLamports:
+        removeInstructionCount > 0
+          ? removeTotalsLamports.tokenA.toFixed(0)
+          : undefined,
+      finalTokenBAmountLamports:
+        removeInstructionCount > 0
+          ? removeTotalsLamports.tokenB.toFixed(0)
+          : undefined,
       claimedFeesTokenA:
         claimInstructionCount > 0
           ? lamportsToUi(claimTotals.tokenA.toString(), tokenA.decimals)
@@ -1266,6 +1623,14 @@ export class TransactionConfirmWorker
       claimedFeesTokenB:
         claimInstructionCount > 0
           ? lamportsToUi(claimTotals.tokenB.toString(), tokenB.decimals)
+          : undefined,
+      claimedFeesTokenALamports:
+        claimInstructionCount > 0
+          ? claimTotalsLamports.tokenA.toFixed(0)
+          : undefined,
+      claimedFeesTokenBLamports:
+        claimInstructionCount > 0
+          ? claimTotalsLamports.tokenB.toFixed(0)
           : undefined,
       removeInstructionCount,
       claimInstructionCount,
