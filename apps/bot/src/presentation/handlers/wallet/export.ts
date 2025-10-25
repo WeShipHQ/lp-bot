@@ -200,7 +200,10 @@ export async function confirmFirstExport(ctx: BotContext) {
   }
 
   await handleWalletExport(ctx);
-  await userService.markPrivateKeyExported(ctx.user.id);
+  await userService.markPrivateKeyExported({
+    privyUserId: ctx.privyUserId,
+    telegramId: ctx.user.telegramId,
+  });
   await ctx.reply(
     "✅ **Private Key Exported Successfully!**\n\n" +
       "⚠️ **Important Security Reminder:**\n" +

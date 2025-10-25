@@ -110,7 +110,7 @@ function registerBase() {
 
   container
     .bind<IUserRepository>(DI_TOKENS.UserRepo)
-    .toDynamicValue(() => new UserRepository(db as any))
+    .toDynamicValue(() => new UserRepository(db))
     .inSingletonScope();
 
   // Cache service (singleton)

@@ -88,6 +88,7 @@ export const users = pgTable("users", {
   telegramId: text("telegram_id").notNull().unique(),
   walletId: text("wallet_id").unique().notNull(),
   // privyUserId: text("privy_user_id").notNull().unique(),
+  privyUserId: text("privy_user_id"),
   username: text("username"),
   walletAddress: text("wallet_address").notNull().unique(),
   autoRebalanceEnabled: boolean("auto_rebalance_enabled")

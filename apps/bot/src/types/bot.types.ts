@@ -33,6 +33,7 @@ interface SettingsState {
 
 export interface BotContext extends Context {
   user: User;
+  privyUserId?: string;
   session?: {
     transferState?: TransferState;
     twoFactorVerification?: TwoFactorVerificationState;

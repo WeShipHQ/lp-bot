@@ -1,85 +1,65 @@
 import { MiddlewareFn } from "telegraf";
 import { FastifyInstance } from "fastify";
-import { privy } from "../../services/privy.service";
-import { CONFIG } from "../../config";
 import { BotContext } from "@/types/bot.types";
-import { User } from "@/db";
-import { createUser, findUserByTelegramId } from "@/db/queries";
-import { userSyncService } from "../../services/user-sync.service";
+import { container } from "@/infrastructure/di/container";
+import { ConnectWalletUseCase } from "@/application/wallet/connect-wallet.use-case";
+import { findUserById } from "@/db/queries";
 
 export function authMiddleware(
   server: FastifyInstance
 ): MiddlewareFn<BotContext> {
   return async (ctx, next) => {
-    if (!ctx.from) return;
-    const telegramUserId = ctx.from.id.toString();
-    const username = ctx.from.username;
-
-    try {
-      let user = await privy.getUserByTelegramUserId(telegramUserId);
-      let walletAddress: string;
-      let walletId: string;
-      let dbUser: User | undefined = undefined;
-
-      if (!user) {
-        const wallet = await privy.walletApi.createWallet({
-          chainType: "solana",
-          ownerId: CONFIG.PRIVY.PRIVY_AUTH_ID,
-          additionalSigners: [{ signerId: CONFIG.PRIVY.PRIVY_AUTH_ID }],
-        });
-
-        user = await privy.importUser({
-          linkedAccounts: [{ type: "telegram", telegramUserId }],
-          customMetadata: {
-            walletId: wallet.id,
-            walletAddress: wallet.address,
-          },
-        });
-
-        walletAddress = wallet.address;
-        walletId = wallet.id;
-
-        dbUser = await createUser({
-          telegramId: telegramUserId,
-          username: ctx.from.username,
-          walletAddress,
-          walletId,
-        });
-
-        server.log.info(
-          `New user registered: ${telegramUserId} with wallet: ${walletAddress}`
-        );
-      } else {
-        walletAddress = user.customMetadata?.walletAddress as string;
-        walletId = user.customMetadata?.walletId as string;
-
-        dbUser = await findUserByTelegramId(telegramUserId);
-        if (!dbUser) {
-          dbUser = await createUser({
-            telegramId: telegramUserId,
-            username: ctx.from.username,
-            walletAddress,
-            walletId,
-          });
-        }
-      }
-
-      // Sync user to local database
-      await userSyncService.syncUser({
-        id: user.id,
-        telegramId: telegramUserId,
-        username,
-        walletAddress,
-        walletId,
-      });
-
-      ctx.user = dbUser;
-
-      server.log.info(`User authenticated: ${telegramUserId}`);
-    } catch (error) {
-      server.log.error({ err: error }, "Auth middleware error");
+    if (!ctx.from) {
+      return;
     }
 
-    return next();
+    const telegramUserId = ctx.from.id.toString();
+    const username = ctx.from.username ?? `Panda_${telegramUserId}`;
+
+    try {
+      const connectWalletUseCase = container.get(ConnectWalletUseCase);
+      const { userId, privyUserId } = await connectWalletUseCase.execute(
+        telegramUserId,
+        undefined,
+        username
+      );
+
+      const dbUser = await findUserById(userId);
+      if (!dbUser) {
+        throw new Error(
+          `User record not found after wallet sync for telegramId=${telegramUserId}`
+        );
+      }
+
+      ctx.user = dbUser;
+      ctx.privyUserId = privyUserId;
+
+      server.log.debug(
+        { telegramUserId, userId },
+        "Authenticated Telegram user"
+      );
+
+      return next();
+    } catch (error) {
+      server.log.error(
+        { err: error, telegramUserId },
+        "Auth middleware error"
+      );
+
+      try {
+        if (ctx.updateType === "callback_query" && "answerCbQuery" in ctx) {
+          await ctx.answerCbQuery("Authentication failed. Please try again.");
+        } else if (ctx.chat?.id && "reply" in ctx) {
+          await ctx.reply(
+            "❌ Authentication failed. Please try again in a moment."
+          );
+        }
+      } catch (notifyError) {
+        server.log.error(
+          { err: notifyError, telegramUserId },
+          "Failed to notify user about auth error"
+        );
+      }
+    }
   };
 }
