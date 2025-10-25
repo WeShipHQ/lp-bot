@@ -31,6 +31,7 @@ export const transactionTypeEnum = pgEnum("transaction_type", [
 ]);
 export const transactionStatusEnum = pgEnum("transaction_status", [
   "PENDING",
+  "PENDING_SWAPS",
   "CONFIRMED",
   "FAILED",
 ]);
