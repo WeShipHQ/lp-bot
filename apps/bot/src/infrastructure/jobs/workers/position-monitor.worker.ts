@@ -46,6 +46,14 @@ export class PositionMonitorWorker implements IWorker<PositionMonitorJobData> {
       const lowerId = onchain?.metadata?.lowerBinId as number | undefined;
       const upperId = onchain?.metadata?.upperBinId as number | undefined;
 
+      // Check Stop Loss and Take Profit conditions
+      const currentPrice = onchain?.metadata?.currentPrice || 0;
+      const initialPriceUSD = Number(position.initialValueUSD) / Number(position.initialValueSOL) * (onchain?.metadata?.solPrice || 0);
+      const priceChangePercentage = ((currentPrice - initialPriceUSD) / initialPriceUSD) * 100;
+
+      const stopLossTriggered = position.slPercentage && priceChangePercentage <= -(position.slPercentage);
+      const takeProfitTriggered = position.tpPercentage && priceChangePercentage >= position.tpPercentage;
+
       // If position is out of range, send a notification
       if (inRange === false) {
         try {
@@ -58,6 +66,37 @@ export class PositionMonitorWorker implements IWorker<PositionMonitorJobData> {
           logger.warn(
             { err },
             "[PositionMonitorWorker] Failed to send out-of-range notification"
+          );
+        }
+      }
+
+      // Check Stop Loss and Take Profit triggers
+      if (stopLossTriggered) {
+        try {
+          await this.notificationService.sendNotification(userId, {
+            type: "position",
+            title: "🛡️ Stop Loss Triggered",
+            message: `Your position ${position.positionAddress.slice(0, 6)}... has hit stop loss at ${Math.abs(priceChangePercentage).toFixed(2)}%. Auto-closing position to limit losses.`,
+          });
+        } catch (err) {
+          logger.warn(
+            { err },
+            "[PositionMonitorWorker] Failed to send stop loss notification"
+          );
+        }
+      }
+
+      if (takeProfitTriggered) {
+        try {
+          await this.notificationService.sendNotification(userId, {
+            type: "position",
+            title: "🎯 Take Profit Triggered",
+            message: `Your position ${position.positionAddress.slice(0, 6)}... has hit take profit at ${priceChangePercentage.toFixed(2)}%. Auto-closing position to secure gains.`,
+          });
+        } catch (err) {
+          logger.warn(
+            { err },
+            "[PositionMonitorWorker] Failed to send take profit notification"
           );
         }
       }
@@ -89,6 +128,42 @@ export class PositionMonitorWorker implements IWorker<PositionMonitorJobData> {
           logger.debug(
             { positionId },
             "[PositionMonitorWorker] Auto-rebalance skipped: missing userAddress"
+          );
+        }
+      }
+
+      // Check if position should be closed due to Stop Loss or Take Profit
+      const shouldClose = stopLossTriggered || takeProfitTriggered;
+      if (shouldClose) {
+        const userAddress =
+          (res.onchain?.metadata?.userAddress as string) || "";
+        if (userAddress) {
+          const reason = stopLossTriggered ? "stop_loss_triggered" : "take_profit_triggered";
+          const payload: RebalanceJobData = {
+            userId,
+            positionId,
+            userAddress,
+            reason,
+          };
+          try {
+            await this.jobQueue.enqueue(JOB_REBALANCE, payload, {
+              attempts: 1,
+            });
+            logger.info("[PositionMonitorWorker] Enqueued close position job", {
+              positionId,
+              reason,
+              userId,
+            });
+          } catch (err) {
+            logger.error(
+              { err },
+              "[PositionMonitorWorker] Failed to enqueue close position job"
+            );
+          }
+        } else {
+          logger.debug(
+            { positionId },
+            "[PositionMonitorWorker] Close position skipped: missing userAddress"
           );
         }
       }

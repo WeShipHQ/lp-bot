@@ -98,6 +98,10 @@ export interface CreatePositionCommand {
     rangeInterval: number;
   };
 
+  // Risk management parameters
+  slPercentage?: number;
+  tpPercentage?: number;
+
   rebalanceSession?: RebalanceSessionMetadata;
 }
 
@@ -267,6 +271,10 @@ export class CreatePositionUseCase {
         positionAddress: adapterPositionAddress,
         priceRange: command.priceRange,
         rebalanceSession: command.rebalanceSession,
+
+        // Risk management parameters
+        slPercentage: command.slPercentage,
+        tpPercentage: command.tpPercentage,
       };
 
       const pendingMetadata = {
