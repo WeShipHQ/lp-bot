@@ -3,10 +3,11 @@ import Redis from 'ioredis';
 import { logger } from '@/utils/logger';
 import { CONFIG } from '@/config';
 import { WorkerRegistry } from './worker-registry';
-import { JOB_NOTIFICATION, JOB_POSITION_MONITOR, JOB_REBALANCE, JOB_TX_CONFIRM, KnownJobNames, KnownJobDataMap } from './job-definitions';
+import { JOB_NOTIFICATION, JOB_POSITION_MONITOR, JOB_REBALANCE, JOB_SWAP_EXECUTION, JOB_TX_CONFIRM, KnownJobNames, KnownJobDataMap } from './job-definitions';
 import { PositionMonitorWorker } from './workers/position-monitor.worker';
 import { RebalanceWorker } from './workers/rebalance.worker';
 import { NotificationWorker } from './workers/notification.worker';
+import { SwapExecutionWorker } from './workers/swap-execution.worker';
 import { TransactionConfirmWorker } from './workers/transaction-confirm.worker';
 import { TelegramClient } from '@/infrastructure/messaging/telegram-client';
 import { NotificationService } from '@/infrastructure/messaging/notification.service';
@@ -80,11 +81,13 @@ export class JobQueueService {
       this.registry.register(JOB_POSITION_MONITOR, new PositionMonitorWorker(getPositionUseCase, notificationService, this));
       this.registry.register(JOB_REBALANCE, new RebalanceWorker(rebalanceUseCase, notificationService));
       if (telegramClient) this.registry.register(JOB_NOTIFICATION, new NotificationWorker(notificationService));
+      this.registry.register(JOB_SWAP_EXECUTION, new SwapExecutionWorker());
       this.registry.register(JOB_TX_CONFIRM, new TransactionConfirmWorker(solana, positionRepo));
 
       // Setup queues and workers
       this.createQueueAndWorker(JOB_POSITION_MONITOR, this.qOpts, { concurrency: 5 });
       this.createQueueAndWorker(JOB_REBALANCE, this.qOpts, { concurrency: 2 });
+      this.createQueueAndWorker(JOB_SWAP_EXECUTION, this.qOpts, { concurrency: 3 });
       this.createQueueAndWorker(JOB_TX_CONFIRM, this.qOpts, { concurrency: 20 });
       if (telegramClient) this.createQueueAndWorker(JOB_NOTIFICATION, this.qOpts, { concurrency: 10 });
 

@@ -39,6 +39,24 @@ export interface NotificationJobData {
   };
 }
 
+// Swap execution job: executes SOL→Token swaps for position creation
+export const JOB_SWAP_EXECUTION = "swap-execution" as const;
+export interface SwapExecutionJobData {
+  userId: string;
+  walletId: string;
+  walletAddress: string;
+  // Swap details
+  inputMint: string; // Should be SOL_MINT
+  outputMint: string;
+  inputAmount: string; // in lamports
+  expectedOutputAmount?: string;
+  // Position creation context
+  positionCreationId: string; // Links swaps to position creation
+  swapIndex: "first" | "second"; // Which swap in the pair
+  dex: DexType;
+  poolAddress: string;
+}
+
 // Transaction confirmation job: polls/queries chain for a tx signature confirmation and updates persistence
 export const JOB_TX_CONFIRM = "transaction-confirm" as const;
 export interface TransactionConfirmJobData {
@@ -49,7 +67,8 @@ export interface TransactionConfirmJobData {
     | "ADD_LIQUIDITY"
     | "REMOVE_LIQUIDITY"
     | "CLAIM_FEES"
-    | "REBALANCE";
+    | "REBALANCE"
+    | "SOL_TO_TOKEN_SWAP";
   userId: string;
   // Optional hints for faster post-confirm updates
   positionId?: string;
@@ -62,11 +81,13 @@ export type KnownJobNames =
   | typeof JOB_POSITION_MONITOR
   | typeof JOB_REBALANCE
   | typeof JOB_NOTIFICATION
+  | typeof JOB_SWAP_EXECUTION
   | typeof JOB_TX_CONFIRM;
 
 export type KnownJobDataMap = {
   [JOB_POSITION_MONITOR]: PositionMonitorJobData;
   [JOB_REBALANCE]: RebalanceJobData;
   [JOB_NOTIFICATION]: NotificationJobData;
+  [JOB_SWAP_EXECUTION]: SwapExecutionJobData;
   [JOB_TX_CONFIRM]: TransactionConfirmJobData;
 };

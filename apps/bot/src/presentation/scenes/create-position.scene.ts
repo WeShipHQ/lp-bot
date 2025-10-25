@@ -1077,6 +1077,18 @@ createPositionScene.command("cancel", async (ctx) => {
   return ctx.scene.leave();
 });
 
+// Handle confirmation action
+createPositionScene.action(/confirm:yes/, async (ctx) => {
+  await ctx.answerCbQuery();
+  
+  // This is handled by the wizard step function
+  // The actual confirmation logic is in Step 8 (Execution step)
+  ctx.wizard.next();
+  if (typeof ctx.wizard.step === "function") {
+    ctx.wizard.step(ctx, () => {});
+  }
+});
+
 // utils
 // Balanced distribution logic moved to CalculateBalancedDistributionUseCase
 

@@ -12,7 +12,10 @@ import { IDexAdapter } from "@/types/dex-adapter.interface";
 import { logger } from "@/utils/logger";
 import { db, pendingTransactions } from "@/db";
 import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
-import { JOB_TX_CONFIRM } from "@/infrastructure/jobs/job-definitions";
+import {
+  JOB_TX_CONFIRM,
+  JOB_SWAP_EXECUTION,
+} from "@/infrastructure/jobs/job-definitions";
 import {
   getCacheService,
   ICacheService,
@@ -24,15 +27,12 @@ import { Token } from "@/types/token.types";
 import { uiToRawAmount } from "@/utils/number-utils";
 import { container } from "@/infrastructure/di/container";
 import { SanctumGatewayOptions } from "@/services/sanctum-gateway.service";
+import { SOL_MINT, OPEN_POSITION_FEE } from "@/config/constants";
 
 export interface DexRegistryLike {
   get(dexType: DexType): IDexAdapter;
 }
 
-/**
- * PositionCreationContext: Complete metadata for position creation
- * This is stored in pendingTransactions and used by the worker to create DB records
- */
 export interface PositionCreationContext {
   // User context
   userId: string;
@@ -161,11 +161,10 @@ export class CreatePositionUseCase {
 
       const adapter = this.dexRegistry.get(command.dex);
 
-      // Get user settings for defaults
-      const userSettings =
-        await this.settingsIntegration.getPositionCreationSettings(
-          command.userId
-        );
+      // Handle SOL auto-convert: Execute swaps first
+      if (command.depositMethod === "sol_auto_convert" && command.solAmount) {
+        return await this.handleSolAutoConvert(command);
+      }
 
       const adapterParams: CreatePositionParams = {
         poolAddress: command.poolAddress,
@@ -370,6 +369,132 @@ export class CreatePositionUseCase {
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  /**
+   * Handle SOL auto-convert flow:
+   * 1. Execute SOL→TokenA swap
+   * 2. Execute SOL→TokenB swap
+   * 3. Store swap metadata for tracking
+   * 4. Return waiting state to user
+   */
+  private async handleSolAutoConvert(
+    command: CreatePositionCommand
+  ): Promise<CreatePositionUCResult> {
+    try {
+      const positionCreationId = `pos-create-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      logger.info("[CreatePosition] Starting SOL auto-convert flow", {
+        userId: command.userId,
+        positionCreationId,
+        solAmount: command.solAmount,
+        tokenA: command.tokenA.address,
+        tokenB: command.tokenB.address,
+      });
+
+      // Calculate SOL amounts for each swap (50/50 split after fees)
+      const feeAmount = (command.solAmount || 0) * (OPEN_POSITION_FEE / 100);
+      const netAmount = (command.solAmount || 0) - feeAmount;
+      const halfAmount = netAmount / 2;
+      const halfAmountLamports = Math.floor(halfAmount * 1e9);
+
+      // Store position creation context for later position creation after swaps complete
+      const swapContext = {
+        command: {
+          userId: command.userId,
+          dex: command.dex,
+          poolAddress: command.poolAddress,
+          strategy: command.strategy,
+          tokenAAmount: command.tokenAAmount,
+          tokenBAmount: command.tokenBAmount,
+        },
+        positionContext: {
+          userId: command.userId,
+          walletAddress: command.walletAddress,
+          walletId: command.walletId,
+          dex: command.dex,
+          poolAddress: command.poolAddress,
+          tokenA: command.tokenA,
+          tokenB: command.tokenB,
+          strategy: command.strategy ?? "spot",
+          depositMethod: "sol_auto_convert",
+          solAmount: command.solAmount,
+          tokenAAmount: command.tokenAAmount,
+          tokenBAmount: command.tokenBAmount,
+          autoRebalance: command.autoRebalance ?? false,
+          slippage: command.slippage,
+          priceRange: command.priceRange,
+          rebalanceSession: command.rebalanceSession,
+        } as PositionCreationContext,
+        positionCreationId,
+      };
+
+      // Store the pending position creation context
+      await db.insert(pendingTransactions).values({
+        signature: positionCreationId, // Use ID as signature for tracking
+        operationType: "CREATE_POSITION",
+        userId: command.userId,
+        status: "PENDING",
+        metadata: swapContext,
+        retryCount: 0,
+        maxRetries: 3,
+      });
+
+      // Enqueue both swap jobs
+      const jobQueue = new JobQueueService({ producerOnly: true });
+
+      // First swap: SOL → TokenA
+      await jobQueue.enqueue(JOB_SWAP_EXECUTION, {
+        userId: command.userId,
+        walletId: command.walletId,
+        walletAddress: command.walletAddress,
+        inputMint: SOL_MINT,
+        outputMint: command.tokenA.address,
+        inputAmount: halfAmountLamports.toString(),
+        expectedOutputAmount: command.tokenAAmount,
+        positionCreationId,
+        swapIndex: "first",
+        dex: command.dex,
+        poolAddress: command.poolAddress,
+      });
+
+      // Second swap: SOL → TokenB
+      await jobQueue.enqueue(JOB_SWAP_EXECUTION, {
+        userId: command.userId,
+        walletId: command.walletId,
+        walletAddress: command.walletAddress,
+        inputMint: SOL_MINT,
+        outputMint: command.tokenB.address,
+        inputAmount: halfAmountLamports.toString(),
+        expectedOutputAmount: command.tokenBAmount,
+        positionCreationId,
+        swapIndex: "second",
+        dex: command.dex,
+        poolAddress: command.poolAddress,
+      });
+
+      logger.info("[CreatePosition] Swap jobs enqueued", {
+        positionCreationId,
+        firstSwap: `${halfAmountLamports} SOL → ${command.tokenA.address}`,
+        secondSwap: `${halfAmountLamports} SOL → ${command.tokenB.address}`,
+      });
+
+      return {
+        success: true,
+        signature: positionCreationId, // Return position creation ID as tracking signature
+        positionAddress: undefined, // Will be set after swaps complete
+      };
+    } catch (error) {
+      logger.error("[CreatePosition] SOL auto-convert failed", {
+        error,
+        command,
+      });
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "SOL auto-convert failed",
       };
     }
   }
