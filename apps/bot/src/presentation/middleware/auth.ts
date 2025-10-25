@@ -14,7 +14,7 @@ export function authMiddleware(
     }
 
     const telegramUserId = ctx.from.id.toString();
-    const username = ctx.from.username ?? undefined;
+    const username = ctx.from.username ?? `Panda_${telegramUserId}`;
 
     try {
       const connectWalletUseCase = container.get(ConnectWalletUseCase);

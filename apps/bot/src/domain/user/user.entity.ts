@@ -14,6 +14,7 @@ export interface UserPreferences {
 
 export interface CreateUserData {
   telegramId: string;
+  privyUserId: string;
   walletId: string;
   walletAddress: string;
   username?: string;
@@ -24,6 +25,7 @@ export class User {
   private constructor(
     public readonly id: string,
     public readonly telegramId: string,
+    public readonly privyUserId: string,
     public readonly walletId: string,
     public readonly walletAddress: string,
     private username: string | null,
@@ -53,6 +55,7 @@ export class User {
     return new User(
       crypto.randomUUID(),
       data.telegramId,
+      data.privyUserId,
       data.walletId,
       data.walletAddress,
       data.username ?? null,
@@ -65,6 +68,7 @@ export class User {
   static reconstitute(data: {
     id: string;
     telegramId: string;
+    privyUserId: string;
     walletId: string;
     walletAddress: string;
     username?: string | null;
@@ -75,6 +79,7 @@ export class User {
     return new User(
       data.id,
       data.telegramId,
+      data.privyUserId,
       data.walletId,
       data.walletAddress,
       data.username ?? null,

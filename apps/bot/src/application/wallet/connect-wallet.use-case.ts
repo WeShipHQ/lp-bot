@@ -10,22 +10,14 @@ export interface ConnectWalletResult {
   privyUserId: string;
 }
 
-/**
- * Connects/creates a Privy wallet for a Telegram user and syncs to DB
- */
 export class ConnectWalletUseCase {
   constructor(private readonly userRepository: IUserRepository) {}
 
-  /**
-   * Authenticate with Privy (privyToken is reserved for future validation),
-   * get or create a wallet, and upsert user in database
-   */
   async execute(
     telegramId: string,
     _privyToken?: string,
     username?: string
   ): Promise<ConnectWalletResult> {
-    // Find existing Privy user linked by telegram
     let privyUser = await privy.getUserByTelegramUserId(telegramId);
 
     const trimmedUsername = username?.trim();
@@ -45,7 +37,9 @@ export class ConnectWalletUseCase {
     };
 
     let walletId =
-      typeof metadata.walletId === "string" ? (metadata.walletId as string) : "";
+      typeof metadata.walletId === "string"
+        ? (metadata.walletId as string)
+        : "";
     let walletAddress =
       typeof metadata.walletAddress === "string"
         ? (metadata.walletAddress as string)
@@ -85,12 +79,12 @@ export class ConnectWalletUseCase {
       throw new Error("Failed to provision Privy wallet for user");
     }
 
-    // Upsert user in DB
     const existing = await this.userRepository.findByTelegramId(telegramId);
 
     if (!existing) {
       const user = User.create({
         telegramId,
+        privyUserId: privyUser.id,
         username: trimmedUsername,
         walletAddress,
         walletId,
@@ -115,6 +109,7 @@ export class ConnectWalletUseCase {
       domainUser = User.reconstitute({
         id: existing.id,
         telegramId: existing.telegramId,
+        privyUserId: existing.privyUserId,
         walletId,
         walletAddress,
         username: existing.getUsername(),

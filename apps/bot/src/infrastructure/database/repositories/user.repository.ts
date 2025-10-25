@@ -123,6 +123,7 @@ export class UserRepository implements IUserRepository {
     return User.reconstitute({
       id: row.id,
       telegramId: row.telegramId,
+      privyUserId: row.privyUserId,
       walletId: row.walletId,
       walletAddress: row.walletAddress,
       username: row.username ?? undefined,
@@ -141,6 +142,7 @@ export class UserRepository implements IUserRepository {
     return {
       id: user.id,
       telegramId: user.telegramId,
+      privyUserId: user.privyUserId,
       walletId: user.walletId,
       walletAddress: user.walletAddress,
       username: user.getUsername() ?? undefined,
