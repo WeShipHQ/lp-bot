@@ -5,9 +5,9 @@ import type { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 import {
   JOB_NOTIFICATION,
   NotificationJobData,
-  NotificationMessagePayload,
   NotificationType,
 } from "@/infrastructure/jobs/job-definitions";
+import { MessageGateway, MessageBody } from "@/domain/message";
 
 export interface Notification {
   type: NotificationType;
@@ -20,6 +20,7 @@ export class NotificationService {
   constructor(
     private readonly telegramClient: ITelegramClient,
     private readonly userRepository: IUserRepository,
+    private readonly messageGateway: MessageGateway,
     private readonly jobQueue?: JobQueueService
   ) {}
 
@@ -34,35 +35,42 @@ export class NotificationService {
     if (notification.messages && notification.messages.length > 0) {
       for (const message of notification.messages) {
         if (message.type === "photo" && message.media) {
-          // Send photo with optional caption
-          const photoOptions: SendPhotoOptions = {};
-          
-          if (message.parseMode) {
-            photoOptions.parse_mode = message.parseMode;
-          }
-          
-          if (message.disableLinkPreview) {
-            photoOptions.link_preview_options = { is_disabled: true };
-          }
-          
-          if (message.text) {
-            photoOptions.caption = message.text;
-          }
-
-          await this.telegramClient.sendPhoto(chatId, message.media.source, photoOptions);
+          // Send photo using message gateway with proper format
+          await this.messageGateway.send({
+            context: {
+              chatId,
+              replyToMessageId: undefined,
+              threadId: undefined,
+            },
+            payload: {
+              key: `notification-${Date.now()}`,
+              body: {
+                kind: "photo",
+                data: message.media.source,
+                caption: message.text,
+                parseMode: message.parseMode,
+                disableLinkPreview: message.disableLinkPreview,
+              },
+            },
+          });
         } else {
-          // Send text message
-          const options: SendOptions = {};
-
-          if (message.parseMode) {
-            options.parse_mode = message.parseMode;
-          }
-
-          if (message.disableLinkPreview) {
-            options.link_preview_options = { is_disabled: true };
-          }
-
-          await this.telegramClient.sendMessage(chatId, message.text || "", options);
+          // Send text message using message gateway
+          await this.messageGateway.send({
+            context: {
+              chatId,
+              replyToMessageId: undefined,
+              threadId: undefined,
+            },
+            payload: {
+              key: `notification-${Date.now()}`,
+              body: {
+                kind: "text",
+                text: message.text || "",
+                parseMode: message.parseMode,
+                disableLinkPreview: message.disableLinkPreview,
+              },
+            },
+          });
         }
       }
       return;
