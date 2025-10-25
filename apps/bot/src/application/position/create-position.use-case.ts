@@ -7,6 +7,7 @@ import {
   CreatePositionParams,
   CreatePositionResult as CreatePositionResultType,
 } from "@/types/core.types";
+import { RebalanceSessionMetadata } from "@/types/rebalance.types";
 import { IDexAdapter } from "@/types/dex-adapter.interface";
 import { logger } from "@/utils/logger";
 import { db, pendingTransactions, User } from "@/db";
@@ -69,6 +70,9 @@ export interface PositionCreationContext {
 
   // Position address from adapter (if available before confirmation)
   positionAddress?: string;
+
+  // Optional rebalance metadata when creation is part of a rebalance flow
+  rebalanceSession?: RebalanceSessionMetadata;
 }
 
 export interface CreatePositionCommand {
@@ -98,6 +102,8 @@ export interface CreatePositionCommand {
     max: number;
     rangeInterval: number;
   };
+
+  rebalanceSession?: RebalanceSessionMetadata;
 }
 
 export interface CreatePositionResult {
@@ -239,6 +245,7 @@ export class CreatePositionUseCase {
 
         positionAddress: adapterPositionAddress,
         priceRange: command.priceRange,
+        rebalanceSession: command.rebalanceSession,
       };
 
       const pendingMetadata = {
@@ -251,6 +258,7 @@ export class CreatePositionUseCase {
           tokenBAmount: command.tokenBAmount,
         },
         positionContext,
+        rebalanceSession: command.rebalanceSession,
       };
 
       try {
