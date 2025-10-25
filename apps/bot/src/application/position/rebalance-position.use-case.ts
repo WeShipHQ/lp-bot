@@ -31,10 +31,24 @@ export interface RebalancePositionResult {
   error?: string;
 }
 
+import { SettingsIntegrationService } from "@/services/settings-integration.service";
+import { IPositionRepository } from "@/domain/position/position.repository";
+import { DexRegistryLike } from "@/services/dex-registry.service";
+import { logger } from "@/utils/logger";
+
+export interface RebalancePositionCommand {
+  userId: string;
+  positionId: string;
+  newStrategy?: string;
+  slippage?: number;
+  forceRebalance?: boolean;
+}
+
 export class RebalancePositionUseCase {
   constructor(
     private readonly positionRepository: IPositionRepository,
-    private readonly dexRegistry: DexRegistryLike
+    private readonly dexRegistry: DexRegistryLike,
+    private readonly settingsIntegration: SettingsIntegrationService
   ) {}
 
   async execute(

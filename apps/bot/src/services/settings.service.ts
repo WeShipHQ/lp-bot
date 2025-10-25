@@ -1,16 +1,120 @@
-// export class SettingsService {
-//   static async setVaultAddress(userId: string, address: string) {
-//     // TODO
-//     return true;
-//   }
+import { container } from "@/infrastructure/di/container";
+import { GetUserByTelegramIdUseCase } from "@/application/user/get-user-by-telegram-id.use-case";
+import { UpdateUserUseCase } from "@/application/user/update-user.use-case";
+import { UserRebalanceScheduleService } from "./user-rebalance-schedule.service";
+import { logger } from "@/utils/logger";
 
-//   static async changeGasFee(userId: string, fee: string) {
-//     // TODO
-//     return true;
-//   }
+export interface UserSettingsData {
+  autoRebalanceEnabled: boolean;
+  rebalanceSchedule: string;
+  rebalanceThreshold: string;
+  defaultBinRange: number;
+  stopLossPercentage: number | null;
+  takeProfitPercentage: number | null;
+  autoConvertToSol: boolean;
+  slippagePercentage: string;
+}
 
-//   static async editSchedule(userId: string, schedule: string) {
-//     // TODO
-//     return true;
-//   }
-// }
+export class SettingsService {
+  async getUserSettings(telegramId: string): Promise<UserSettingsData> {
+    const userGetter = container.get(GetUserByTelegramIdUseCase);
+    const user = await userGetter.execute(telegramId);
+    
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    return {
+      autoRebalanceEnabled: user.isAutoRebalanceEnabled(),
+      rebalanceSchedule: user.getRebalanceSchedule(),
+      rebalanceThreshold: user.getRebalanceThreshold().toString(),
+      defaultBinRange: user.getDefaultBinRange(),
+      stopLossPercentage: user.getStopLossPercentage(),
+      takeProfitPercentage: user.getTakeProfitPercentage(),
+      autoConvertToSol: user.getAutoConvertToSol(),
+      slippagePercentage: user.getSlippagePercentage(),
+    };
+  }
+
+  async updateRebalanceSchedule(telegramId: string, schedule: string): Promise<void> {
+    const updater = container.get(UpdateUserUseCase);
+    await updater.setRebalancingSchedule(telegramId, schedule);
+    
+    // Update scheduled jobs
+    const scheduleService = container.get(UserRebalanceScheduleService);
+    await scheduleService.updateUserRebalanceSchedule(telegramId);
+    
+    logger.info(`Updated rebalance schedule to ${schedule} for user ${telegramId}`);
+  }
+
+  async updateAutoRebalance(telegramId: string, enabled: boolean): Promise<void> {
+    const updater = container.get(UpdateUserUseCase);
+    await updater.toggleAutoRebalance(telegramId);
+    
+    // Update scheduled jobs
+    const scheduleService = container.get(UserRebalanceScheduleService);
+    if (enabled) {
+      await scheduleService.updateUserRebalanceSchedule(telegramId);
+    } else {
+      await scheduleService.removeUserRebalanceJobs(telegramId);
+    }
+    
+    logger.info(`Updated auto rebalance to ${enabled} for user ${telegramId}`);
+  }
+
+  async shouldAutoRebalance(position: any, userSettings: UserSettingsData): Promise<boolean> {
+    // Check if auto rebalance is enabled
+    if (!userSettings.autoRebalanceEnabled) {
+      return false;
+    }
+
+    // Check if rebalance schedule is not disabled
+    if (userSettings.rebalanceSchedule === 'disabled') {
+      return false;
+    }
+
+    // Add more logic here based on position health, thresholds, etc.
+    // This would integrate with position monitoring logic
+    return true; // Placeholder - implement actual logic
+  }
+
+  async getSlippageForUser(telegramId: string): Promise<number> {
+    const settings = await this.getUserSettings(telegramId);
+    return parseFloat(settings.slippagePercentage);
+  }
+
+  async shouldStopLoss(position: any, userSettings: UserSettingsData): Promise<boolean> {
+    if (!userSettings.stopLossPercentage) {
+      return false;
+    }
+
+    // Add logic to check if position has hit stop loss threshold
+    // This would integrate with position monitoring logic
+    return false; // Placeholder - implement actual logic
+  }
+
+  async shouldTakeProfit(position: any, userSettings: UserSettingsData): Promise<boolean> {
+    if (!userSettings.takeProfitPercentage) {
+      return false;
+    }
+
+    // Add logic to check if position has hit take profit threshold
+    // This would integrate with position monitoring logic
+    return false; // Placeholder - implement actual logic
+  }
+
+  async shouldAutoConvertToSol(telegramId: string): Promise<boolean> {
+    const settings = await this.getUserSettings(telegramId);
+    return settings.autoConvertToSol;
+  }
+
+  async getDefaultBinRange(telegramId: string): Promise<number> {
+    const settings = await this.getUserSettings(telegramId);
+    return settings.defaultBinRange;
+  }
+
+  async getRebalanceThreshold(telegramId: string): Promise<number> {
+    const settings = await this.getUserSettings(telegramId);
+    return parseFloat(settings.rebalanceThreshold);
+  }
+}

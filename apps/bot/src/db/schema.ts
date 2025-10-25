@@ -91,18 +91,43 @@ export const users = pgTable("users", {
   privyUserId: text("privy_user_id"),
   username: text("username"),
   walletAddress: text("wallet_address").notNull().unique(),
+  
+  // Rebalancing settings
   autoRebalanceEnabled: boolean("auto_rebalance_enabled")
     .notNull()
     .default(true),
   rebalanceThreshold: decimal("rebalance_threshold", { precision: 5, scale: 2 })
     .notNull()
-    .default("5.00"),
+    .default("20.00"),
   rebalanceStrategy: rebalanceStrategyEnum("rebalance_strategy")
     .notNull()
     .default("STANDARD"),
+  rebalanceSchedule: text("rebalance_schedule")
+    .notNull()
+    .default("15m"), // 5m, 15m, 1h, 3h, disabled
+  
+  // Position configuration
+  defaultBinRange: integer("default_bin_range")
+    .notNull()
+    .default(10), // 5, 10, 20, or custom 5-100
   balancedPositionBinRange: integer("balanced_position_bin_range")
     .notNull()
     .default(10),
+  
+  // Risk management settings
+  stopLossPercentage: decimal("stop_loss_percentage", { precision: 5, scale: 2 })
+    .default("25.00"), // 10, 25, 50, or custom x%, or null for disabled
+  takeProfitPercentage: decimal("take_profit_percentage", { precision: 5, scale: 2 })
+    .default("25.00"), // 10, 25, 50, or custom x%, or null for disabled
+  
+  // Trading settings
+  autoConvertToSol: boolean("auto_convert_to_sol")
+    .notNull()
+    .default(true), // auto convert to SOL when close position or claim fees
+  slippagePercentage: decimal("slippage_percentage", { precision: 5, scale: 2 })
+    .notNull()
+    .default("3.00"), // proper values for slippage
+  
   ...timestamps,
 });
 

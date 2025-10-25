@@ -18,6 +18,24 @@ export function settingsCommand(
       ST_PATTERNS.vaultSet.source,
       ST_PATTERNS.gasSet.source,
       ST_PATTERNS.scheduleSet.source,
+      
+      // New settings patterns
+      ST_PATTERNS.toggleRebalance.source,
+      ST_PATTERNS.rebalanceThreshold.source,
+      ST_PATTERNS.binRange.source,
+      ST_PATTERNS.stopLoss.source,
+      ST_PATTERNS.takeProfit.source,
+      ST_PATTERNS.toggleAutoConvert.source,
+      ST_PATTERNS.slippage.source,
+      
+      // Menu navigation patterns
+      "schedule_menu",
+      "threshold_menu", 
+      "bin_menu",
+      "sl_menu",
+      "tp_menu",
+      "slippage_menu",
+      "back_to_main",
     ].join("|")
   );
 

@@ -82,10 +82,24 @@ export class UserRepository implements IUserRepository {
         username: persistenceData.username,
         walletId: persistenceData.walletId,
         walletAddress: persistenceData.walletAddress,
+        
+        // Rebalancing settings
         autoRebalanceEnabled: persistenceData.autoRebalanceEnabled,
         rebalanceThreshold: persistenceData.rebalanceThreshold,
         rebalanceStrategy: persistenceData.rebalanceStrategy,
+        rebalanceSchedule: persistenceData.rebalanceSchedule,
+        
+        // Position configuration
+        defaultBinRange: persistenceData.defaultBinRange,
         balancedPositionBinRange: persistenceData.balancedPositionBinRange,
+        
+        // Risk management
+        stopLossPercentage: persistenceData.stopLossPercentage,
+        takeProfitPercentage: persistenceData.takeProfitPercentage,
+        
+        // Trading settings
+        autoConvertToSol: persistenceData.autoConvertToSol,
+        slippagePercentage: persistenceData.slippagePercentage,
       })
       .where(eq(schema.users.id, user.id));
   }
@@ -109,12 +123,25 @@ export class UserRepository implements IUserRepository {
   private toDomain(row: typeof schema.users.$inferSelect): User {
     // Build user preferences from database columns
     const preferences: UserPreferences = {
+      // Rebalancing settings
       autoRebalanceEnabled: row.autoRebalanceEnabled,
       rebalanceThreshold: Number(row.rebalanceThreshold),
       rebalanceStrategy: row.rebalanceStrategy as RebalanceStrategy,
+      rebalanceSchedule: row.rebalanceSchedule || '15m',
+      
+      // Position configuration
+      defaultBinRange: row.defaultBinRange || 10,
       balancedPositionBinRange: row.balancedPositionBinRange,
-      // Note: The schema doesn't have these fields, so we use defaults
-      // In production, you might want to add these columns to the database
+      
+      // Risk management
+      stopLossPercentage: row.stopLossPercentage ? Number(row.stopLossPercentage) : null,
+      takeProfitPercentage: row.takeProfitPercentage ? Number(row.takeProfitPercentage) : null,
+      
+      // Trading settings
+      autoConvertToSol: row.autoConvertToSol ?? true,
+      slippagePercentage: row.slippagePercentage?.toString() || '3.00',
+      
+      // Notification settings (defaults for backwards compatibility)
       notificationsEnabled: true,
       priceAlertsEnabled: true,
       rebalanceAlertsEnabled: true,
@@ -146,10 +173,25 @@ export class UserRepository implements IUserRepository {
       walletId: user.walletId,
       walletAddress: user.walletAddress,
       username: user.getUsername() ?? undefined,
+      
+      // Rebalancing settings
       autoRebalanceEnabled: preferences.autoRebalanceEnabled,
       rebalanceThreshold: preferences.rebalanceThreshold.toString(),
       rebalanceStrategy: preferences.rebalanceStrategy,
+      rebalanceSchedule: preferences.rebalanceSchedule,
+      
+      // Position configuration
+      defaultBinRange: preferences.defaultBinRange,
       balancedPositionBinRange: preferences.balancedPositionBinRange,
+      
+      // Risk management
+      stopLossPercentage: preferences.stopLossPercentage,
+      takeProfitPercentage: preferences.takeProfitPercentage,
+      
+      // Trading settings
+      autoConvertToSol: preferences.autoConvertToSol,
+      slippagePercentage: preferences.slippagePercentage,
+      
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.getUpdatedAt().toISOString(),
     };

@@ -37,6 +37,9 @@ import { GetPoolTokenBalancesUseCase } from "@/application/wallet/get-pool-token
 import { ConnectWalletUseCase } from "@/application/wallet/connect-wallet.use-case";
 import { SendTokensUseCase } from "@/application/wallet/send-tokens.use-case";
 import { GetTopTokenBalancesUseCase } from "@/application/wallet/get-top-token-balances.use-case";
+import { SettingsService } from "@/services/settings.service";
+import { SettingsIntegrationService } from "@/services/settings-integration.service";
+import { UserRebalanceScheduleService } from "@/services/user-rebalance-schedule.service";
 
 import { GetTrendingPoolsUseCase } from "@/application/trending/get-trending-pools.use-case";
 import { SearchPoolsUseCase } from "@/application/trending/search-pools.use-case";
@@ -49,6 +52,7 @@ import { RouteFreeTextMessageUseCase } from "@/application/message/route-free-te
 import { MessageService } from "@/application/message/message.service";
 import { GetUserSettingsUseCase } from "@/application/settings/get-user-settings.use-case";
 import { UpdateUserSettingUseCase } from "@/application/settings/update-user-setting.use-case";
+import { GetUserByTelegramIdUseCase } from "@/application/user/get-user-by-telegram-id.use-case";
 
 // Adapters
 import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
@@ -304,6 +308,20 @@ function registerBase() {
   container
     .bind(UpdateUserSettingUseCase)
     .toDynamicValue(() => new UpdateUserSettingUseCase());
+  container
+    .bind(GetUserByTelegramIdUseCase)
+    .toDynamicValue(() => new GetUserByTelegramIdUseCase());
+  
+  // Additional services
+  container
+    .bind(SettingsService)
+    .toDynamicValue(() => new SettingsService());
+  container
+    .bind(SettingsIntegrationService)
+    .toDynamicValue(() => new SettingsIntegrationService()));
+  container
+    .bind(UserRebalanceScheduleService)
+    .toDynamicValue(() => new UserRebalanceScheduleService()));
 }
 
 let runtimeRegistered = false;
