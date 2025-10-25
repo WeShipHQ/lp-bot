@@ -23,6 +23,23 @@
         "tsconfig.json",
         "tsup.config.ts"
       ],
+      "outputs": [
+        "dist/**",
+        ".vercel/**",
+        "build/**",
+        ".next/**",
+        "!.next/cache/**"
+      ],
+      "cache": true
+    },
+    "build:bot": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        ".env*",
+        "src/**/*",
+        "tsconfig.json",
+        "tsup.config.ts"
+      ],
       "dependsOn": ["^build"],
       "outputs": [
         "dist/**",

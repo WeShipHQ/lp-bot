@@ -36,6 +36,9 @@ type WizardState = {
     | "percentage"
     | "custom_amount"
     | "price_change_selection"
+    | "risk_management"
+    | "stop_loss"
+    | "take_profit"
     | "confirm";
   poolAddress?: string;
   dex?: DexType;
@@ -50,6 +53,8 @@ type WizardState = {
   autoRebalancing?: "yes" | "no";
   awaitingCustomAmount?: boolean;
   awaitingCustomPriceChange?: boolean;
+  awaitingCustomStopLoss?: boolean;
+  awaitingCustomTakeProfit?: boolean;
   enteredCustomAmount?: boolean;
   messageId?: number;
   tokenAAmountCalculated?: number;
@@ -59,6 +64,8 @@ type WizardState = {
     max: number | string;
     rangeInterval: number;
   };
+  stopLossPercentage?: number;
+  takeProfitPercentage?: number;
 };
 
 const SKIP_VALIDATE = false;
@@ -428,7 +435,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     const message = generateProgressMessage(
       poolData!,
       state,
-      "Customize Settings (7/8)",
+      "Customize Settings (7/9)",
       "✅ Auto-Rebalance: Monitor and adjust every 1hr if out of range (fees apply)."
     );
 
@@ -447,7 +454,126 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     });
   },
 
-  // Step 7: Summary & Final Confirmation
+  // Step 7: Risk Management (Stop Loss & Take Profit)
+  async (ctx, next) => {
+    const state = ctx.scene.state as WizardState;
+    const { depositMethod, poolData } = state;
+
+    // For now, only show risk management for SOL auto-convert
+    // Can be extended to single-sided in future
+    if (depositMethod !== "sol_auto_convert") {
+      ctx.wizard.next(); // Skip to summary for single-sided
+      if (typeof ctx.wizard.step === "function") {
+        return ctx.wizard.step(ctx, next);
+      }
+    }
+
+    const message = generateProgressMessage(
+      poolData!,
+      state,
+      "Risk Management (8/9)",
+      "🛡️ *Stop Loss*: Automatically close position if price drops X% below entry.\n\n" +
+        "🎯 *Take Profit*: Automatically close position if price rises X% above entry.\n\n" +
+        "⚠️ *Optional*: Leave disabled to manage position manually."
+    );
+
+    (ctx.scene.state as WizardState).step = "risk_management";
+
+    return ctx.editMessageText(message, {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.callback("Set Stop Loss", "risk:stop_loss"),
+          Markup.button.callback("Set Take Profit", "risk:take_profit"),
+        ],
+        [
+          Markup.button.callback("⏭️ Skip Risk Management", "risk:skip"),
+        ],
+        [
+          Markup.button.callback("🔙 Back", "back"),
+          Markup.button.callback("❌ Cancel", "cancel"),
+        ],
+      ]),
+    });
+  },
+
+  // Step 7a: Stop Loss Configuration
+  async (ctx, next) => {
+    const state = ctx.scene.state as WizardState;
+    const { poolData } = state;
+
+    const message = generateProgressMessage(
+      poolData!,
+      state,
+      "Set Stop Loss (8/9)",
+      "Set the percentage drop from entry price that will trigger automatic position closure.\n\n" +
+        "Examples:\n" +
+        "• *5%*: Conservative protection\n" +
+        "• *10%*: Moderate protection\n" +
+        "• *20%*: Aggressive protection\n\n" +
+        "⚠️ Position will close automatically if triggered."
+    );
+
+    (ctx.scene.state as WizardState).step = "stop_loss";
+
+    return ctx.editMessageText(message, {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.callback("5%", "stop_loss:5"),
+          Markup.button.callback("10%", "stop_loss:10"),
+          Markup.button.callback("20%", "stop_loss:20"),
+        ],
+        [
+          Markup.button.callback("✏️ Custom %", "stop_loss:custom"),
+        ],
+        [
+          Markup.button.callback("🔙 Back", "back"),
+          Markup.button.callback("❌ Cancel", "cancel"),
+        ],
+      ]),
+    });
+  },
+
+  // Step 7b: Take Profit Configuration
+  async (ctx, next) => {
+    const state = ctx.scene.state as WizardState;
+    const { poolData } = state;
+
+    const message = generateProgressMessage(
+      poolData!,
+      state,
+      "Set Take Profit (8/9)",
+      "Set the percentage gain from entry price that will trigger automatic position closure.\n\n" +
+        "Examples:\n" +
+        "• *10%*: Conservative target\n" +
+        "• *25%*: Moderate target\n" +
+        "• *50%*: Aggressive target\n\n" +
+        "💰 Position will close automatically if triggered."
+    );
+
+    (ctx.scene.state as WizardState).step = "take_profit";
+
+    return ctx.editMessageText(message, {
+      parse_mode: "Markdown",
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.callback("10%", "take_profit:10"),
+          Markup.button.callback("25%", "take_profit:25"),
+          Markup.button.callback("50%", "take_profit:50"),
+        ],
+        [
+          Markup.button.callback("✏️ Custom %", "take_profit:custom"),
+        ],
+        [
+          Markup.button.callback("🔙 Back", "back"),
+          Markup.button.callback("❌ Cancel", "cancel"),
+        ],
+      ]),
+    });
+  },
+
+  // Step 8: Summary & Final Confirmation
   async (ctx) => {
     const user = ctx.user;
     const { strategy, amount, percentage, poolData, dex } = ctx.scene
@@ -489,7 +615,8 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
           rangeMax: prices.toPrice,
           tokenAAmount,
           tokenBAmount,
-        }
+        },
+        "Confirm Position (9/9)"
       );
 
       return ctx.editMessageText(summary, {
@@ -620,6 +747,10 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
               rangeInterval: state.priceRange.rangeInterval,
             }
           : undefined,
+
+        // Risk management parameters
+        slPercentage: state.stopLossPercentage,
+        tpPercentage: state.takeProfitPercentage,
       });
 
       if (!result.success || !result.signature) {
@@ -981,6 +1112,122 @@ createPositionScene.action(/rebalance:(yes|no)/, async (ctx, next) => {
   }
 });
 
+// Risk Management action handlers
+createPositionScene.action(/risk:(stop_loss|take_profit|skip)/, async (ctx, next) => {
+  await ctx.answerCbQuery();
+  const state = ctx.scene.state as WizardState;
+  const action = ctx.match[1];
+
+  if (action === "skip") {
+    await ctx.editMessageText(
+      "⏭️ *Risk Management Skipped*\n\nYou can manage position manually. Stop Loss and Take Profit are disabled.",
+      { parse_mode: "Markdown" }
+    );
+    ctx.wizard.next();
+    if (typeof ctx.wizard.step === "function") {
+      return ctx.wizard.step(ctx, next);
+    }
+    return;
+  }
+
+  const actionName = action === "stop_loss" ? "Stop Loss" : "Take Profit";
+  const message = generateProgressMessage(
+    state.poolData!,
+    state,
+    `${actionName} Selected`,
+    `You chose to set ${actionName}. Continue with configuration.`
+  );
+
+  await ctx.editMessageText(message, { parse_mode: "Markdown" });
+
+  ctx.wizard.next();
+  if (typeof ctx.wizard.step === "function") {
+    return ctx.wizard.step(ctx, next);
+  }
+});
+
+createPositionScene.action(/stop_loss:(\d+)/, async (ctx, next) => {
+  await ctx.answerCbQuery();
+  const percentage = parseInt(ctx.match[1]);
+  if (isNaN(percentage) || percentage <= 0 || percentage > 100) {
+    return ctx.reply("❌ Invalid stop loss percentage. Try again.");
+  }
+
+  const state = ctx.scene.state as WizardState;
+  state.stopLossPercentage = percentage;
+
+  const message = generateProgressMessage(
+    state.poolData!,
+    state,
+    "Stop Loss Configured",
+    `🛡️ Stop loss set to ${percentage}%. Position will auto-close if price drops this amount.`
+  );
+
+  await ctx.editMessageText(message, { parse_mode: "Markdown" });
+
+  ctx.wizard.next();
+  if (typeof ctx.wizard.step === "function") {
+    return ctx.wizard.step(ctx, next);
+  }
+});
+
+createPositionScene.action("stop_loss:custom", async (ctx) => {
+  await ctx.answerCbQuery();
+
+  await ctx.replyWithMarkdown(
+    "*Enter your custom stop loss percentage* (e.g., 15):",
+    {
+      parse_mode: "Markdown",
+      reply_markup: {
+        force_reply: true,
+      },
+    }
+  );
+
+  (ctx.scene.state as WizardState).awaitingCustomStopLoss = true;
+});
+
+createPositionScene.action(/take_profit:(\d+)/, async (ctx, next) => {
+  await ctx.answerCbQuery();
+  const percentage = parseInt(ctx.match[1]);
+  if (isNaN(percentage) || percentage <= 0 || percentage > 1000) {
+    return ctx.reply("❌ Invalid take profit percentage. Try again.");
+  }
+
+  const state = ctx.scene.state as WizardState;
+  state.takeProfitPercentage = percentage;
+
+  const message = generateProgressMessage(
+    state.poolData!,
+    state,
+    "Take Profit Configured",
+    `🎯 Take profit set to ${percentage}%. Position will auto-close if price rises this amount.`
+  );
+
+  await ctx.editMessageText(message, { parse_mode: "Markdown" });
+
+  ctx.wizard.next();
+  if (typeof ctx.wizard.step === "function") {
+    return ctx.wizard.step(ctx, next);
+  }
+});
+
+createPositionScene.action("take_profit:custom", async (ctx) => {
+  await ctx.answerCbQuery();
+
+  await ctx.replyWithMarkdown(
+    "*Enter your custom take profit percentage* (e.g., 50):",
+    {
+      parse_mode: "Markdown",
+      reply_markup: {
+        force_reply: true,
+      },
+    }
+  );
+
+  (ctx.scene.state as WizardState).awaitingCustomTakeProfit = true;
+});
+
 createPositionScene.action("confirm:yes", async (ctx, next) => {
   await ctx.answerCbQuery();
   ctx.wizard.next();
@@ -1050,6 +1297,60 @@ createPositionScene.on(message("text"), async (ctx, next) => {
 
     (ctx.scene.state as WizardState).priceChangePercentage = percentage;
     (ctx.scene.state as WizardState).awaitingCustomPriceChange = false;
+
+    if (ctx.message.reply_to_message?.message_id) {
+      await ctx.deleteMessage(ctx.message.reply_to_message?.message_id);
+    }
+
+    if (state.messageId) {
+      await ctx.deleteMessage(state.messageId);
+    }
+
+    await ctx.deleteMessage();
+
+    ctx.wizard.next();
+    if (typeof ctx.wizard.step === "function") {
+      return ctx.wizard.step(ctx, next);
+    }
+  }
+
+  if (state.awaitingCustomStopLoss) {
+    const percentage = parseFloat(ctx.message.text);
+    if (isNaN(percentage) || percentage <= 0 || percentage > 100) {
+      return ctx.reply(
+        "❌ Invalid stop loss percentage. Enter a number between 1 and 100 (e.g., 15)."
+      );
+    }
+
+    (ctx.scene.state as WizardState).stopLossPercentage = percentage;
+    (ctx.scene.state as WizardState).awaitingCustomStopLoss = false;
+
+    if (ctx.message.reply_to_message?.message_id) {
+      await ctx.deleteMessage(ctx.message.reply_to_message?.message_id);
+    }
+
+    if (state.messageId) {
+      await ctx.deleteMessage(state.messageId);
+    }
+
+    await ctx.deleteMessage();
+
+    ctx.wizard.next();
+    if (typeof ctx.wizard.step === "function") {
+      return ctx.wizard.step(ctx, next);
+    }
+  }
+
+  if (state.awaitingCustomTakeProfit) {
+    const percentage = parseFloat(ctx.message.text);
+    if (isNaN(percentage) || percentage <= 0 || percentage > 1000) {
+      return ctx.reply(
+        "❌ Invalid take profit percentage. Enter a number between 1 and 1000 (e.g., 50)."
+      );
+    }
+
+    (ctx.scene.state as WizardState).takeProfitPercentage = percentage;
+    (ctx.scene.state as WizardState).awaitingCustomTakeProfit = false;
 
     if (ctx.message.reply_to_message?.message_id) {
       await ctx.deleteMessage(ctx.message.reply_to_message?.message_id);

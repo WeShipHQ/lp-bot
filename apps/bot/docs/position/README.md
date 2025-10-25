@@ -12,6 +12,7 @@ This directory contains comprehensive documentation for all position-related flo
    - Complete wizard-based position creation
    - From pool selection through transaction confirmation
    - Covers SOL auto-convert and single-sided strategies
+   - **NEW**: Includes Stop Loss & Take Profit configuration
 
 2. **[Position Claim Fees Flow](./position-claim-fees-flow.md)**
    - Manual fee claiming with automatic SOL conversion
@@ -22,6 +23,7 @@ This directory contains comprehensive documentation for all position-related flo
    - Manual and automatic position rebalancing
    - Coordinated close and recreate transactions
    - Session management and segment tracking
+   - **NEW**: Enhanced to handle Stop Loss & Take Profit triggers
 
 4. **[Position Close Flow](./position-close-flow.md)**
    - Complete position liquidation
@@ -32,6 +34,18 @@ This directory contains comprehensive documentation for all position-related flo
    - High-level view of all position states
    - State transitions and data relationships
    - System architecture and integration patterns
+
+6. **[Stop Loss & Take Profit Implementation](./position-stop-loss-take-profit-implementation.md)**
+   - **NEW**: Technical implementation details for SL/TP features
+   - Database schema, monitoring logic, and integration points
+
+7. **[Stop Loss & Take Profit Flow](./position-stop-loss-take-profit-flow.md)**
+   - **NEW**: Detailed flow diagrams and sequence charts
+   - Component interactions and data flow visualization
+
+8. **[Stop Loss & Take Profit User Guide](./position-stop-loss-take-profit-user-guide.md)**
+   - **NEW**: Comprehensive user guide for SL/TP features
+   - Setup instructions, examples, and best practices
 
 ### Supporting Documents
 
@@ -96,6 +110,9 @@ Data Layer (Database, Cache)
 | Close Position | ✅ Implemented | position-close-flow.md |
 | Transaction Confirmation | ✅ Implemented | tx-confirm-flow.md |
 | Monitoring | ✅ Implemented | position-lifecycle-overview.md |
+| Stop Loss & Take Profit | ✅ **NEWLY IMPLEMENTED** | position-stop-loss-take-profit-implementation.md |
+| SL/TP Flow | ✅ **NEWLY DOCUMENTED** | position-stop-loss-take-profit-flow.md |
+| SL/TP User Guide | ✅ **NEWLY CREATED** | position-stop-loss-take-profit-user-guide.md |
 
 ### Common Patterns
 

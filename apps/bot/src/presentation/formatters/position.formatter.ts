@@ -12,6 +12,8 @@ export interface CreatePositionStateView {
   percentage?: number;
   priceChangePercentage?: number;
   autoRebalancing?: "yes" | "no";
+  stopLossPercentage?: number;
+  takeProfitPercentage?: number;
 }
 
 export function generateProgressMessage(
@@ -102,13 +104,14 @@ export function generatePositionSummary(
     rangeMax: string;
     tokenAAmount: number;
     tokenBAmount: number;
-  }
+  },
+  stepTitle?: string
 ): string {
   const { strategy, depositMethod, selectedToken, amount, percentage, autoRebalancing } = state;
 
   const verifiedEmoji = poolData?.isVerified ? "✅" : "⚠️";
 
-  let message = `*Position Summary*\n\n` + `Pool: *${poolData?.name}* ${verifiedEmoji}\n`;
+  let message = `*${stepTitle || 'Position Summary'}*\n\n` + `Pool: *${poolData?.name}* ${verifiedEmoji}\n`;
 
   message += `Strategy: *${(strategy || "").toUpperCase()}*\n`;
 
@@ -130,6 +133,17 @@ export function generatePositionSummary(
 
   if (depositMethod === "sol_auto_convert") {
     message += `Auto-rebalancing: *${autoRebalancing === "yes" ? "Enabled" : "Disabled"}*\n\n`;
+  }
+
+  // Display Stop Loss and Take Profit if configured
+  if (stopLossPercentage) {
+    message += `🛡️ Stop Loss: *${stopLossPercentage}%*\n`;
+  }
+  if (takeProfitPercentage) {
+    message += `🎯 Take Profit: *${takeProfitPercentage}%*\n`;
+  }
+  if (stopLossPercentage || takeProfitPercentage) {
+    message += `\n`;
   }
 
   message += "*Create position by confirming on the button below*";
