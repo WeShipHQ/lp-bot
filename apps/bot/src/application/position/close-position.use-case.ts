@@ -53,6 +53,7 @@ import {
 import { CachePatterns, CacheKeys } from "@/infrastructure/cache/cache-keys";
 import { WalletService } from "@/services/wallet.service";
 import { Token } from "@/types/token.types";
+import { SanctumGatewayOptions } from "@/services/sanctum-gateway.service";
 
 export class ClosePositionUseCase {
   private readonly cache: ICacheService;
@@ -122,14 +123,41 @@ export class ClosePositionUseCase {
 
       let signature = "" as string | undefined;
       try {
-        signature = await WalletService.signAndSendTransactionWithJito(
-          command.user,
-          txResult.instructions,
-          [],
-          []
-        );
+        if (await WalletService.isGatewayAvailable()) {
+          console.log("[CreatePosition] Using Sanctum Gateway for transaction");
+
+          signature = await WalletService.signAndSendTransactionWithGateway(
+            command.user.walletId,
+            command.user.walletAddress,
+            txResult.instructions,
+            [],
+            [],
+            {},
+            {
+              cuPriceRange: "high",
+              jitoTipRange: "medium",
+              expireInSlots: 150,
+              deliveryMethodType: undefined,
+              skipSimulation: false,
+              skipPriorityFee: false,
+            } as SanctumGatewayOptions
+          );
+        } else {
+          console.log(
+            "[CreatePosition] Gateway not available, using standard Jito method"
+          );
+
+          // Fallback to existing method
+          signature = await WalletService.signAndSendTransactionWithJito(
+            command.user,
+            txResult.instructions,
+            [],
+            []
+          );
+        }
       } catch (err) {
-        logger.error("Transaction submission failed", { err });
+        console.log("Transaction submission failed", { err, command });
+        logger.error("Transaction submission failed", { err, command });
       }
 
       if (!signature) {
