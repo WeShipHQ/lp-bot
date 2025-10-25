@@ -11,7 +11,7 @@ import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
 import { db, pendingTransactions, users, User } from "@/db";
 import { eq } from "drizzle-orm";
 import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
-import { PositionCreationContext } from "@/application/position/create-position.use-case";
+// import { PositionCreationContext } from "@/application/position/create-position.use-case";
 import { positionPersistenceService } from "@/services/position-persistence.service";
 import { rebalancePersistenceService } from "@/services/rebalance-persistence.service";
 import { closePositionPersistenceService } from "@/services/close-position-persistence.service";

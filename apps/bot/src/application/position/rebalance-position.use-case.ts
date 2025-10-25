@@ -16,7 +16,7 @@ import { Token } from "@/types/token.types";
 export interface RebalancePositionCommand {
   userId: string;
   positionId: string;
-  userAddress: string; // wallet public key (base58)
+  userAddress: string;
   walletId?: string;
   // Optional execution params
   newStrategy?: string;
@@ -107,9 +107,9 @@ export class RebalancePositionUseCase {
       try {
         signature = await WalletService.signAndSendTransactionWithJito(
           userRecord,
-          closeTx.instructions,
-          closeTx.signers ?? [],
-          closeTx.lookupTables ?? []
+          closeTx.instructions
+          // closeTx.signers ?? [],
+          // closeTx.lookupTables ?? []
         );
       } catch (error) {
         logger.error("Failed to submit close position transaction", { error });
@@ -221,7 +221,9 @@ export class RebalancePositionUseCase {
         );
         const cache = getCacheService();
         await cache.invalidate(CachePatterns.portfolioPattern(command.userId));
-        await cache.invalidate(CachePatterns.positionPattern(command.positionId));
+        await cache.invalidate(
+          CachePatterns.positionPattern(command.positionId)
+        );
       } catch (error) {
         logger.debug("Failed to invalidate cache after rebalance submission", {
           error,
