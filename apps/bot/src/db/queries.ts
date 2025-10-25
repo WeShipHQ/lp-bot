@@ -58,7 +58,7 @@ export async function findUserById(id: string): Promise<User | undefined> {
 export async function updateUser(id: string, updates: Partial<NewUser>) {
   const [user] = await db
     .update(users)
-    .set({ ...updates, updatedAt: new Date() })
+    .set({ ...updates, updatedAt: new Date().toISOString() })
     .where(eq(users.id, id))
     .returning();
   return user;
@@ -122,7 +122,7 @@ export async function findActiveWalletByUserId(
 export async function updateWallet(id: string, updates: Partial<NewWallet>) {
   const [wallet] = await db
     .update(wallets)
-    .set({ ...updates, updatedAt: new Date() })
+    .set(updates)
     .where(eq(wallets.id, id))
     .returning();
   return wallet;
@@ -175,7 +175,7 @@ export async function updatePosition(
 ) {
   const [position] = await db
     .update(positions)
-    .set({ ...updates, updatedAt: new Date() })
+    .set(updates)
     .where(eq(positions.id, id))
     .returning();
   return position;
@@ -187,11 +187,16 @@ export async function deletePosition(id: string) {
 
 // position segments -----
 export async function createPositionSegment(newSegment: NewPositionSegment) {
-  const [segment] = await db.insert(positionSegments).values(newSegment).returning();
+  const [segment] = await db
+    .insert(positionSegments)
+    .values(newSegment)
+    .returning();
   return segment;
 }
 
-export async function getPositionSegments(positionId: string): Promise<PositionSegment[]> {
+export async function getPositionSegments(
+  positionId: string
+): Promise<PositionSegment[]> {
   try {
     return await db.query.positionSegments.findMany({
       where: eq(positionSegments.positionId, positionId),
@@ -202,7 +207,9 @@ export async function getPositionSegments(positionId: string): Promise<PositionS
   }
 }
 
-export async function getCurrentSegment(positionId: string): Promise<PositionSegment | undefined> {
+export async function getCurrentSegment(
+  positionId: string
+): Promise<PositionSegment | undefined> {
   try {
     return await db.query.positionSegments.findFirst({
       where: eq(positionSegments.positionId, positionId),
@@ -234,11 +241,13 @@ export async function createClaimHistory(newClaimHistory: NewClaimHistory) {
   return createdClaimHistory;
 }
 
-export async function getClaimHistory(positionId: string): Promise<ClaimHistory[]> {
+export async function getClaimHistory(
+  positionId: string
+): Promise<ClaimHistory[]> {
   try {
     return await db.query.claimHistory.findMany({
       where: eq(claimHistory.positionId, positionId),
-      orderBy: desc(claimHistory.timestamp),
+      orderBy: desc(claimHistory.updatedAt),
     });
   } catch (error) {
     throw error;
@@ -255,7 +264,9 @@ export async function getTotalClaimedFees(positionId: string) {
 }
 
 // rebalance events -----
-export async function createRebalanceEvent(newRebalanceEvent: NewRebalanceEvent) {
+export async function createRebalanceEvent(
+  newRebalanceEvent: NewRebalanceEvent
+) {
   const [rebalanceEvent] = await db
     .insert(rebalanceEvents)
     .values(newRebalanceEvent)
@@ -269,7 +280,7 @@ export async function findRebalanceEventsByPositionId(
   try {
     return await db.query.rebalanceEvents.findMany({
       where: eq(rebalanceEvents.positionId, positionId),
-      orderBy: desc(rebalanceEvents.timestamp),
+      orderBy: desc(rebalanceEvents.updatedAt),
     });
   } catch (error) {
     throw error;
@@ -303,11 +314,13 @@ export async function createPositionSnapshot(
   return createdPositionSnapshot;
 }
 
-export async function getPositionSnapshots(positionId: string): Promise<PositionSnapshot[]> {
+export async function getPositionSnapshots(
+  positionId: string
+): Promise<PositionSnapshot[]> {
   try {
     return await db.query.positionSnapshots.findMany({
       where: eq(positionSnapshots.positionId, positionId),
-      orderBy: desc(positionSnapshots.snapshotTimestamp),
+      orderBy: desc(positionSnapshots.updatedAt),
     });
   } catch (error) {
     throw error;

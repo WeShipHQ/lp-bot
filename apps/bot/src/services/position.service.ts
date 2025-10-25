@@ -659,7 +659,6 @@ export class PositionService {
         await tx.insert(claimHistory).values({
           positionId: position.id,
           segmentId: currentSegment.id,
-          timestamp: new Date(),
           claimType: "manual",
           claimedTokenXAmount: claimedTokenXAmount.toString(),
           claimedTokenYAmount: claimedTokenYAmount.toString(),
@@ -696,7 +695,6 @@ export class PositionService {
           .set({
             totalFeesClaimedUSD: newTotalFeesClaimedUSD.toString(),
             totalRealizedPnlUSD: newTotalRealizedPnlUSD.toString(),
-            updatedAt: new Date(),
           })
           .where(eq(positions.id, position.id));
 
@@ -812,7 +810,6 @@ export class PositionService {
       // Update position status to REBALANCING
       await updatePosition(dbPosition.id, {
         status: "REBALANCING",
-        updatedAt: new Date(),
       });
 
       try {
@@ -929,7 +926,6 @@ export class PositionService {
         // Step 5: Create rebalance event
         const rebalanceEvent = await createRebalanceEvent({
           positionId: dbPosition.id,
-          timestamp: new Date(),
           triggerReason: "Manual rebalance",
           oldPositionAddress: positionAddress,
           newPositionAddress: createResult.positionId || "pending",
@@ -959,7 +955,6 @@ export class PositionService {
           currentSegmentInitialUSD: newSegmentInitialUSD.toString(),
           currentSegmentStartAt: new Date(),
           totalRealizedPnlUSD: newTotalRealizedPnl.toString(),
-          updatedAt: new Date(),
         });
 
         logger.info(
@@ -975,7 +970,6 @@ export class PositionService {
         // Rollback position status
         await updatePosition(dbPosition.id, {
           status: "ACTIVE",
-          updatedAt: new Date(),
         });
         throw error;
       }
@@ -1264,7 +1258,6 @@ export class PositionService {
             finalTokenXPriceUSD: priceXUSD.toString(),
             finalTokenYPriceUSD: priceYUSD.toString(),
             closureSignature: signature,
-            updatedAt: new Date(),
           })
           .where(eq(positions.id, position.id));
         console.log("txxxx222");
@@ -1273,7 +1266,6 @@ export class PositionService {
           await tx.insert(claimHistory).values({
             positionId: position.id,
             segmentId: currentSegment.id,
-            timestamp: new Date(),
             claimType: "closure",
             claimedTokenXAmount: claimedTokenXAmount.toString(),
             claimedTokenYAmount: claimedTokenYAmount.toString(),

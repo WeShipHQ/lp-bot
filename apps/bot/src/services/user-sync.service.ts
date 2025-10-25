@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 export interface UserData {
-  id: string; 
+  id: string;
   telegramId: string;
   username?: string;
   walletAddress?: string;
@@ -12,7 +12,6 @@ export interface UserData {
 }
 
 export class UserSyncService {
-
   async syncUser(userData: UserData): Promise<boolean> {
     try {
       const existingUser = await db.query.users.findFirst({
@@ -25,7 +24,6 @@ export class UserSyncService {
           .set({
             username: userData.username || existingUser.username,
             walletAddress: userData.walletAddress || existingUser.walletAddress,
-            updatedAt: new Date(),
           })
           .where(eq(users.id, existingUser.id));
 
@@ -55,7 +53,7 @@ export class UserSyncService {
       return false;
     }
   }
- 
+
   async getUserByTelegramId(telegramId: string) {
     try {
       return await db.query.users.findFirst({
@@ -67,7 +65,6 @@ export class UserSyncService {
     }
   }
 
- 
   async getUserById(id: string) {
     try {
       return await db.query.users.findFirst({
@@ -79,7 +76,6 @@ export class UserSyncService {
     }
   }
 
-  
   async getUserByTelegramIdOrCreate(userData: UserData) {
     try {
       let user = await this.getUserByTelegramId(userData.telegramId);

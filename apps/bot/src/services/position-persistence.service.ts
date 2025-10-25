@@ -79,8 +79,6 @@ export class PositionPersistenceService {
           slPercentage: context.slPercentage?.toString(),
           tpPercentage: context.tpPercentage?.toString(),
           creationSignature: signature,
-          createdAt: new Date(),
-          updatedAt: new Date(),
         })
         .returning();
 
@@ -99,7 +97,6 @@ export class PositionPersistenceService {
           startTimestamp: new Date(),
           initialValueUSD: initialValueUSD.toFixed(2),
           startPositionAddress: positionAddress,
-          createdAt: new Date(),
         })
         .returning();
 
@@ -113,7 +110,6 @@ export class PositionPersistenceService {
         positionId: position.id,
         segmentId: segment.id,
         snapshotType: "creation",
-        snapshotTimestamp: new Date(),
         currentValueUSD: initialValueUSD.toFixed(6),
         tokenXAmount: tokenAAmount,
         tokenYAmount: tokenBAmount,
@@ -127,7 +123,6 @@ export class PositionPersistenceService {
         tokenXPriceUSD: tokenAPriceUsd.toString(),
         tokenYPriceUSD: tokenBPriceUsd.toString(),
         solPriceUSD: solPriceUsd.toString(),
-        createdAt: new Date(),
       });
 
       logger.info("Position snapshot created", {

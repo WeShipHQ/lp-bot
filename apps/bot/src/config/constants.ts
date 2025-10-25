@@ -17,8 +17,9 @@ export const SLIPPAGE_LARGE = 0.05; // 5%
 
 export const BUFFER_AMOUNT = 0.01;
 
-// decimals
+export const MINIMAL_SOL_AMOUNT_IN_LAMPORTS = 10_000_000;
 
+// decimals
 
 // export const TOTAL_RANGE_INTERVAL = 20;
 

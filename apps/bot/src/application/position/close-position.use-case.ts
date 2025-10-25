@@ -40,7 +40,7 @@ export interface PositionClosureContext {
   tokenB: Token;
 }
 
-export interface ClosePositionResult {
+export interface ClosePositionUCResult {
   success: boolean;
   signature?: string;
   error?: string;
@@ -65,7 +65,7 @@ export class ClosePositionUseCase {
     this.cache = cacheService ?? getCacheService();
   }
 
-  async execute(command: ClosePositionCommand): Promise<ClosePositionResult> {
+  async execute(command: ClosePositionCommand): Promise<ClosePositionUCResult> {
     try {
       if (!command?.userId) {
         return { success: false, error: "User ID is required" };
@@ -146,21 +146,8 @@ export class ClosePositionUseCase {
           positionAddress: position.positionAddress,
           poolAddress: position.poolAddress,
           closureReason: command.closureReason ?? "user_close",
-          tokenA: position.tokenX,
-          tokenB: position.tokenY,
-        };
-            symbol: position.tokenX.symbol,
-            decimals: position.tokenX.decimals,
-            name: position.tokenX.symbol,
-            logoUri: position.tokenX.logoURI,
-          },
-          tokenB: {
-            address: position.tokenY.address,
-            symbol: position.tokenY.symbol,
-            decimals: position.tokenY.decimals,
-            name: position.tokenY.symbol,
-            logoUri: position.tokenY.logoURI,
-          },
+          tokenA: position.tokenX as Token,
+          tokenB: position.tokenY as Token,
         };
 
         const metadata = {
@@ -183,8 +170,6 @@ export class ClosePositionUseCase {
           metadata,
           retryCount: 0,
           maxRetries: 3,
-          createdAt: new Date(),
-          updatedAt: new Date(),
         });
       } catch (err) {
         logger.error("Failed to insert pending transaction (close)", { err });

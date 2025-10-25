@@ -171,8 +171,6 @@ export class RebalancePositionUseCase {
           },
           retryCount: 0,
           maxRetries: 3,
-          createdAt: new Date(),
-          updatedAt: new Date(),
         });
       } catch (error) {
         logger.error("Failed to record pending rebalance transaction", {

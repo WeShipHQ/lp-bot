@@ -213,8 +213,6 @@ export class ClaimFeesUseCase {
           metadata,
           retryCount: 0,
           maxRetries: 3,
-          createdAt: new Date(),
-          updatedAt: new Date(),
         });
       } catch (error) {
         logger.error("Failed to insert pending transaction (claim fees)", {

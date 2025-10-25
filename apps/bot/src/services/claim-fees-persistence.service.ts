@@ -74,7 +74,6 @@ export class ClaimFeesPersistenceService {
       await tx.insert(claimHistory).values({
         positionId: context.positionId,
         segmentId,
-        timestamp: new Date(),
         claimType,
         claimedTokenXAmount: claimed.tokenXAmount,
         claimedTokenYAmount: claimed.tokenYAmount,
@@ -85,7 +84,6 @@ export class ClaimFeesPersistenceService {
         solPriceUSD: prices.solUsd.toString(),
         transactionSignature: signature,
         isDuringRebalance: claimType === "rebalance",
-        createdAt: new Date(),
       });
 
       const currentTotalFees = new Decimal(position.totalFeesClaimedUSD ?? "0");
@@ -95,7 +93,6 @@ export class ClaimFeesPersistenceService {
         .update(positions)
         .set({
           totalFeesClaimedUSD: newTotalFees,
-          updatedAt: new Date(),
         })
         .where(eq(positions.id, context.positionId));
 
@@ -147,7 +144,6 @@ export class ClaimFeesPersistenceService {
           positionId: context.positionId,
           segmentId,
           snapshotType: "claim",
-          snapshotTimestamp: new Date(),
           currentValueUSD: currentValueDecimal.toFixed(2),
           tokenXAmount: snapshot.tokenXAmount,
           tokenYAmount: snapshot.tokenYAmount,
@@ -161,7 +157,6 @@ export class ClaimFeesPersistenceService {
           tokenXPriceUSD: prices.tokenXPriceUsd.toString(),
           tokenYPriceUSD: prices.tokenYPriceUsd.toString(),
           solPriceUSD: prices.solUsd.toString(),
-          createdAt: new Date(),
         });
       }
     });

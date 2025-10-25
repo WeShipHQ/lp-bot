@@ -80,7 +80,6 @@ export class UserRepository implements IUserRepository {
         rebalanceThreshold: persistenceData.rebalanceThreshold,
         rebalanceStrategy: persistenceData.rebalanceStrategy,
         balancedPositionBinRange: persistenceData.balancedPositionBinRange,
-        updatedAt: new Date(),
       })
       .where(eq(schema.users.id, user.id));
   }
@@ -122,8 +121,8 @@ export class UserRepository implements IUserRepository {
       walletAddress: row.walletAddress,
       username: row.username ?? undefined,
       preferences,
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
+      createdAt: new Date(row.createdAt),
+      updatedAt: new Date(row.updatedAt),
     });
   }
 
@@ -143,8 +142,8 @@ export class UserRepository implements IUserRepository {
       rebalanceThreshold: preferences.rebalanceThreshold.toString(),
       rebalanceStrategy: preferences.rebalanceStrategy,
       balancedPositionBinRange: preferences.balancedPositionBinRange,
-      createdAt: user.createdAt,
-      updatedAt: user.getUpdatedAt(),
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.getUpdatedAt().toISOString(),
     };
   }
 }

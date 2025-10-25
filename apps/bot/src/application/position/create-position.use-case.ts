@@ -5,7 +5,7 @@ import {
 import {
   DexType,
   CreatePositionParams,
-  CreatePositionResult as CreatePositionResultType,
+  CreatePositionResult,
 } from "@/types/core.types";
 import { RebalanceSessionMetadata } from "@/types/rebalance.types";
 import { IDexAdapter } from "@/types/dex-adapter.interface";
@@ -26,7 +26,7 @@ export interface PositionCreationContext {
   // User context
   userId: string;
   walletAddress: string;
-  walletId?: string;
+  walletId: string;
 
   // Pool context
   dex: DexType;
@@ -57,13 +57,6 @@ export interface PositionCreationContext {
   slPercentage?: number;
   tpPercentage?: number;
 
-  // Price quotes (for USD conversion)
-  // quotes?: {
-  //   solUsd?: number;
-  //   tokenAUsd?: number;
-  //   tokenBUsd?: number;
-  // };
-
   // Transaction metadata
   expectedFeesLamports?: number;
   slippage?: number;
@@ -77,7 +70,9 @@ export interface PositionCreationContext {
 
 export interface CreatePositionCommand {
   // Domain/user context
-  user: User;
+  userId: string;
+  walletId: string;
+  walletAddress: string;
   dex: DexType;
 
   // On-chain context
@@ -106,17 +101,13 @@ export interface CreatePositionCommand {
   rebalanceSession?: RebalanceSessionMetadata;
 }
 
-// Remove this interface as it's now defined in core.types.ts
+export interface CreatePositionUCResult {
+  success: boolean;
+  signature?: string;
+  positionAddress?: string;
+  error?: string;
+}
 
-/**
- * Responsible for orchestrating the creation of a position on a specific DEX.
- * Flow:
- *  - Validate input
- *  - Build create-position transaction via DEX adapter
- *  - Submit transaction (adapter may already submit depending on implementation)
- *  - Record pending transaction in DB for async processing
- *  - Enqueue background job to process and persist full position details
- */
 export interface ITransactionService {
   submit(
     built: any,
@@ -131,7 +122,7 @@ import {
 import { CachePatterns } from "@/infrastructure/cache/cache-keys";
 import { WalletService } from "@/services/wallet.service";
 import { Token } from "@/types/token.types";
-import Decimal from "decimal.js";
+import { uiToRawAmount } from "@/utils/number-utils";
 
 export class CreatePositionUseCase {
   private readonly cache: ICacheService;
@@ -142,14 +133,19 @@ export class CreatePositionUseCase {
     this.cache = cacheService ?? getCacheService();
   }
 
-  async execute(command: CreatePositionCommand): Promise<CreatePositionResult> {
+  async execute(
+    command: CreatePositionCommand
+  ): Promise<CreatePositionUCResult> {
     try {
-      if (!command?.user) {
-        return { success: false, error: "User is required" };
+      if (!command?.walletId || !command?.walletAddress) {
+        return {
+          success: false,
+          error: "WalletId and WalletAddress are required",
+        };
       }
 
       validatePoolAddress(command.poolAddress);
-      validateWalletAddress(command.user.walletAddress);
+      validateWalletAddress(command.walletAddress);
 
       if (!command.tokenAAmount || parseFloat(command.tokenAAmount) <= 0) {
         return { success: false, error: "tokenAAmount must be greater than 0" };
@@ -162,18 +158,20 @@ export class CreatePositionUseCase {
 
       const adapterParams: CreatePositionParams = {
         poolAddress: command.poolAddress,
-        userAddress: command.user.walletAddress,
-        tokenAAmount: new Decimal(command.tokenAAmount)
-          .mul(Decimal.pow(10, command.tokenA.decimals))
-          .toString(),
-        tokenBAmount: new Decimal(command.tokenBAmount)
-          .mul(Decimal.pow(10, command.tokenB.decimals))
-          .toString(),
+        userAddress: command.walletAddress,
+        tokenAAmount: uiToRawAmount(
+          command.tokenAAmount,
+          command.tokenA.decimals
+        ).toString(),
+        tokenBAmount: uiToRawAmount(
+          command.tokenBAmount,
+          command.tokenB.decimals
+        ).toString(),
         strategy: command.strategy,
         slippage: command.slippage,
       };
 
-      let txResult: CreatePositionResultType;
+      let txResult: CreatePositionResult;
       try {
         txResult = await adapter.createPositionIx(adapterParams);
       } catch (error) {
@@ -197,8 +195,9 @@ export class CreatePositionUseCase {
 
       let signature = "" as string | undefined;
       try {
-        signature = await WalletService.signAndSendTransactionWithJito(
-          command.user,
+        signature = await WalletService.signAndSendTransactionWithJitoV2(
+          command.walletId,
+          command.walletAddress,
           txResult.instructions,
           [txResult.positionKp],
           []
@@ -218,9 +217,9 @@ export class CreatePositionUseCase {
       const adapterPositionAddress = txResult.positionKp.publicKey.toBase58();
 
       const positionContext: PositionCreationContext = {
-        userId: command.user.id,
-        walletId: command.user.walletId,
-        walletAddress: command.user.walletAddress,
+        userId: command.userId,
+        walletId: command.walletId,
+        walletAddress: command.walletAddress,
 
         dex: command.dex,
         poolAddress: command.poolAddress,
@@ -245,7 +244,7 @@ export class CreatePositionUseCase {
 
       const pendingMetadata = {
         command: {
-          userId: command.user.id,
+          userId: command.userId,
           dex: command.dex,
           poolAddress: command.poolAddress,
           strategy: command.strategy,
@@ -260,13 +259,11 @@ export class CreatePositionUseCase {
         await db.insert(pendingTransactions).values({
           signature,
           operationType: "CREATE_POSITION",
-          userId: command.user.id,
+          userId: command.userId,
           status: "PENDING",
           metadata: pendingMetadata,
           retryCount: 0,
           maxRetries: 3,
-          createdAt: new Date(),
-          updatedAt: new Date(),
         });
       } catch (err) {
         logger.error("Failed to insert pending transaction", {
@@ -287,8 +284,9 @@ export class CreatePositionUseCase {
           {
             signature,
             operationType: "CREATE_POSITION",
-            userId: command.user.id,
-            positionAddress: extractedData.positionAddress || adapterPositionAddress,
+            userId: command.userId,
+            positionAddress:
+              positionContext.positionAddress || adapterPositionAddress,
             submittedAt: Date.now(),
           },
           { delay: 500 }
@@ -302,11 +300,11 @@ export class CreatePositionUseCase {
 
       try {
         await this.cache.invalidate(
-          CachePatterns.portfolioPattern(command.user.id)
+          CachePatterns.portfolioPattern(command.userId)
         );
       } catch (cacheError) {
         logger.debug("Failed to invalidate portfolio cache", {
-          userId: command.user.id,
+          userId: command.userId,
           cacheError,
         });
       }
