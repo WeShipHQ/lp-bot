@@ -143,11 +143,12 @@ export class ClosePositionUseCase {
         const closeContext: PositionClosureContext = {
           userId: command.userId,
           positionId: command.positionId,
-          positionAddress,
+          positionAddress: position.positionAddress,
           poolAddress: position.poolAddress,
           closureReason: command.closureReason ?? "user_close",
-          tokenA: {
-            address: position.tokenX.address,
+          tokenA: position.tokenX,
+          tokenB: position.tokenY,
+        };
             symbol: position.tokenX.symbol,
             decimals: position.tokenX.decimals,
             name: position.tokenX.symbol,

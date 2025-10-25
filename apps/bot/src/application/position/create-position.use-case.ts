@@ -106,12 +106,7 @@ export interface CreatePositionCommand {
   rebalanceSession?: RebalanceSessionMetadata;
 }
 
-export interface CreatePositionResult {
-  success: boolean;
-  signature?: string;
-  positionAddress?: string;
-  error?: string;
-}
+// Remove this interface as it's now defined in core.types.ts
 
 /**
  * Responsible for orchestrating the creation of a position on a specific DEX.
@@ -293,8 +288,7 @@ export class CreatePositionUseCase {
             signature,
             operationType: "CREATE_POSITION",
             userId: command.user.id,
-            positionAddress:
-              positionContext?.positionAddress ?? adapterPositionAddress,
+            positionAddress: extractedData.positionAddress || adapterPositionAddress,
             submittedAt: Date.now(),
           },
           { delay: 500 }
