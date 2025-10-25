@@ -74,6 +74,29 @@ export type WeisheepPosterInput = {
   borderRadius?: number;
 };
 
+export type PnlPosterInput = {
+  // Position info
+  tradingPair: string;
+  positionAddress: string;
+  dex: string;
+  
+  // PNL data
+  pnlUsd: number;
+  pnlPercentage: number;
+  finalValueUsd: number;
+  initialValueUsd: number;
+  feesClaimedUsd: number;
+  
+  // Timing
+  durationDays: number;
+  closedAt: Date;
+  
+  // Optional customization
+  backgroundImagePath?: string;
+  logoImagePath?: string;
+  projectName?: string;
+};
+
 async function loadImageFromSafePath(imagePath: string) {
   const absolutePath = await resolveAssetPath(imagePath);
   const fileBuffer = await fs.readFile(absolutePath);
@@ -415,4 +438,296 @@ export async function generateWeisheepPoster(
   }
 
   return drawingCanvas.toBuffer("image/png");
+}
+
+export async function generatePnlPoster(input: PnlPosterInput): Promise<Buffer> {
+  const {
+    tradingPair,
+    positionAddress,
+    dex,
+    pnlUsd,
+    pnlPercentage,
+    finalValueUsd,
+    initialValueUsd,
+    feesClaimedUsd,
+    durationDays,
+    closedAt,
+    backgroundImagePath = pnlUsd >= 0 
+      ? "src/assets/images/template-flex.png" 
+      : "src/assets/images/template-flex-3.png",
+    logoImagePath = "src/assets/images/template-flex.png", // Fallback
+    projectName = "LIQUIDITY BOT",
+  } = input;
+
+  console.log("[WeisheepPoster] Generating PNL poster:", {
+    tradingPair,
+    positionAddress,
+    dex,
+    pnlUsd,
+    pnlPercentage,
+    finalValueUsd,
+    initialValueUsd,
+    feesClaimedUsd,
+    durationDays,
+    backgroundImagePath,
+  });
+
+  const CANVAS_WIDTH = 1200;
+  const CANVAS_HEIGHT = 675;
+  const drawingCanvas = createCanvas(CANVAS_WIDTH, CANVAS_HEIGHT);
+  const drawingContext = drawingCanvas.getContext("2d");
+
+  // Background
+  const backgroundImage = await loadImageFromSafePath(backgroundImagePath);
+  drawingContext.drawImage(backgroundImage, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+  // ---- Text helpers
+  const drawTextBlock = (
+    textContent: string,
+    positionX: number,
+    positionY: number,
+    options: {
+      font: string;
+      color?: string;
+      align?: CanvasTextAlign;
+      baseline?: CanvasTextBaseline;
+      shadow?: boolean;
+      maxWidth?: number;
+    }
+  ) => {
+    drawingContext.save();
+    drawingContext.font = options.font;
+    drawingContext.fillStyle = options.color ?? "#FFFFFF";
+    drawingContext.textAlign = options.align ?? "left";
+    drawingContext.textBaseline = options.baseline ?? "alphabetic";
+    if (options.shadow) {
+      drawingContext.shadowColor = "rgba(0,0,0,0.7)";
+      drawingContext.shadowBlur = 8;
+      drawingContext.shadowOffsetX = 0;
+      drawingContext.shadowOffsetY = 2;
+    }
+    if (options.maxWidth) {
+      drawingContext.fillText(
+        textContent,
+        positionX,
+        positionY,
+        options.maxWidth
+      );
+    } else {
+      drawingContext.fillText(textContent, positionX, positionY);
+    }
+    drawingContext.restore();
+  };
+
+  const getEllipsizedText = (
+    textContent: string,
+    maxWidth: number,
+    fontDeclaration: string
+  ) => {
+    drawingContext.save();
+    drawingContext.font = fontDeclaration;
+    const fullWidth = drawingContext.measureText(textContent).width;
+    if (fullWidth <= maxWidth) {
+      drawingContext.restore();
+      return textContent;
+    }
+    let low = 0;
+    let high = textContent.length;
+    const ellipsisChar = "…";
+    while (low < high) {
+      const mid = Math.floor((low + high) / 2);
+      const sliced = textContent.slice(0, mid) + ellipsisChar;
+      if (drawingContext.measureText(sliced).width <= maxWidth) low = mid + 1;
+      else high = mid;
+    }
+    const result = textContent.slice(0, Math.max(0, low - 1)) + ellipsisChar;
+    drawingContext.restore();
+    return result;
+  };
+
+  /* ============ Colors ============ */
+  const LABEL_TEXT_COLOR = "rgba(255,255,255,0.72)";
+  const VALUE_TEXT_COLOR = "#FFFFFF";
+  const PROFIT_COLOR = "#22C55E";
+  const LOSS_COLOR = "#EF4444";
+
+  // Determine colors based on PNL
+  const pnlColor = pnlUsd >= 0 ? PROFIT_COLOR : LOSS_COLOR;
+  const pnlSign = pnlUsd >= 0 ? "+" : "";
+
+  // Header: Project name
+  drawTextBlock(
+    projectName.toUpperCase(),
+    24,
+    48,
+    {
+      font: "700 22px FredokaBold, Fredoka, Arial",
+      color: VALUE_TEXT_COLOR,
+      align: "left",
+      baseline: "alphabetic",
+      shadow: false,
+    }
+  );
+
+  // BIG PNL TEXT (center-top area)
+  const pnlText = `${pnlSign}${formatNumber(Math.abs(pnlUsd), { maxDecimals: 2 })}`;
+  drawTextBlock(pnlText, CANVAS_WIDTH / 2, 140, {
+    font: "bold 120px FredokaBold, Arial",
+    color: pnlColor,
+    align: "center",
+    baseline: "top",
+    shadow: true,
+  });
+
+  // PNL percentage
+  const pnlPercentageText = `${pnlSign}${formatNumber(Math.abs(pnlPercentage), { maxDecimals: 2 })}%`;
+  drawTextBlock(pnlPercentageText, CANVAS_WIDTH / 2, 280, {
+    font: "bold 48px FredokaBold, Arial",
+    color: pnlColor,
+    align: "center",
+    baseline: "top",
+    shadow: true,
+  });
+
+  // Label–Value box (value below label), left-aligned
+  const drawLabelValueBox = (args: {
+    x: number;
+    y: number;
+    width: number;
+    label: string;
+    value: string;
+    labelFont?: string;
+    valueFont?: string;
+    labelColor?: string;
+    valueColor?: string;
+    labelValueGap?: number;
+  }) => {
+    const {
+      x,
+      y,
+      width,
+      label,
+      value,
+      labelFont = "bold 20px SilkscreenBold, Arial",
+      valueFont = "26px Fredoka, Arial",
+      labelColor = LABEL_TEXT_COLOR,
+      valueColor = VALUE_TEXT_COLOR,
+      labelValueGap = 4,
+    } = args;
+
+    // label
+    drawTextBlock(label, x, y, {
+      font: labelFont,
+      color: labelColor,
+      align: "left",
+      baseline: "top",
+    });
+
+    // value
+    const measuredValueText = getEllipsizedText(value || "-", width, valueFont);
+    const valuePositionY = y + getFontPixelSize(labelFont) + labelValueGap;
+    drawTextBlock(measuredValueText, x, valuePositionY, {
+      font: valueFont,
+      color: valueColor,
+      align: "left",
+      baseline: "top",
+    });
+  };
+
+  // 3-row grid of label–value
+  const CONTENT_LEFT = 48;
+  const CONTENT_RIGHT = CANVAS_WIDTH - 48;
+  const INNER_CONTENT_WIDTH = CONTENT_RIGHT - CONTENT_LEFT;
+
+  // narrow nav
+  const columnGap = -120;
+  const columnWidth = (INNER_CONTENT_WIDTH - columnGap) / 2;
+  const column1X = CONTENT_LEFT;
+  const column2X = CONTENT_LEFT + columnWidth + columnGap;
+
+  const GRID_START_Y = 350;
+  const ROW_GAP = 8;
+  const ROW_HEIGHT = 72;
+  const CELL_TOP_PADDING = 0;
+
+  // Format values
+  const formatCurrency = (value: number) => "$" + formatNumber(value, { maxDecimals: 2 });
+  const formatDate = (date: Date) => date.toLocaleDateString('en-US', { 
+    month: 'short', 
+    day: 'numeric', 
+    year: 'numeric' 
+  });
+
+  // Row 1: PAIR | DEX
+  drawLabelValueBox({
+    x: column1X,
+    y: GRID_START_Y + CELL_TOP_PADDING,
+    width: columnWidth,
+    label: "PAIR",
+    value: tradingPair,
+  });
+  drawLabelValueBox({
+    x: column2X,
+    y: GRID_START_Y + CELL_TOP_PADDING,
+    width: columnWidth,
+    label: "DEX",
+    value: dex.toUpperCase(),
+  });
+
+  // Row 2: INITIAL VALUE | FINAL VALUE
+  const row2Y = GRID_START_Y + ROW_HEIGHT + ROW_GAP;
+  drawLabelValueBox({
+    x: column1X,
+    y: row2Y + CELL_TOP_PADDING,
+    width: columnWidth,
+    label: "INITIAL VALUE",
+    value: formatCurrency(initialValueUsd),
+  });
+  drawLabelValueBox({
+    x: column2X,
+    y: row2Y + CELL_TOP_PADDING,
+    width: columnWidth,
+    label: "FINAL VALUE",
+    value: formatCurrency(finalValueUsd),
+  });
+
+  // Row 3: FEES CLAIMED | DURATION
+  const row3Y = row2Y + ROW_HEIGHT + ROW_GAP;
+  drawLabelValueBox({
+    x: column1X,
+    y: row3Y + CELL_TOP_PADDING,
+    width: columnWidth,
+    label: "FEES CLAIMED",
+    value: formatCurrency(feesClaimedUsd),
+  });
+  drawLabelValueBox({
+    x: column2X,
+    y: row3Y + CELL_TOP_PADDING,
+    width: columnWidth,
+    label: "DURATION",
+    value: `${durationDays} days`,
+  });
+
+  // Position address (bottom row, full width)
+  const row4Y = row3Y + ROW_HEIGHT + ROW_GAP;
+  const truncatedAddress = positionAddress.slice(0, 8) + "..." + positionAddress.slice(-8);
+  drawLabelValueBox({
+    x: CONTENT_LEFT,
+    y: row4Y + CELL_TOP_PADDING,
+    width: INNER_CONTENT_WIDTH,
+    label: "POSITION ADDRESS",
+    value: truncatedAddress,
+  });
+
+  return drawingCanvas.toBuffer("image/png");
+}
+
+// Helper function to format numbers
+function formatNumber(num: number, options: { maxDecimals?: number } = {}): string {
+  const { maxDecimals = 2 } = options;
+  if (!isFinite(num)) return "0";
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: maxDecimals,
+  }).format(num);
 }

@@ -44,6 +44,7 @@ import {
   rawToUiAmount,
   solToLamports,
 } from "@/utils/number-utils";
+import { generatePnlPoster, type PnlPosterInput } from "@/services/weisheep-poster.service";
 
 export class TransactionConfirmWorker
   implements IWorker<TransactionConfirmJobData>
@@ -1370,7 +1371,7 @@ export class TransactionConfirmWorker
       );
 
       const jobQueue = new JobQueueService({ producerOnly: true });
-      const notificationMessages = this.buildClosePositionNotifications(
+      const notificationMessages = await this.buildClosePositionNotifications(
         signature,
         persistenceResult
       );
@@ -1399,10 +1400,10 @@ export class TransactionConfirmWorker
     }
   }
 
-  private buildClosePositionNotifications(
+  private async buildClosePositionNotifications(
     signature: string,
     result: any
-  ): NotificationMessagePayload[] {
+  ): Promise<NotificationMessagePayload[]> {
     const pnlUsd = Number(result.totalPnlUSD);
     const pnlPercentage = Number(result.totalPnlPercentage);
 
@@ -1417,6 +1418,58 @@ export class TransactionConfirmWorker
       `Transaction: [View on Solscan](${solscanUrl})`,
     ].join("\n");
 
+    try {
+      // Generate PNL poster image
+      const position = await this.positionRepository.findById(result.positionId);
+      if (position) {
+        // Calculate duration in days
+        const durationMs = position.closedAt 
+          ? new Date(position.closedAt).getTime() - new Date(position.createdAt).getTime()
+          : Date.now() - new Date(position.createdAt).getTime();
+        const durationDays = Math.floor(durationMs / (1000 * 60 * 60 * 24));
+
+        // Extract token symbols from position data
+        const tokenASymbol = position.tokenX?.symbol || "TokenA";
+        const tokenBSymbol = position.tokenY?.symbol || "TokenB";
+        const tradingPair = `${tokenASymbol}-${tokenBSymbol}`;
+
+        const pnlPosterInput: PnlPosterInput = {
+          tradingPair,
+          positionAddress: result.positionAddress,
+          dex: position.dex || "meteora",
+          pnlUsd,
+          pnlPercentage,
+          finalValueUsd: Number(result.finalValueUSD),
+          initialValueUsd: position.getInitialValue().toNumber(),
+          feesClaimedUsd: position.getClaimedFees().toNumber(),
+          durationDays,
+          closedAt: position.getClosedAt() || new Date(),
+        };
+
+        const imageBuffer = await generatePnlPoster(pnlPosterInput);
+
+        return [
+          {
+            text: primaryMessage,
+            parseMode: "Markdown",
+            disableLinkPreview: true,
+          },
+          {
+            type: "photo",
+            media: {
+              source: imageBuffer,
+              filename: `pnl-${result.positionAddress?.slice(0, 8)}.png`,
+              contentType: "image/png",
+            },
+            disableLinkPreview: true,
+          },
+        ];
+      }
+    } catch (error) {
+      logger.warn({ error, positionId: result.positionId }, "[TxConfirmWorker] Failed to generate PNL poster");
+    }
+
+    // Fallback to text-only notification
     return [
       {
         text: primaryMessage,
