@@ -24,9 +24,15 @@ export const JOB_NOTIFICATION = "notification" as const;
 export type NotificationType = "price" | "rebalance" | "general" | "position";
 
 export interface NotificationMessagePayload {
-  text: string;
+  text?: string;
   parseMode?: "Markdown" | "MarkdownV2" | "HTML";
   disableLinkPreview?: boolean;
+  type?: "text" | "photo";
+  media?: {
+    source: Buffer;
+    filename: string;
+    contentType: string;
+  };
 }
 
 export interface NotificationJobData {

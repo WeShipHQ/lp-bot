@@ -1,5 +1,5 @@
 import { ITelegramClient } from "./telegram-client";
-import type { SendOptions } from "./telegram-client";
+import type { SendOptions, SendPhotoOptions } from "./telegram-client";
 import { IUserRepository } from "@/domain/user/user.repository";
 import type { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 import {
@@ -33,17 +33,37 @@ export class NotificationService {
 
     if (notification.messages && notification.messages.length > 0) {
       for (const message of notification.messages) {
-        const options: SendOptions = {};
+        if (message.type === "photo" && message.media) {
+          // Send photo with optional caption
+          const photoOptions: SendPhotoOptions = {};
+          
+          if (message.parseMode) {
+            photoOptions.parse_mode = message.parseMode;
+          }
+          
+          if (message.disableLinkPreview) {
+            photoOptions.link_preview_options = { is_disabled: true };
+          }
+          
+          if (message.text) {
+            photoOptions.caption = message.text;
+          }
 
-        if (message.parseMode) {
-          options.parse_mode = message.parseMode;
+          await this.telegramClient.sendPhoto(chatId, message.media.source, photoOptions);
+        } else {
+          // Send text message
+          const options: SendOptions = {};
+
+          if (message.parseMode) {
+            options.parse_mode = message.parseMode;
+          }
+
+          if (message.disableLinkPreview) {
+            options.link_preview_options = { is_disabled: true };
+          }
+
+          await this.telegramClient.sendMessage(chatId, message.text || "", options);
         }
-
-        if (message.disableLinkPreview) {
-          options.link_preview_options = { is_disabled: true };
-        }
-
-        await this.telegramClient.sendMessage(chatId, message.text, options);
       }
       return;
     }
