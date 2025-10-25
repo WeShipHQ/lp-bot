@@ -33,8 +33,6 @@ import {
   formatPrice,
 } from "@/presentation/formatters/base.formatter";
 import { claimFeesPersistenceService } from "@/services/claim-fees-persistence.service";
-import { WalletService } from "@/services/wallet.service";
-import { jupiterService } from "@/services/jupiter.service";
 import { SOL_MINT } from "@/config/constants";
 
 type CloseInstructionExtractionResult = {

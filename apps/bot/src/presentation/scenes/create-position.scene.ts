@@ -5,10 +5,7 @@ import { MeteoraCreatePositionStrategy } from "@/types/meteora.types";
 import { message } from "telegraf/filters";
 import { Token } from "@/types/token.types";
 import { getSolscanLink } from "@/utils/link";
-import {
-  CreatePositionUseCase,
-  PositionCreationContext,
-} from "@/application/position/create-position.use-case";
+import { CreatePositionUseCase } from "@/application/position/create-position.use-case";
 import { container } from "@/infrastructure/di/container";
 import { GetPoolDetailsUseCase } from "@/application/trending/get-pool-details.use-case";
 import { GetBalanceUseCase } from "@/application/wallet/get-balance.use-case";

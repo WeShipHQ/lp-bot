@@ -17,6 +17,9 @@ export const SLIPPAGE_LARGE = 0.05; // 5%
 
 export const BUFFER_AMOUNT = 0.01;
 
+// decimals
+
+
 // export const TOTAL_RANGE_INTERVAL = 20;
 
 // // Selected DEX for the bot runtime. Set via env BOT_DEX or DEX (meteora|saros|orca|raydium)

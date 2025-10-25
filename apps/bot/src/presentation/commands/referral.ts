@@ -8,19 +8,22 @@ export function referralCommand(
   _server: FastifyInstance
 ) {
   bot.command("referral", async (ctx: BotContext) => {
-    try {
-      if (!ctx.user) {
-        await ctx.reply(
-          "Authentication failed"
-        );
-        return;
-      }
+    await ctx.reply(
+      "Referral command is not available yet. Please check back later."
+    );
+    // try {
+    //   if (!ctx.user) {
+    //     await ctx.reply(
+    //       "Authentication failed"
+    //     );
+    //     return;
+    //   }
 
-      await showReferralInfo(ctx);
-    } catch (error) {
-      console.error("Error in referral command:", error);
-      await ctx.reply("Something went wrong. Please try again later.");
-    }
+    //   await showReferralInfo(ctx);
+    // } catch (error) {
+    //   console.error("Error in referral command:", error);
+    //   await ctx.reply("Something went wrong. Please try again later.");
+    // }
   });
 
   bot.action("referral", async (ctx: BotContext) => {

@@ -76,7 +76,7 @@ export const snapshotTypeEnum = pgEnum("SnapshotType", [
 ]);
 
 // Tables
-export const users = pgTable("User", {
+export const users = pgTable("User", { 
   id: uuid("id").primaryKey().defaultRandom(),
   telegramId: text("telegramId").notNull().unique(),
   walletId: text("walletId").unique().notNull(),
