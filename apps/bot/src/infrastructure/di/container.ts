@@ -77,6 +77,7 @@ import type { Telegraf } from "telegraf";
 import type { BotContext } from "@/types/bot.types";
 import { getEnabledDexTypes } from "@/config/dex.config";
 import { IDexAdapter } from "@/types/dex-adapter.interface";
+import { UpdateUserUseCase } from "@/application/user/update-user.use-case";
 
 /**
  * Central DI tokens for interfaces and non-class deps
@@ -160,17 +161,15 @@ function registerBase() {
     .inSingletonScope();
 
   // Use-cases (transient by default)
-  container
-    .bind(CreatePositionUseCase)
-    .toDynamicValue(
-      (c) =>
-        new CreatePositionUseCase(
-          // c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
-          c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
-          // c.container.get(DI_TOKENS.TransactionService),
-          c.container.get<ICacheService>(DI_TOKENS.Cache)
-        )
-    );
+  container.bind(CreatePositionUseCase).toDynamicValue(
+    (c) =>
+      new CreatePositionUseCase(
+        // c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
+        c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
+        // c.container.get(DI_TOKENS.TransactionService),
+        c.container.get<ICacheService>(DI_TOKENS.Cache)
+      )
+  );
 
   container
     .bind(ClosePositionUseCase)
@@ -211,7 +210,8 @@ function registerBase() {
       (c) =>
         new RebalancePositionUseCase(
           c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
-          c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry)
+          c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
+          c.container.get(SettingsIntegrationService)
         )
     );
 
@@ -309,19 +309,22 @@ function registerBase() {
     .bind(UpdateUserSettingUseCase)
     .toDynamicValue(() => new UpdateUserSettingUseCase());
   container
+    .bind(UpdateUserUseCase)
+    .toDynamicValue(() => new UpdateUserUseCase());
+  container
     .bind(GetUserByTelegramIdUseCase)
     .toDynamicValue(() => new GetUserByTelegramIdUseCase());
-  
+
   // Additional services
-  container
-    .bind(SettingsService)
-    .toDynamicValue(() => new SettingsService());
+  container.bind(SettingsService).toDynamicValue(() => new SettingsService());
   container
     .bind(SettingsIntegrationService)
-    .toDynamicValue(() => new SettingsIntegrationService()));
+    .toDynamicValue(
+      () => new SettingsIntegrationService(container.get(SettingsService))
+    );
   container
     .bind(UserRebalanceScheduleService)
-    .toDynamicValue(() => new UserRebalanceScheduleService()));
+    .toDynamicValue(() => new UserRebalanceScheduleService());
 }
 
 let runtimeRegistered = false;

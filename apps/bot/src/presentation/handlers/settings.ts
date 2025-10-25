@@ -1,25 +1,25 @@
 import { BotContext } from "@/types/bot.types";
 import { FastifyInstance } from "fastify";
 import { SettingsFormatter } from "../formatters/settings.formatter";
-import { 
-  getSettingsKeyboard, 
+import {
+  getSettingsKeyboard,
   getScheduleKeyboard,
   getBinRangeKeyboard,
   getRebalanceThresholdKeyboard,
   getStopLossKeyboard,
   getTakeProfitKeyboard,
-  getSlippageKeyboard
+  getSlippageKeyboard,
 } from "../keyboards/settings-menu";
 import { container } from "@/infrastructure/di/container";
 import { GetUserSettingsUseCase } from "@/application/settings/get-user-settings.use-case";
 import { UpdateUserSettingUseCase } from "@/application/settings/update-user-setting.use-case";
-import { 
-  ST_CALLBACKS, 
+import {
+  ST_CALLBACKS,
   ST_PATTERNS,
   RebalanceSchedule,
   BinRange,
   RiskPercentage,
-  SlippageBps
+  SlippageBps,
 } from "../constants/settings.constants";
 
 export async function settingsHandler(
@@ -32,7 +32,7 @@ export async function settingsHandler(
 
   const message = SettingsFormatter.formatOverview(settings);
 
-  await ctx.reply(message, {
+  await ctx.replyWithMarkdown(message, {
     reply_markup: getSettingsKeyboard(settings),
   });
 }
@@ -53,79 +53,109 @@ export async function handleSettingsCallback(
 
   try {
     // Handle menu navigation
-    if (data === 'schedule_menu') {
+    if (data === "schedule_menu") {
       const getter = container.get(GetUserSettingsUseCase);
       const settings = await getter.execute(ctx.user.telegramId);
-      const keyboard = getScheduleKeyboard(settings.rebalancingSchedule as RebalanceSchedule);
-      
+      const keyboard = getScheduleKeyboard(
+        settings.rebalancingSchedule as RebalanceSchedule
+      );
+
       await ctx.answerCbQuery();
-      await ctx.reply("⏰ **Rebalancing Schedule**\n\nChoose how often to check for rebalancing:", {
-        reply_markup: keyboard
-      });
+      await ctx.reply(
+        "⏰ **Rebalancing Schedule**\n\nChoose how often to check for rebalancing:",
+        {
+          reply_markup: keyboard,
+        }
+      );
       return;
     }
 
-    if (data === 'threshold_menu') {
+    if (data === "threshold_menu") {
       const getter = container.get(GetUserSettingsUseCase);
       const settings = await getter.execute(ctx.user.telegramId);
-      const keyboard = getRebalanceThresholdKeyboard(settings.rebalanceThreshold);
-      
+      const keyboard = getRebalanceThresholdKeyboard(
+        settings.rebalanceThreshold
+      );
+
       await ctx.answerCbQuery();
-      await ctx.reply("🔄 **Rebalance Threshold**\n\nSet the percentage that triggers rebalancing:", {
-        reply_markup: keyboard
-      });
+      await ctx.reply(
+        "🔄 **Rebalance Threshold**\n\nSet the percentage that triggers rebalancing:",
+        {
+          reply_markup: keyboard,
+        }
+      );
       return;
     }
 
-    if (data === 'bin_menu') {
+    if (data === "bin_menu") {
       const getter = container.get(GetUserSettingsUseCase);
       const settings = await getter.execute(ctx.user.telegramId);
-      const keyboard = getBinRangeKeyboard(settings.defaultBinRange as BinRange | number);
-      
+      const keyboard = getBinRangeKeyboard(
+        settings.defaultBinRange as BinRange | number
+      );
+
       await ctx.answerCbQuery();
-      await ctx.reply("📊 **Default Bin Range**\n\nSet the default bin range for DLMM positions:", {
-        reply_markup: keyboard
-      });
+      await ctx.reply(
+        "📊 **Default Bin Range**\n\nSet the default bin range for DLMM positions:",
+        {
+          reply_markup: keyboard,
+        }
+      );
       return;
     }
 
-    if (data === 'sl_menu') {
+    if (data === "sl_menu") {
       const getter = container.get(GetUserSettingsUseCase);
       const settings = await getter.execute(ctx.user.telegramId);
-      const keyboard = getStopLossKeyboard(settings.stopLossPercentage as RiskPercentage | number | null);
-      
+      const keyboard = getStopLossKeyboard(
+        settings.stopLossPercentage as RiskPercentage | number | null
+      );
+
       await ctx.answerCbQuery();
-      await ctx.reply("⚠️ **Stop Loss**\n\nSet automatic position closure on price drop:", {
-        reply_markup: keyboard
-      });
+      await ctx.reply(
+        "⚠️ **Stop Loss**\n\nSet automatic position closure on price drop:",
+        {
+          reply_markup: keyboard,
+        }
+      );
       return;
     }
 
-    if (data === 'tp_menu') {
+    if (data === "tp_menu") {
       const getter = container.get(GetUserSettingsUseCase);
       const settings = await getter.execute(ctx.user.telegramId);
-      const keyboard = getTakeProfitKeyboard(settings.takeProfitPercentage as RiskPercentage | number | null);
-      
+      const keyboard = getTakeProfitKeyboard(
+        settings.takeProfitPercentage as RiskPercentage | number | null
+      );
+
       await ctx.answerCbQuery();
-      await ctx.reply("🎯 **Take Profit**\n\nSet automatic position closure on price rise:", {
-        reply_markup: keyboard
-      });
+      await ctx.reply(
+        "🎯 **Take Profit**\n\nSet automatic position closure on price rise:",
+        {
+          reply_markup: keyboard,
+        }
+      );
       return;
     }
 
-    if (data === 'slippage_menu') {
+    if (data === "slippage_menu") {
       const getter = container.get(GetUserSettingsUseCase);
       const settings = await getter.execute(ctx.user.telegramId);
-      const keyboard = getSlippageKeyboard(settings.slippagePercentage as SlippageBps | number);
-      
+      const keyboard = getSlippageKeyboard(
+        settings.slippagePercentage as SlippageBps | number
+      );
+
       await ctx.answerCbQuery();
-      await ctx.reply("💰 **Slippage Tolerance**\n\nSet maximum price change during trades:", {
-        reply_markup: keyboard
-      });
+      await ctx.reply(
+        "💰 **Slippage Tolerance**\n\nSet maximum price change during trades:",
+        {
+          reply_markup: keyboard,
+        }
+      );
       return;
     }
 
-    if (data === 'back_to_main') {
+    if (data === "back_to_main") {
       const getter = container.get(GetUserSettingsUseCase);
       const settings = await getter.execute(ctx.user.telegramId);
       const message = SettingsFormatter.formatOverview(settings);
@@ -147,9 +177,15 @@ export async function handleSettingsCallback(
       const chatId = ctx.chat?.id;
       if (messageId && chatId) {
         try {
-          await ctx.telegram.editMessageText(chatId, messageId, undefined, text, {
-            reply_markup: keyboard,
-          });
+          await ctx.telegram.editMessageText(
+            chatId,
+            messageId,
+            undefined,
+            text,
+            {
+              reply_markup: keyboard,
+            }
+          );
           await ctx.answerCbQuery("🔄 Refreshed");
           return;
         } catch {}
@@ -194,7 +230,9 @@ export async function handleSettingsCallback(
       const s = await getter.execute(ctx.user.telegramId);
       const text = SettingsFormatter.formatOverview(s);
 
-      await ctx.answerCbQuery(`🔄 Auto rebalance ${newState ? 'enabled' : 'disabled'}`);
+      await ctx.answerCbQuery(
+        `🔄 Auto rebalance ${newState ? "enabled" : "disabled"}`
+      );
       await updateSettingsMessage(ctx, text, s);
       return;
     }
@@ -202,13 +240,17 @@ export async function handleSettingsCallback(
     // Handle toggle auto convert
     if (ST_PATTERNS.toggleAutoConvert.test(data)) {
       const updater = container.get(UpdateUserSettingUseCase);
-      const newState = await updater.toggleAutoConvertToSol(ctx.user.telegramId);
+      const newState = await updater.toggleAutoConvertToSol(
+        ctx.user.telegramId
+      );
 
       const getter = container.get(GetUserSettingsUseCase);
       const s = await getter.execute(ctx.user.telegramId);
       const text = SettingsFormatter.formatOverview(s);
 
-      await ctx.answerCbQuery(`💰 Auto convert ${newState ? 'enabled' : 'disabled'}`);
+      await ctx.answerCbQuery(
+        `💰 Auto convert ${newState ? "enabled" : "disabled"}`
+      );
       await updateSettingsMessage(ctx, text, s);
       return;
     }
@@ -217,10 +259,13 @@ export async function handleSettingsCallback(
     const scheduleMatch = data.match(ST_PATTERNS.scheduleSet);
     if (scheduleMatch) {
       const value = data.split(":").pop() as RebalanceSchedule | string;
-      
+
       if (value === "custom") {
         await ctx.answerCbQuery();
-        ctx.session = { ...ctx.session, settingsState: { step: "schedule_input" } };
+        ctx.session = {
+          ...ctx.session,
+          settingsState: { step: "schedule_input" },
+        };
         await ctx.reply(SettingsFormatter.promptCustomSchedule(), {
           reply_markup: { force_reply: true },
         });
@@ -243,10 +288,13 @@ export async function handleSettingsCallback(
     const thresholdMatch = data.match(ST_PATTERNS.rebalanceThreshold);
     if (thresholdMatch) {
       const value = data.split(":").pop() as string;
-      
+
       if (value === "custom") {
         await ctx.answerCbQuery();
-        ctx.session = { ...ctx.session, settingsState: { step: "threshold_input" } };
+        ctx.session = {
+          ...ctx.session,
+          settingsState: { step: "threshold_input" },
+        };
         await ctx.reply(SettingsFormatter.promptCustomRebalanceThreshold(), {
           reply_markup: { force_reply: true },
         });
@@ -269,10 +317,13 @@ export async function handleSettingsCallback(
     const binMatch = data.match(ST_PATTERNS.binRange);
     if (binMatch) {
       const value = data.split(":").pop() as BinRange | string;
-      
+
       if (value === "custom") {
         await ctx.answerCbQuery();
-        ctx.session = { ...ctx.session, settingsState: { step: "bin_range_input" } };
+        ctx.session = {
+          ...ctx.session,
+          settingsState: { step: "bin_range_input" },
+        };
         await ctx.reply(SettingsFormatter.promptCustomBinRange(), {
           reply_markup: { force_reply: true },
         });
@@ -295,10 +346,13 @@ export async function handleSettingsCallback(
     const slMatch = data.match(ST_PATTERNS.stopLoss);
     if (slMatch) {
       const value = data.split(":").pop() as RiskPercentage | string;
-      
+
       if (value === "custom") {
         await ctx.answerCbQuery();
-        ctx.session = { ...ctx.session, settingsState: { step: "stop_loss_input" } };
+        ctx.session = {
+          ...ctx.session,
+          settingsState: { step: "stop_loss_input" },
+        };
         await ctx.reply(SettingsFormatter.promptCustomStopLoss(), {
           reply_markup: { force_reply: true },
         });
@@ -306,7 +360,10 @@ export async function handleSettingsCallback(
       }
 
       const updater = container.get(UpdateUserSettingUseCase);
-      await updater.setStopLossPercentage(ctx.user.telegramId, value === "disabled" ? "disabled" : value);
+      await updater.setStopLossPercentage(
+        ctx.user.telegramId,
+        value === "disabled" ? "disabled" : value
+      );
 
       const getter = container.get(GetUserSettingsUseCase);
       const s = await getter.execute(ctx.user.telegramId);
@@ -321,10 +378,13 @@ export async function handleSettingsCallback(
     const tpMatch = data.match(ST_PATTERNS.takeProfit);
     if (tpMatch) {
       const value = data.split(":").pop() as RiskPercentage | string;
-      
+
       if (value === "custom") {
         await ctx.answerCbQuery();
-        ctx.session = { ...ctx.session, settingsState: { step: "take_profit_input" } };
+        ctx.session = {
+          ...ctx.session,
+          settingsState: { step: "take_profit_input" },
+        };
         await ctx.reply(SettingsFormatter.promptCustomTakeProfit(), {
           reply_markup: { force_reply: true },
         });
@@ -332,7 +392,10 @@ export async function handleSettingsCallback(
       }
 
       const updater = container.get(UpdateUserSettingUseCase);
-      await updater.setTakeProfitPercentage(ctx.user.telegramId, value === "disabled" ? "disabled" : value);
+      await updater.setTakeProfitPercentage(
+        ctx.user.telegramId,
+        value === "disabled" ? "disabled" : value
+      );
 
       const getter = container.get(GetUserSettingsUseCase);
       const s = await getter.execute(ctx.user.telegramId);
@@ -347,10 +410,13 @@ export async function handleSettingsCallback(
     const slippageMatch = data.match(ST_PATTERNS.slippage);
     if (slippageMatch) {
       const value = data.split(":").pop() as SlippageBps | string;
-      
+
       if (value === "custom") {
         await ctx.answerCbQuery();
-        ctx.session = { ...ctx.session, settingsState: { step: "slippage_input" } };
+        ctx.session = {
+          ...ctx.session,
+          settingsState: { step: "slippage_input" },
+        };
         await ctx.reply(SettingsFormatter.promptCustomSlippage(), {
           reply_markup: { force_reply: true },
         });
@@ -382,7 +448,8 @@ export async function handleSettingsInput(
   ctx: BotContext,
   _server: FastifyInstance
 ) {
-  const messageText = ctx.message && "text" in ctx.message ? ctx.message.text : undefined;
+  const messageText =
+    ctx.message && "text" in ctx.message ? ctx.message.text : undefined;
   const state = ctx.session?.settingsState;
   if (!state) return false;
   if (!messageText) return true; // ignore non-text within settings flow
@@ -418,7 +485,9 @@ export async function handleSettingsInput(
       await updater.setRebalancingSchedule(ctx.user.telegramId, value);
 
       delete ctx.session?.settingsState;
-      await ctx.reply(SettingsFormatter.updated("Rebalancing schedule updated."));
+      await ctx.reply(
+        SettingsFormatter.updated("Rebalancing schedule updated.")
+      );
 
       const getter = container.get(GetUserSettingsUseCase);
       const s = await getter.execute(ctx.user.telegramId);
@@ -433,7 +502,9 @@ export async function handleSettingsInput(
       await updater.setCustomRebalanceThreshold(ctx.user.telegramId, raw);
 
       delete ctx.session?.settingsState;
-      await ctx.reply(SettingsFormatter.updated("Rebalance threshold updated."));
+      await ctx.reply(
+        SettingsFormatter.updated("Rebalance threshold updated.")
+      );
 
       const getter = container.get(GetUserSettingsUseCase);
       const s = await getter.execute(ctx.user.telegramId);
@@ -514,7 +585,11 @@ export async function handleSettingsInput(
 }
 
 // Helper function to update settings message
-async function updateSettingsMessage(ctx: BotContext, text: string, settings: any) {
+async function updateSettingsMessage(
+  ctx: BotContext,
+  text: string,
+  settings: any
+) {
   const messageId = ctx.callbackQuery?.message?.message_id;
   const chatId = ctx.chat?.id;
   if (messageId && chatId) {

@@ -1,16 +1,18 @@
-import { 
-  GasPriority, 
-  RebalanceSchedule, 
-  BinRange, 
-  RiskPercentage, 
-  SlippageBps 
+import { UserSettings } from "@/application/settings/get-user-settings.use-case";
+import {
+  GasPriority,
+  RebalanceSchedule,
+  BinRange,
+  RiskPercentage,
+  SlippageBps,
 } from "../constants/settings.constants";
+import { divider } from "@/utils/misc";
 
 export interface SettingsMessageModel {
   vaultAddress?: string | null;
   gasPriority: GasPriority;
   rebalancingSchedule: string;
-  
+
   // New settings
   autoRebalanceEnabled: boolean;
   rebalanceThreshold: string;
@@ -22,41 +24,49 @@ export interface SettingsMessageModel {
 }
 
 export class SettingsFormatter {
-  static formatOverview(model: SettingsMessageModel): string {
-    const vault = model.vaultAddress && model.vaultAddress.trim().length > 0 ? model.vaultAddress : "Not set";
-    const gasLabel = model.gasPriority === "low"
-      ? "Low (0.00005 SOL)"
-      : model.gasPriority === "high"
-        ? "High (0.0002 SOL)"
-        : "Medium (0.0001 SOL)";
+  static formatOverview(model: UserSettings): string {
+    const vault =
+      model.vaultAddress && model.vaultAddress.trim().length > 0
+        ? model.vaultAddress
+        : "Not set";
+    // const gasLabel = model.gasPriority === "low"
+    //   ? "Low (0.00005 SOL)"
+    //   : model.gasPriority === "high"
+    //     ? "High (0.0002 SOL)"
+    //     : "Medium (0.0001 SOL)";
 
     const lines: string[] = [];
-    lines.push("⚙️ **Settings**\n");
-    
+    lines.push("⚙️ *Settings*\n");
+
     // Rebalancing Settings
-    lines.push("🔄 **Rebalancing**");
-    lines.push(`• Auto Rebalance: ${model.autoRebalanceEnabled ? '✅ Enabled' : '❌ Disabled'}`);
+    lines.push("🔄 *Rebalancing*");
+    lines.push(
+      `• Auto Rebalance: ${model.autoRebalanceEnabled ? "✅ Enabled" : "❌ Disabled"}`
+    );
     lines.push(`• Schedule: ${model.rebalancingSchedule}`);
     lines.push(`• Threshold: ${model.rebalanceThreshold}%`);
-    
+
     // Position Configuration
-    lines.push("\n📊 **Position Configuration**");
+    lines.push("\n📊 *Position Configuration*");
     lines.push(`• Default Bin Range: ${model.defaultBinRange}`);
-    
+
     // Risk Management
-    lines.push("\n⚠️ **Risk Management**");
-    lines.push(`• Stop Loss: ${model.stopLossPercentage || '❌ Disabled'}`);
-    lines.push(`• Take Profit: ${model.takeProfitPercentage || '❌ Disabled'}`);
-    
+    lines.push("\n⚠️ *Risk Management*");
+    lines.push(`• Stop Loss: ${model.stopLossPercentage || "❌ Disabled"}`);
+    lines.push(`• Take Profit: ${model.takeProfitPercentage || "❌ Disabled"}`);
+
     // Trading Settings
-    lines.push("\n💰 **Trading Settings**");
-    lines.push(`• Auto Convert to SOL: ${model.autoConvertToSol ? '✅ Enabled' : '❌ Disabled'}`);
+    lines.push("\n💰 *Trading Settings*");
+    lines.push(
+      `• Auto Convert to SOL: ${model.autoConvertToSol ? "✅ Enabled" : "❌ Disabled"}`
+    );
     lines.push(`• Slippage: ${model.slippagePercentage}%`);
-    
+
     // Legacy settings
-    lines.push("\n🔧 **Legacy Settings**");
+    lines.push(divider("-", 50));
+    lines.push("\n🔧 *Legacy Settings*");
     lines.push(`• Vault Address: ${vault}`);
-    lines.push(`• Gas Priority: ${gasLabel}`);
+    // lines.push(`• Gas Priority: ${gasLabel}`);
 
     return lines.join("\n");
   }
@@ -94,18 +104,18 @@ export class SettingsFormatter {
   }
 
   static formatBinRange(range: number | string): string {
-    if (range === 'custom') return 'Custom';
+    if (range === "custom") return "Custom";
     return `${range} bins`;
   }
 
   static formatRiskPercentage(value: number | string | null): string {
-    if (value === null || value === 'disabled') return 'Disabled';
-    if (value === 'custom') return 'Custom';
+    if (value === null || value === "disabled") return "Disabled";
+    if (value === "custom") return "Custom";
     return `${value}%`;
   }
 
   static formatSlippage(bps: number | string): string {
-    if (bps === 'custom') return 'Custom';
+    if (bps === "custom") return "Custom";
     return `${(Number(bps) / 100).toFixed(2)}%`;
   }
 }

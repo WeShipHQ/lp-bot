@@ -150,7 +150,7 @@ export class UserRepository implements IUserRepository {
     return User.reconstitute({
       id: row.id,
       telegramId: row.telegramId,
-      privyUserId: row.privyUserId,
+      privyUserId: row.privyUserId!,
       walletId: row.walletId,
       walletAddress: row.walletAddress,
       username: row.username ?? undefined,
@@ -185,8 +185,8 @@ export class UserRepository implements IUserRepository {
       balancedPositionBinRange: preferences.balancedPositionBinRange,
       
       // Risk management
-      stopLossPercentage: preferences.stopLossPercentage,
-      takeProfitPercentage: preferences.takeProfitPercentage,
+      stopLossPercentage: preferences.stopLossPercentage?.toString(),
+      takeProfitPercentage: preferences.takeProfitPercentage?.toString(),
       
       // Trading settings
       autoConvertToSol: preferences.autoConvertToSol,

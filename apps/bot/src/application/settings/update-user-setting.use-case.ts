@@ -34,7 +34,7 @@ export class UpdateUserSettingUseCase {
   // New settings methods
   async toggleAutoRebalance(telegramId: string): Promise<boolean> {
     const user = await this.getUser(telegramId);
-    const newState = !user.autoRebalanceEnabled;
+    const newState = !user.isAutoRebalanceEnabled();
     
     const updater = container.get(UpdateUserUseCase);
     await updater.execute(telegramId, { autoRebalanceEnabled: newState });
@@ -83,7 +83,7 @@ export class UpdateUserSettingUseCase {
     } else if (typeof percentage === 'number') {
       value = percentage;
     } else {
-      value = percentage as number;
+      value = Number(percentage);
     }
     
     if (value !== null && (value < 1 || value > 100)) {
@@ -105,7 +105,7 @@ export class UpdateUserSettingUseCase {
     } else if (typeof percentage === 'number') {
       value = percentage;
     } else {
-      value = percentage as number;
+      value = Number(percentage);
     }
     
     if (value !== null && (value < 1 || value > 100)) {

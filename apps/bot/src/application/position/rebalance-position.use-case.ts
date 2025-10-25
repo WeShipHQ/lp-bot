@@ -12,6 +12,7 @@ import { WalletService } from "@/services/wallet.service";
 import { eq } from "drizzle-orm";
 import { RebalanceSessionMetadata } from "@/types/rebalance.types";
 import { Token } from "@/types/token.types";
+import { SettingsIntegrationService } from "@/services/settings-integration.service";
 
 export interface RebalancePositionCommand {
   userId: string;
@@ -30,11 +31,6 @@ export interface RebalancePositionResult {
   newPositionAddress?: string;
   error?: string;
 }
-
-import { SettingsIntegrationService } from "@/services/settings-integration.service";
-import { IPositionRepository } from "@/domain/position/position.repository";
-import { DexRegistryLike } from "@/services/dex-registry.service";
-import { logger } from "@/utils/logger";
 
 export interface RebalancePositionCommand {
   userId: string;

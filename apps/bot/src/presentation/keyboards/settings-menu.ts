@@ -1,101 +1,109 @@
 import { InlineKeyboardMarkup } from "@telegraf/types";
-import { 
-  GasPriority, 
-  RebalanceSchedule, 
-  BinRange, 
-  RiskPercentage, 
+import {
+  GasPriority,
+  RebalanceSchedule,
+  BinRange,
+  RiskPercentage,
   SlippageBps,
-  ST_CALLBACKS 
+  ST_CALLBACKS,
 } from "../constants/settings.constants";
+import { UserSettings } from "@/application/settings/get-user-settings.use-case";
 
-export interface SettingsViewModel {
-  vaultAddress?: string | null;
-  gasPriority: GasPriority;
-  rebalancingSchedule: RebalanceSchedule | string;
-  
-  // New settings
-  autoRebalanceEnabled: boolean;
-  rebalanceThreshold: string;
-  defaultBinRange: number | string;
-  stopLossPercentage: number | string | null;
-  takeProfitPercentage: number | string | null;
-  autoConvertToSol: boolean;
-  slippagePercentage: number | string;
-}
+// export interface SettingsViewModel {
+//   vaultAddress?: string | null;
+//   gasPriority: GasPriority;
+//   rebalancingSchedule: RebalanceSchedule | string;
 
-export function getSettingsKeyboard(settings: SettingsViewModel): InlineKeyboardMarkup {
+//   // New settings
+//   autoRebalanceEnabled: boolean;
+//   rebalanceThreshold: string;
+//   defaultBinRange: number | string;
+//   stopLossPercentage: number | string | null;
+//   takeProfitPercentage: number | string | null;
+//   autoConvertToSol: boolean;
+//   slippagePercentage: number | string;
+// }
+
+export function getSettingsKeyboard(
+  settings: UserSettings
+): InlineKeyboardMarkup {
   const keyboard = [];
-  
-  // Rebalancing Settings
+
   keyboard.push([
-    { 
-      text: `🔄 Auto Rebalance: ${settings.autoRebalanceEnabled ? '✅' : '❌'}`, 
-      callback_data: ST_CALLBACKS.toggleRebalance 
-    }
+    {
+      text: `🔄 Auto Rebalance: ${settings.autoRebalanceEnabled ? "✅" : "❌"}`,
+      callback_data: ST_CALLBACKS.toggleRebalance,
+    },
   ]);
-  
+
   if (settings.autoRebalanceEnabled) {
     keyboard.push([
-      { text: `⏰ Schedule: ${settings.rebalancingSchedule}`, callback_data: 'schedule_menu' },
-      { text: `📊 Threshold: ${settings.rebalanceThreshold}%`, callback_data: 'threshold_menu' }
+      {
+        text: `⏰ Schedule: ${settings.rebalancingSchedule}`,
+        callback_data: "schedule_menu",
+      },
+      {
+        text: `📊 Threshold: ${settings.rebalanceThreshold}%`,
+        callback_data: "threshold_menu",
+      },
     ]);
   }
-  
+
   // Position Configuration
   keyboard.push([
-    { 
-      text: `📊 Bin Range: ${typeof settings.defaultBinRange === 'number' ? settings.defaultBinRange + ' bins' : 'Custom'}`, 
-      callback_data: 'bin_menu' 
-    }
+    {
+      text: `📊 Bin Range: ${typeof settings.defaultBinRange === "number" ? settings.defaultBinRange + " bins" : "Custom"}`,
+      callback_data: "bin_menu",
+    },
   ]);
-  
+
   // Risk Management
   keyboard.push([
-    { 
-      text: `⚠️ Stop Loss: ${formatRiskPercentage(settings.stopLossPercentage)}`, 
-      callback_data: 'sl_menu' 
+    {
+      text: `⚠️ Stop Loss: ${formatRiskPercentage(settings.stopLossPercentage)}`,
+      callback_data: "sl_menu",
     },
-    { 
-      text: `🎯 Take Profit: ${formatRiskPercentage(settings.takeProfitPercentage)}`, 
-      callback_data: 'tp_menu' 
-    }
+    {
+      text: `🎯 Take Profit: ${formatRiskPercentage(settings.takeProfitPercentage)}`,
+      callback_data: "tp_menu",
+    },
   ]);
-  
+
   // Trading Settings
   keyboard.push([
-    { 
-      text: `💰 Auto Convert: ${settings.autoConvertToSol ? '✅' : '❌'}`, 
-      callback_data: ST_CALLBACKS.toggleAutoConvert 
-    }
+    {
+      text: `💰 Auto Convert: ${settings.autoConvertToSol ? "✅" : "❌"}`,
+      callback_data: ST_CALLBACKS.toggleAutoConvert,
+    },
   ]);
-  
+
   keyboard.push([
-    { 
-      text: `💰 Slippage: ${formatSlippage(settings.slippagePercentage)}`, 
-      callback_data: 'slippage_menu' 
-    }
+    {
+      text: `💰 Slippage: ${formatSlippage(settings.slippagePercentage)}`,
+      callback_data: "slippage_menu",
+    },
   ]);
-  
+
   // Legacy Settings
   keyboard.push([
-    { text: "🔑 Set Vault Address", callback_data: ST_CALLBACKS.vaultSet }
+    { text: "🔑 Set Vault Address", callback_data: ST_CALLBACKS.vaultSet },
   ]);
-  
+
   keyboard.push([
     { text: "⛽ Gas: Low", callback_data: ST_CALLBACKS.gasSet("low") },
     { text: "Medium", callback_data: ST_CALLBACKS.gasSet("medium") },
     { text: "High", callback_data: ST_CALLBACKS.gasSet("high") },
   ]);
-  
-  keyboard.push([
-    { text: "🔄 Refresh", callback_data: ST_CALLBACKS.refresh }
-  ]);
-  
+
+  keyboard.push([{ text: "🔄 Refresh", callback_data: ST_CALLBACKS.refresh }]);
+
   return { inline_keyboard: keyboard };
 }
 
 // Helper keyboards for sub-menus
-export function getScheduleKeyboard(current: RebalanceSchedule | string): InlineKeyboardMarkup {
+export function getScheduleKeyboard(
+  current: RebalanceSchedule | string
+): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [
@@ -105,15 +113,20 @@ export function getScheduleKeyboard(current: RebalanceSchedule | string): Inline
       ],
       [
         { text: "3h", callback_data: ST_CALLBACKS.scheduleSet("3h") },
-        { text: "Disabled", callback_data: ST_CALLBACKS.scheduleSet("disabled") },
+        {
+          text: "Disabled",
+          callback_data: ST_CALLBACKS.scheduleSet("disabled"),
+        },
         { text: "Custom", callback_data: ST_CALLBACKS.scheduleSet("custom") },
       ],
-      [{ text: "⬅️ Back", callback_data: "back_to_main" }]
-    ]
+      [{ text: "⬅️ Back", callback_data: "back_to_main" }],
+    ],
   };
 }
 
-export function getBinRangeKeyboard(current: BinRange | number): InlineKeyboardMarkup {
+export function getBinRangeKeyboard(
+  current: BinRange | number
+): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [
@@ -121,15 +134,15 @@ export function getBinRangeKeyboard(current: BinRange | number): InlineKeyboardM
         { text: "10", callback_data: ST_CALLBACKS.binRange(10) },
         { text: "20", callback_data: ST_CALLBACKS.binRange(20) },
       ],
-      [
-        { text: "Custom", callback_data: ST_CALLBACKS.binRange("custom") },
-      ],
-      [{ text: "⬅️ Back", callback_data: "back_to_main" }]
-    ]
+      [{ text: "Custom", callback_data: ST_CALLBACKS.binRange("custom") }],
+      [{ text: "⬅️ Back", callback_data: "back_to_main" }],
+    ],
   };
 }
 
-export function getRebalanceThresholdKeyboard(current: string): InlineKeyboardMarkup {
+export function getRebalanceThresholdKeyboard(
+  current: string
+): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [
@@ -140,14 +153,19 @@ export function getRebalanceThresholdKeyboard(current: string): InlineKeyboardMa
       [
         { text: "25%", callback_data: ST_CALLBACKS.rebalanceThreshold("25") },
         { text: "30%", callback_data: ST_CALLBACKS.rebalanceThreshold("30") },
-        { text: "Custom", callback_data: ST_CALLBACKS.rebalanceThreshold("custom") },
+        {
+          text: "Custom",
+          callback_data: ST_CALLBACKS.rebalanceThreshold("custom"),
+        },
       ],
-      [{ text: "⬅️ Back", callback_data: "back_to_main" }]
-    ]
+      [{ text: "⬅️ Back", callback_data: "back_to_main" }],
+    ],
   };
 }
 
-export function getStopLossKeyboard(current: RiskPercentage | number | null): InlineKeyboardMarkup {
+export function getStopLossKeyboard(
+  current: RiskPercentage | number | null
+): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [
@@ -159,12 +177,14 @@ export function getStopLossKeyboard(current: RiskPercentage | number | null): In
         { text: "Custom", callback_data: ST_CALLBACKS.stopLoss("custom") },
         { text: "Disabled", callback_data: ST_CALLBACKS.stopLoss("disabled") },
       ],
-      [{ text: "⬅️ Back", callback_data: "back_to_main" }]
-    ]
+      [{ text: "⬅️ Back", callback_data: "back_to_main" }],
+    ],
   };
 }
 
-export function getTakeProfitKeyboard(current: RiskPercentage | number | null): InlineKeyboardMarkup {
+export function getTakeProfitKeyboard(
+  current: RiskPercentage | number | null
+): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [
@@ -174,14 +194,19 @@ export function getTakeProfitKeyboard(current: RiskPercentage | number | null): 
       ],
       [
         { text: "Custom", callback_data: ST_CALLBACKS.takeProfit("custom") },
-        { text: "Disabled", callback_data: ST_CALLBACKS.takeProfit("disabled") },
+        {
+          text: "Disabled",
+          callback_data: ST_CALLBACKS.takeProfit("disabled"),
+        },
       ],
-      [{ text: "⬅️ Back", callback_data: "back_to_main" }]
-    ]
+      [{ text: "⬅️ Back", callback_data: "back_to_main" }],
+    ],
   };
 }
 
-export function getSlippageKeyboard(current: SlippageBps | number): InlineKeyboardMarkup {
+export function getSlippageKeyboard(
+  current: SlippageBps | number
+): InlineKeyboardMarkup {
   return {
     inline_keyboard: [
       [
@@ -193,19 +218,19 @@ export function getSlippageKeyboard(current: SlippageBps | number): InlineKeyboa
         { text: "5%", callback_data: ST_CALLBACKS.slippage(500) },
         { text: "Custom", callback_data: ST_CALLBACKS.slippage("custom") },
       ],
-      [{ text: "⬅️ Back", callback_data: "back_to_main" }]
-    ]
+      [{ text: "⬅️ Back", callback_data: "back_to_main" }],
+    ],
   };
 }
 
 // Helper functions
 function formatRiskPercentage(value: number | string | null): string {
-  if (value === null || value === 'disabled') return 'Disabled';
-  if (value === 'custom') return 'Custom';
+  if (value === null || value === "disabled") return "Disabled";
+  if (value === "custom") return "Custom";
   return `${value}%`;
 }
 
 function formatSlippage(bps: number | string): string {
-  if (bps === 'custom') return 'Custom';
+  if (bps === "custom") return "Custom";
   return `${(Number(bps) / 100).toFixed(2)}%`;
 }
