@@ -595,7 +595,9 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
 
       const createUC = container.get(CreatePositionUseCase);
       const result = await createUC.execute({
-        user: ctx.user,
+        userId: ctx.user.id,
+        walletId: ctx.user.walletId!,
+        walletAddress: ctx.user.walletAddress!,
         dex: (dex as DexType) || "meteora",
 
         poolAddress: poolData.address,

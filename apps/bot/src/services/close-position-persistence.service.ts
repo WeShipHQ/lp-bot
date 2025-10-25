@@ -133,7 +133,6 @@ export class ClosePositionPersistenceService {
         await tx.insert(claimHistory).values({
           positionId: context.positionId,
           segmentId: currentSegment.id,
-          timestamp: new Date(),
           claimType: "closure",
           claimedTokenXAmount: claimedFeesX,
           claimedTokenYAmount: claimedFeesY,
@@ -142,7 +141,6 @@ export class ClosePositionPersistenceService {
           tokenYPriceUSD: prices.tokenBUsd.toString(),
           transactionSignature: signature,
           isDuringRebalance: false,
-          createdAt: new Date(),
         });
 
         logger.info("Fees claimed during position closure", {
@@ -214,7 +212,6 @@ export class ClosePositionPersistenceService {
           totalRealizedPnlUSD: newTotalRealizedPnl.toFixed(6),
           totalFeesClaimedUSD: newTotalFeesClaimed.toFixed(6),
           closureSignature: signature,
-          updatedAt: new Date(),
         })
         .where(eq(positions.id, context.positionId));
 
@@ -232,7 +229,6 @@ export class ClosePositionPersistenceService {
         positionId: context.positionId,
         segmentId: currentSegment.id,
         snapshotType: "closure",
-        snapshotTimestamp: new Date(),
         currentValueUSD: finalValueUSD.toFixed(6),
         tokenXAmount: finalTokenAAmount.toString(),
         tokenYAmount: finalTokenBAmount.toString(),
@@ -246,7 +242,6 @@ export class ClosePositionPersistenceService {
         tokenXPriceUSD: prices.tokenAUsd.toString(),
         tokenYPriceUSD: prices.tokenBUsd.toString(),
         solPriceUSD: prices.solUsd.toString(),
-        createdAt: new Date(),
       });
 
       logger.info("Position snapshot created for closure", {

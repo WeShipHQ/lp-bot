@@ -1,9 +1,19 @@
-import { eq, and, sql } from 'drizzle-orm';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import * as schema from '../../../db/schema';
-import { Position, PositionStatus, DexType, StrategyType, PositionToken } from '../../../domain/position/position.entity';
-import { IPositionRepository } from '../../../domain/position/position.repository';
-import { Money, TokenAmount, Range } from '../../../domain/shared/value-objects';
+import { eq, and, sql } from "drizzle-orm";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import * as schema from "../../../db/schema";
+import {
+  Position,
+  PositionStatus,
+  DexType,
+  StrategyType,
+  PositionToken,
+} from "../../../domain/position/position.entity";
+import { IPositionRepository } from "../../../domain/position/position.repository";
+import {
+  Money,
+  TokenAmount,
+  Range,
+} from "../../../domain/shared/value-objects";
 
 export class PositionRepository implements IPositionRepository {
   constructor(private readonly db: PostgresJsDatabase<typeof schema>) {}
@@ -22,7 +32,9 @@ export class PositionRepository implements IPositionRepository {
     return this.toDomain(result[0]);
   }
 
-  async findByPositionAddress(positionAddress: string): Promise<Position | null> {
+  async findByPositionAddress(
+    positionAddress: string
+  ): Promise<Position | null> {
     const result = await this.db
       .select()
       .from(schema.positions)
@@ -53,7 +65,7 @@ export class PositionRepository implements IPositionRepository {
       .where(
         and(
           eq(schema.positions.userId, userId),
-          eq(schema.positions.status, 'ACTIVE')
+          eq(schema.positions.status, "ACTIVE")
         )
       )
       .orderBy(sql`${schema.positions.createdAt} DESC`);
@@ -61,7 +73,10 @@ export class PositionRepository implements IPositionRepository {
     return results.map((row) => this.toDomain(row));
   }
 
-  async findByUserAndStatus(userId: string, status: PositionStatus): Promise<Position[]> {
+  async findByUserAndStatus(
+    userId: string,
+    status: PositionStatus
+  ): Promise<Position[]> {
     const results = await this.db
       .select()
       .from(schema.positions)
@@ -88,19 +103,16 @@ export class PositionRepository implements IPositionRepository {
 
   async save(position: Position): Promise<void> {
     const persistenceData = this.toPersistence(position);
-    
+
     await this.db.insert(schema.positions).values(persistenceData);
   }
 
   async update(position: Position): Promise<void> {
     const persistenceData = this.toPersistence(position);
-    
+
     await this.db
       .update(schema.positions)
-      .set({
-        ...persistenceData,
-        updatedAt: new Date(),
-      })
+      .set(persistenceData)
       .where(eq(schema.positions.id, position.id));
   }
 
@@ -121,9 +133,9 @@ export class PositionRepository implements IPositionRepository {
     const conditions = userId
       ? and(
           eq(schema.positions.userId, userId),
-          eq(schema.positions.status, 'ACTIVE')
+          eq(schema.positions.status, "ACTIVE")
         )
-      : eq(schema.positions.status, 'ACTIVE');
+      : eq(schema.positions.status, "ACTIVE");
 
     const result = await this.db
       .select({ count: sql<number>`count(*)` })
@@ -166,13 +178,13 @@ export class PositionRepository implements IPositionRepository {
       initialTokenYAmount: row.initialTokenYAmount,
       currentTokenXAmount: row.initialTokenXAmount, // Will be updated by use cases
       currentTokenYAmount: row.initialTokenYAmount, // Will be updated by use cases
-      claimedFeesUsd: Number(row.totalFeesClaimedUSD ?? '0'),
+      claimedFeesUsd: Number(row.totalFeesClaimedUSD ?? "0"),
       priceRange,
       isRebalancingEnabled: row.isRebalancingEnabled ?? false,
-      rebalanceThreshold: Number(row.rebalanceThreshold ?? '20'),
-      createdAt: row.createdAt,
-      updatedAt: row.updatedAt,
-      closedAt: row.closedAt ?? undefined,
+      rebalanceThreshold: Number(row.rebalanceThreshold ?? "20"),
+      createdAt: new Date(row.createdAt),
+      updatedAt: new Date(row.updatedAt),
+      closedAt: row.closedAt ? new Date(row.closedAt) : undefined,
       transactionSignature: row.creationSignature,
     });
   }
@@ -180,7 +192,9 @@ export class PositionRepository implements IPositionRepository {
   /**
    * Maps domain entity to database row
    */
-  private toPersistence(position: Position): typeof schema.positions.$inferInsert {
+  private toPersistence(
+    position: Position
+  ): typeof schema.positions.$inferInsert {
     const currentValue = position.getCurrentValue();
     const initialValue = position.getInitialValue();
     const claimedFees = position.getClaimedFees();
@@ -206,28 +220,28 @@ export class PositionRepository implements IPositionRepository {
       tokenY: position.tokenY as any,
       status: position.getStatus(),
       initialValueUSD: initialValue.toNumber().toString(),
-      initialValueSOL: '0', // TODO: Add SOL value tracking if needed
+      initialValueSOL: "0", // TODO: Add SOL value tracking if needed
       initialTokenXAmount: initialTokenXUiAmount,
       initialTokenYAmount: initialTokenYUiAmount,
-      initialTokenXPriceUSD: '0', // TODO: Add price tracking
-      initialTokenYPriceUSD: '0', // TODO: Add price tracking
+      initialTokenXPriceUSD: "0", // TODO: Add price tracking
+      initialTokenYPriceUSD: "0", // TODO: Add price tracking
       currentSegmentNumber: 1,
       currentSegmentInitialUSD: initialValue.toNumber().toString(),
       currentSegmentStartAt: position.createdAt,
-      totalRealizedPnlUSD: '0', // Calculated from snapshots
+      totalRealizedPnlUSD: "0", // Calculated from snapshots
       totalFeesClaimedUSD: claimedFees.toNumber().toString(),
-      isRebalancingEnabled: position['isRebalancingEnabled'],
-      rebalanceThreshold: position['rebalanceThreshold'].toString(),
-      creationSignature: position.getTransactionSignature() ?? '',
-      createdAt: position.createdAt,
-      updatedAt: position.getUpdatedAt(),
+      isRebalancingEnabled: position["isRebalancingEnabled"],
+      rebalanceThreshold: position["rebalanceThreshold"].toString(),
+      creationSignature: position.getTransactionSignature() ?? "",
+      createdAt: position.createdAt.toISOString(),
+      updatedAt: position.getUpdatedAt().toISOString(),
     };
 
     // Add closed-specific fields if position is closed
     if (position.isClosed()) {
       const currentTokenXUiAmount = currentTokenX.toUi().toString();
       const currentTokenYUiAmount = currentTokenY.toUi().toString();
-      
+
       persistence.closedAt = position.getClosedAt();
       persistence.finalValueUSD = currentValue.toNumber().toString();
       persistence.finalTokenXAmount = currentTokenXUiAmount;

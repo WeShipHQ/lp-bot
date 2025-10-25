@@ -108,9 +108,7 @@ export class RebalancePersistenceService {
 
       // 4. Calculate segment PnL
       const segmentInitialUSD = new Decimal(currentSegment.initialValueUSD);
-      const segmentPnlUSD = segmentFinalUSD
-        .sub(segmentInitialUSD)
-        .toFixed(2);
+      const segmentPnlUSD = segmentFinalUSD.sub(segmentInitialUSD).toFixed(2);
       const segmentPnlPercentage = segmentFinalUSD
         .sub(segmentInitialUSD)
         .div(segmentInitialUSD)
@@ -142,7 +140,6 @@ export class RebalancePersistenceService {
         await tx.insert(claimHistory).values({
           positionId: context.positionId,
           segmentId: currentSegment.id,
-          timestamp: new Date(),
           claimType: "rebalance",
           claimedTokenXAmount: claimedFeesX,
           claimedTokenYAmount: claimedFeesY,
@@ -151,7 +148,6 @@ export class RebalancePersistenceService {
           tokenYPriceUSD: prices.tokenBUsd.toString(),
           transactionSignature: signature,
           isDuringRebalance: true,
-          createdAt: new Date(),
         });
 
         logger.info("Fees claimed during rebalance", {
@@ -167,10 +163,9 @@ export class RebalancePersistenceService {
         .values({
           positionId: context.positionId,
           segmentNumber: newSegmentNumber,
-          startTimestamp: new Date(),
           initialValueUSD: newSegmentInitialUSD,
           startPositionAddress: context.newPositionAddress,
-          createdAt: new Date(),
+          startTimestamp: new Date(),
         })
         .returning();
 
@@ -183,7 +178,6 @@ export class RebalancePersistenceService {
       // 8. Record rebalance event
       await tx.insert(rebalanceEvents).values({
         positionId: context.positionId,
-        timestamp: new Date(),
         triggerReason: context.triggerReason,
         oldPositionAddress: context.oldPositionAddress,
         newPositionAddress: context.newPositionAddress,
@@ -197,7 +191,6 @@ export class RebalancePersistenceService {
         newSegmentInitialUSD,
         closeTransactionSignature: signature,
         createTransactionSignature: signature,
-        createdAt: new Date(),
       });
 
       logger.info("Rebalance event recorded", {
@@ -224,7 +217,6 @@ export class RebalancePersistenceService {
           totalRealizedPnlUSD: newTotalRealizedPnl,
           totalFeesClaimedUSD: newTotalFeesClaimed,
           status: "ACTIVE",
-          updatedAt: new Date(),
         })
         .where(eq(positions.id, context.positionId));
 
@@ -240,7 +232,6 @@ export class RebalancePersistenceService {
         positionId: context.positionId,
         segmentId: newSegment.id,
         snapshotType: "rebalance",
-        snapshotTimestamp: new Date(),
         currentValueUSD: newSegmentInitialUSD,
         tokenXAmount: tokenAAmount,
         tokenYAmount: tokenBAmount,
@@ -257,7 +248,6 @@ export class RebalancePersistenceService {
         tokenXPriceUSD: prices.tokenAUsd.toString(),
         tokenYPriceUSD: prices.tokenBUsd.toString(),
         solPriceUSD: prices.solUsd.toString(),
-        createdAt: new Date(),
       });
 
       logger.info("Position snapshot created for rebalance", {

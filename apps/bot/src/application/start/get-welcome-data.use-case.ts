@@ -1,4 +1,4 @@
-import { WelcomeData, WalletDataFetchError } from '../../domain/start';
+import { WelcomeData } from "../../domain/start";
 
 export interface GetWelcomeDataRequest {
   walletAddress?: string;
@@ -15,11 +15,11 @@ export interface SolanaService {
 }
 
 export class GetWelcomeDataUseCase {
-  constructor(
-    private readonly solanaService: SolanaService
-  ) {}
+  constructor(private readonly solanaService: SolanaService) {}
 
-  async execute(request: GetWelcomeDataRequest): Promise<GetWelcomeDataResponse> {
+  async execute(
+    request: GetWelcomeDataRequest
+  ): Promise<GetWelcomeDataResponse> {
     if (!request.walletAddress) {
       const welcomeData = WelcomeData.createWalletCreating();
       return { welcomeData };
@@ -41,7 +41,7 @@ export class GetWelcomeDataUseCase {
       return { welcomeData };
     } catch (error) {
       console.log("Failed to fetch wallet data:", error);
-      
+
       // Return welcome data without balance information
       const welcomeData = WelcomeData.create({
         walletAddress: request.walletAddress,

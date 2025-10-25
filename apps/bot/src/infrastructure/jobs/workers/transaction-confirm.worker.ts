@@ -1,3 +1,746 @@
+// import { Job, tryCatch } from "bullmq";
+// import { IWorker } from "../worker-registry";
+// import {
+//   TransactionConfirmJobData,
+//   JOB_POSITION_MONITOR,
+//   JOB_NOTIFICATION,
+// } from "../job-definitions";
+// import type { NotificationMessagePayload } from "../job-definitions";
+// import { logger } from "@/utils/logger";
+// import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
+// import { db, pendingTransactions, users, User } from "@/db";
+// import { eq } from "drizzle-orm";
+// import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
+// import {
+//   TransactionParserService,
+//   // ParsedTransactionData,
+// } from "@/services/transaction-parser.service";
+// // import {
+// //   positionPersistenceService,
+// //   rebalancePersistenceService,
+// //   closePositionPersistenceService,
+// //   claimFeesPersistenceService,
+// // } from "@/services";
+// import { getTokenPriceService } from "@/services/token-price.service";
+// import {
+//   MeteoraDlmmInstruction,
+//   parseMeteoraInstructions,
+// } from "@/utils/tx-parser";
+// import { ClaimFeesContext, PositionClosureContext } from "@/application";
+// import Decimal from "decimal.js";
+// import { lamportsToUi } from "@/utils/math";
+// import {
+//   formatPercentage,
+//   formatPrice,
+// } from "@/presentation/formatters/base.formatter";
+// import { SOL_MINT } from "@/config/constants";
+// import { SwapService } from "@/services/swap.service";
+// import { RebalanceSessionMetadata } from "@/types/rebalance.types";
+// import { container } from "@/infrastructure/di/container";
+// import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
+// import { getCacheService } from "@/infrastructure/cache/cache.service";
+
+// /**
+//  * Result of transaction parsing
+//  */
+// interface CloseInstructionExtractionResult {
+//   positionAddress?: string;
+//   finalTokenAAmount?: string;
+//   finalTokenBAmount?: string;
+//   finalTokenAAmountLamports?: string;
+//   finalTokenBAmountLamports?: string;
+//   claimedFeesTokenA?: string;
+//   claimedFeesTokenB?: string;
+//   claimedFeesTokenALamports?: string;
+//   claimedFeesTokenBLamports?: string;
+//   removeInstructionCount: number;
+//   claimInstructionCount: number;
+//   closeInstructionCount: number;
+// }
+
+// /**
+//  * Result of SOL conversion
+//  */
+// interface SolConversionResult {
+//   solAmount: Decimal;
+//   usdValue: number;
+//   success: boolean;
+//   error?: string;
+// }
+
+// /**
+//  * Complete rebalance session data
+//  */
+// interface CompleteRebalanceSession {
+//   sessionId: string;
+//   positionId: string;
+//   closeData: {
+//     signature: string;
+//     finalValueUsd: number;
+//     solProceeds: Decimal;
+//     feesClaimedUsd: number;
+//   };
+//   createData: {
+//     signature: string;
+//     totalValueUsd: number;
+//     solUsed: Decimal;
+//   };
+//   netSolChange: Decimal;
+//   totalValueUsd: number;
+// }
+
+// export class TransactionConfirmWorker
+//   implements IWorker<TransactionConfirmJobData>
+// {
+//   private readonly priceService = getTokenPriceService();
+//   private readonly meteoraAdapter = new MeteoraAdapter();
+//   private readonly cache = getCacheService();
+//   private readonly swapService = new SwapService();
+//   private readonly transactionParser = new TransactionParserService(
+//     this.solana.getConnection()
+//   );
+
+//   constructor(
+//     private readonly solana: SolanaAdapter,
+//     private readonly positionRepository: PositionRepository
+//   ) {}
+
+//   async process(job: Job<TransactionConfirmJobData>): Promise<void> {
+//     console.log("TransactionConfirmWorker", job.data);
+//     const {
+//       signature,
+//       operationType,
+//       userId,
+//       positionId,
+//       positionAddress,
+//       submittedAt,
+//     } = job.data;
+//     const started = Date.now();
+
+//     try {
+//       const status = await this.solana.getSignatureStatus(signature);
+//       if (!status || (!status.confirmationStatus && !status.err)) {
+//         // Pending/no info: decide on retry vs timeout
+//         const ptx = await db.query.pendingTransactions.findFirst({
+//           where: eq(pendingTransactions.signature, signature),
+//         });
+
+//         const created =
+//           ptx?.createdAt ||
+//           (submittedAt ? new Date(submittedAt) : new Date(Date.now() - 1000));
+
+//         const ageMs = Date.now() - new Date(created).getTime();
+
+//         const timeoutMs = 5 * 60 * 1000; // 5 minutes
+
+//         if (ageMs > timeoutMs) {
+//           await db
+//             .update(pendingTransactions)
+//             .set({ status: "FAILED" })
+//             .where(eq(pendingTransactions.signature, signature));
+//         }
+//         throw new Error("Transaction pending");
+//       }
+
+//       await db
+//         .update(pendingTransactions)
+//         .set({ status: "PROCESSING" })
+//         .where(eq(pendingTransactions.signature, signature));
+
+//       // // Parse transaction and extract data
+//       // const parsedData =
+//       //   await this.transactionParser.parseTransaction(signature);
+
+//       // if (!parsedData.extractedData) {
+//       //   logger.error("[TxConfirmWorker] Failed to extract transaction data", {
+//       //     signature,
+//       //   });
+//       //   return;
+//       // }
+
+//       // const extractedData = parsedData.extractedData;
+
+//       // Route to appropriate handler based on operation type
+//       switch (operationType) {
+//         case "CREATE_POSITION":
+//           await this.handleCreatePosition(job.data);
+//           break;
+//         case "CLAIM_FEES":
+//           await this.handleClaimFees(job.data, parsedData);
+//           break;
+//         case "CLOSE_POSITION":
+//           await this.handleClosePosition(job.data, parsedData);
+//           break;
+//         default:
+//           throw new Error(`Unknown operation type: ${operationType}`);
+//       }
+
+//       // Mark as completed
+//       await db
+//         .update(pendingTransactions)
+//         .set({
+//           status: "COMPLETED",
+//           // completedAt: new Date(),
+//         })
+//         .where(eq(pendingTransactions.signature, signature));
+
+//       const duration = Date.now() - started;
+//       logger.info(
+//         {
+//           signature,
+//           operationType,
+//           userId,
+//           duration,
+//         },
+//         "[TransactionConfirmWorker] job completed"
+//       );
+//     } catch (error) {
+//       logger.error(
+//         {
+//           signature,
+//           operationType,
+//           error: error instanceof Error ? error.message : String(error),
+//           stack: error instanceof Error ? error.stack : undefined,
+//         },
+//         "[TransactionConfirmWorker] job failed"
+//       );
+
+//       // Mark as failed
+//       await db
+//         .update(pendingTransactions)
+//         .set({
+//           status: "FAILED",
+//           errorMessage: error instanceof Error ? error.message : String(error),
+//           // completedAt: new Date(),
+//         })
+//         .where(eq(pendingTransactions.signature, signature));
+
+//       throw error;
+//     }
+//   }
+
+//   /**
+//    * Handle CREATE_POSITION confirmation
+//    */
+//   private async handleCreatePosition(
+//     jobData: TransactionConfirmJobData
+//     // extractedData: ParsedTransactionData
+//   ): Promise<void> {
+//     try {
+//       const { signature, userId } = jobData;
+//       const ptx = await db.query.pendingTransactions.findFirst({
+//         where: eq(pendingTransactions.signature, signature),
+//       });
+
+//       if (!ptx || !ptx.metadata) {
+//         logger.error(
+//           "[TxConfirmWorker] No pending transaction metadata found",
+//           { signature }
+//         );
+//         return;
+//       }
+
+//       const {
+//         positionAddress,
+//         tokenAAmount,
+//         tokenBAmount,
+//         prices,
+//         calculatedValue,
+//       } =
+//         await this.transactionParser.extractCreatePositionTransactionData(
+//           signature
+//         );
+//       const metadata = extractedData.metadata;
+
+//       if (
+//         !extractedData.positionAddress ||
+//         !extractedData.tokenAAmount ||
+//         !extractedData.tokenBAmount
+//       ) {
+//         logger.error(
+//           "[TxConfirmWorker] Missing required data for position creation",
+//           { signature }
+//         );
+//         return;
+//       }
+
+//       // Create position in database
+//       const positionId = await positionPersistenceService.createPosition({
+//         signature,
+//         positionAddress: extractedData.positionAddress,
+//         context: metadata.positionContext!,
+//         onChainData: {
+//           actualTokenAAmount: extractedData.tokenAAmount,
+//           actualTokenBAmount: extractedData.tokenBAmount,
+//         },
+//         prices: extractedData.prices || {
+//           tokenAUsd: 0,
+//           tokenBUsd: 0,
+//           solUsd: 0,
+//         },
+//       });
+
+//       // Create initial segment
+//       await positionPersistenceService.createSegment({
+//         positionId,
+//         segmentNumber: 1,
+//         startTimestamp: new Date(),
+//         initialValueUSD: extractedData.calculatedValue || 0,
+//       });
+
+//       // Create creation snapshot
+//       await positionPersistenceService.createSnapshot({
+//         positionId,
+//         type: "creation",
+//         tokenBalances: {},
+//         usdValues: {
+//           currentValue: extractedData.calculatedValue || 0,
+//         },
+//         prices: extractedData.prices || {},
+//       });
+
+//       // Schedule position monitoring (if auto-rebalance enabled)
+//       if (metadata.positionContext?.autoRebalance) {
+//         const jobQueue = new JobQueueService({ producerOnly: true });
+
+//         await jobQueue.enqueue(
+//           JOB_POSITION_MONITOR,
+//           {
+//             userId,
+//             positionId,
+//           },
+//           {
+//             repeat: { every: 60 * 60 * 1000 }, // Every hour
+//           }
+//         );
+//       }
+
+//       logger.info("[TxConfirmWorker] Position creation confirmed", {
+//         signature,
+//         positionId,
+//         positionAddress: extractedData.positionAddress,
+//       });
+//     } catch (error) {
+//       logger.error("[TxConfirmWorker] Failed to handle CREATE_POSITION", {
+//         error,
+//         signature,
+//         userId,
+//         positionAddress,
+//       });
+//       throw error;
+//     }
+//   }
+
+//   /**
+//    * Handle CLAIM_FEES confirmation
+//    */
+//   private async handleClaimFees(
+//     jobData: TransactionConfirmJobData,
+//     extractedData: ParsedTransactionData
+//   ): Promise<void> {
+//     const { signature, userId } = jobData;
+//     const metadata = extractedData.metadata;
+
+//     if (
+//       !extractedData.positionId ||
+//       !extractedData.tokenAAmount ||
+//       !extractedData.tokenBAmount
+//     ) {
+//       logger.error("[TxConfirmWorker] Missing required data for claim fees", {
+//         signature,
+//       });
+//       return;
+//     }
+
+//     // Convert claimed fees to SOL
+//     const solConversion = await this.convertFeesToSOL(
+//       userId,
+//       extractedData.tokenAAmount,
+//       extractedData.tokenBAmount,
+//       metadata.tokenAMint,
+//       metadata.tokenBMint,
+//       metadata.tokenADecimals,
+//       metadata.tokenBDecimals
+//     );
+
+//     // Calculate USD values
+//     const priceData = await this.priceService.getPrices([
+//       metadata.tokenAMint,
+//       metadata.tokenBMint,
+//       SOL_MINT,
+//     ]);
+
+//     const estimatedUsd = this.calculateEstimatedUSD(
+//       extractedData.tokenAAmount,
+//       extractedData.tokenBAmount,
+//       priceData[metadata.tokenAMint]?.price || 0,
+//       priceData[metadata.tokenBMint]?.price || 0
+//     );
+
+//     const claimedUsd =
+//       solConversion.success && (priceData[SOL_MINT]?.price ?? 0) > 0
+//         ? solConversion.solAmount.mul(priceData[SOL_MINT]!.price)
+//         : estimatedUsd;
+
+//     // Record claim in database
+//     await claimFeesPersistenceService.recordClaim({
+//       signature,
+//       context: { positionId: extractedData.positionId!, userId },
+//       claimed: {
+//         tokenXAmount: extractedData.tokenAAmount,
+//         tokenYAmount: extractedData.tokenBAmount,
+//         claimedUsdValue: claimedUsd.toFixed(2),
+//         tokenXPriceUsd: priceData[metadata.tokenAMint]?.price ?? 0,
+//         tokenYPriceUsd: priceData[metadata.tokenBMint]?.price ?? 0,
+//         solReceived: solConversion.solAmount.isZero()
+//           ? undefined
+//           : solConversion.solAmount.toDecimalPlaces(9).toString(),
+//       },
+//       prices: { solUsd: priceData[SOL_MINT]?.price ?? 0 },
+//       claimType: "manual",
+//     });
+
+//     logger.info("[TxConfirmWorker] Claim fees confirmed", {
+//       signature,
+//       positionId: extractedData.positionId,
+//       claimedUsd: claimedUsd,
+//     });
+//   }
+
+//   /**
+//    * Handle CLOSE_POSITION confirmation
+//    */
+//   private async handleClosePosition(
+//     jobData: TransactionConfirmJobData,
+//     extractedData: ParsedTransactionData
+//   ): Promise<void> {
+//     const { signature, userId } = jobData;
+//     const metadata = extractedData.metadata;
+
+//     if (
+//       !extractedData.positionId ||
+//       !extractedData.tokenAAmount ||
+//       !extractedData.tokenBAmount
+//     ) {
+//       logger.error(
+//         "[TxConfirmWorker] Missing required data for position close",
+//         { signature }
+//       );
+//       return;
+//     }
+
+//     // Convert all withdrawn tokens to SOL
+//     const solConversion = await this.convertWithdrawnTokensToSOL(
+//       userId,
+//       extractedData.tokenAAmount,
+//       extractedData.tokenBAmount,
+//       metadata.tokenAMint,
+//       metadata.tokenBMint,
+//       metadata.tokenADecimals,
+//       metadata.tokenBDecimals
+//     );
+
+//     // Calculate final USD values and PnL
+//     const priceData = await this.priceService.getPrices([
+//       metadata.tokenAMint,
+//       metadata.tokenBMint,
+//       SOL_MINT,
+//     ]);
+
+//     const finalValueUsd =
+//       solConversion.success && (priceData[SOL_MINT]?.price ?? 0) > 0
+//         ? solConversion.solAmount.mul(priceData[SOL_MINT]!.price)
+//         : 0;
+
+//     const initialValueUsd = await this.getPositionInitialValue(
+//       extractedData.positionId
+//     );
+//     const totalFeesClaimedUsd = await this.getPositionTotalFeesClaimed(
+//       extractedData.positionId
+//     );
+//     const totalPnlUsd = finalValueUsd - initialValueUsd + totalFeesClaimedUsd;
+//     const totalPnlPercentage =
+//       initialValueUsd > 0 ? (totalPnlUsd / initialValueUsd) * 100 : 0;
+
+//     // Record final position values
+//     await positionPersistenceService.updatePositionFinalValues({
+//       positionId: extractedData.positionId!,
+//       status: "CLOSED",
+//       closedAt: new Date(),
+//       closureSignature: signature,
+//       finalValueUSD: finalValueUsd,
+//       finalValueSOL: solConversion.solAmount.toDecimalPlaces(9).toString(),
+//       finalTokenXAmount: extractedData.tokenAAmount,
+//       finalTokenYAmount: extractedData.tokenBAmount,
+//       finalTokenXPriceUSD: priceData[metadata.tokenAMint]?.price ?? 0,
+//       finalTokenYPriceUSD: priceData[metadata.tokenBMint]?.price ?? 0,
+//       totalRealizedPnlUSD: totalPnlUsd,
+//     });
+
+//     // Close current segment
+//     await positionPersistenceService.closeSegment({
+//       positionId: extractedData.positionId!,
+//       segmentNumber: await this.getCurrentSegmentNumber(
+//         extractedData.positionId
+//       ),
+//       endTimestamp: new Date(),
+//       finalValueUSD: finalValueUsd,
+//       realizedPnlUSD: totalPnlUsd,
+//       closureReason: metadata.closureReason || "user_close",
+//     });
+
+//     // Record final fee claim if any
+//     if (solConversion.claimedFeesUsd > 0) {
+//       await claimFeesPersistenceService.recordClaim({
+//         signature,
+//         context: { positionId: extractedData.positionId!, userId },
+//         claimed: {
+//           claimedUsdValue: solConversion.claimedFeesUsd.toFixed(2),
+//           solReceived: solConversion.claimedFeesSol
+//             .toDecimalPlaces(9)
+//             .toString(),
+//         },
+//         prices: { solUsd: priceData[SOL_MINT]?.price ?? 0 },
+//         claimType: "closure",
+//       });
+//     }
+
+//     // Create closure snapshot
+//     await positionPersistenceService.createSnapshot({
+//       positionId: extractedData.positionId!,
+//       type: "closure",
+//       tokenBalances: {
+//         SOL: solConversion.solAmount.toDecimalPlaces(4).toString(),
+//       },
+//       usdValues: {
+//         currentValue: finalValueUsd,
+//         initialValue: initialValueUsd,
+//         pnlUsd: totalPnlUsd,
+//         totalFeesClaimed: totalFeesClaimedUsd,
+//       },
+//       prices: priceData,
+//     });
+
+//     logger.info("[TxConfirmWorker] Position closed", {
+//       signature,
+//       positionId: extractedData.positionId,
+//       finalValueUsd,
+//       totalPnlUsd,
+//       totalPnlPercentage,
+//     });
+//   }
+
+//   /**
+//    * Convert claimed fees to SOL
+//    */
+//   private async convertFeesToSOL(
+//     userId: string,
+//     tokenAAmount: string,
+//     tokenBAmount: string,
+//     tokenAMint: string,
+//     tokenBMint: string,
+//     tokenADecimals: number,
+//     tokenBDecimals: number
+//   ): Promise<SolConversionResult> {
+//     try {
+//       const priceData = await this.priceService.getPrices([
+//         tokenAMint,
+//         tokenBMint,
+//         SOL_MINT,
+//       ]);
+
+//       let solReceived = new Decimal(0);
+
+//       // Check for direct SOL fees
+//       if (tokenAMint === SOL_MINT) {
+//         solReceived = solReceived.add(lamportsToUi(tokenAAmount));
+//       }
+//       if (tokenBMint === SOL_MINT) {
+//         solReceived = solReceived.add(lamportsToUi(tokenBAmount));
+//       }
+
+//       // Swap non-SOL fees to SOL
+//       if (tokenAMint !== SOL_MINT && tokenAAmount !== "0") {
+//         const swapResult = await this.swapService.swapTokenToSol(
+//           userId,
+//           tokenAMint,
+//           BigInt(parseInt(tokenAAmount) * Math.pow(10, tokenADecimals))
+//         );
+//         if (swapResult.success) {
+//           solReceived = solReceived.add(swapResult.solAmount);
+//         } else {
+//           logger.warn("[TxConfirmWorker] Failed to swap token A to SOL", {
+//             token: tokenAMint,
+//             amount: tokenAAmount,
+//             error: swapResult.error,
+//           });
+//         }
+//       }
+
+//       if (tokenBMint !== SOL_MINT && tokenBAmount !== "0") {
+//         const swapResult = await this.swapService.swapTokenToSol(
+//           userId,
+//           tokenBMint,
+//           BigInt(parseInt(tokenBAmount) * Math.pow(10, tokenBDecimals))
+//         );
+//         if (swapResult.success) {
+//           solReceived = solReceived.add(swapResult.solAmount);
+//         } else {
+//           logger.warn("[TxConfirmWorker] Failed to swap token B to SOL", {
+//             token: tokenBMint,
+//             amount: tokenBAmount,
+//             error: swapResult.error,
+//           });
+//         }
+//       }
+
+//       const usdValue = solReceived.mul(priceData[SOL_MINT]?.price ?? 0);
+
+//       return {
+//         solAmount: solReceived,
+//         usdValue: usdValue.toNumber(),
+//         success: true,
+//       };
+//     } catch (error) {
+//       logger.error("[TxConfirmWorker] SOL conversion failed", { error });
+//       return {
+//         solAmount: new Decimal(0),
+//         usdValue: 0,
+//         success: false,
+//         error: error instanceof Error ? error.message : String(error),
+//       };
+//     }
+//   }
+
+//   /**
+//    * Convert withdrawn tokens to SOL
+//    */
+//   private async convertWithdrawnTokensToSOL(
+//     userId: string,
+//     tokenAAmount: string,
+//     tokenBAmount: string,
+//     tokenAMint: string,
+//     tokenBMint: string,
+//     tokenADecimals: number,
+//     tokenBDecimals: number
+//   ): Promise<SolConversionResult> {
+//     try {
+//       const priceData = await this.priceService.getPrices([
+//         tokenAMint,
+//         tokenBMint,
+//         SOL_MINT,
+//       ]);
+
+//       let solReceived = new Decimal(0);
+
+//       // Swap token A to SOL
+//       if (tokenAMint !== SOL_MINT && tokenAAmount !== "0") {
+//         const swapResult = await this.swapService.swapTokenToSol(
+//           userId,
+//           tokenAMint,
+//           BigInt(parseInt(tokenAAmount) * Math.pow(10, tokenADecimals))
+//         );
+//         if (swapResult.success) {
+//           solReceived = solReceived.add(swapResult.solAmount);
+//         } else {
+//           logger.warn("[TxConfirmWorker] Failed to swap token A to SOL", {
+//             token: tokenAMint,
+//             amount: tokenAAmount,
+//             error: swapResult.error,
+//           });
+//         }
+//       }
+
+//       // Swap token B to SOL
+//       if (tokenBMint !== SOL_MINT && tokenBAmount !== "0") {
+//         const swapResult = await this.swapService.swapTokenToSol(
+//           userId,
+//           tokenBMint,
+//           BigInt(parseInt(tokenBAmount) * Math.pow(10, tokenBDecimals))
+//         );
+//         if (swapResult.success) {
+//           solReceived = solReceived.add(swapResult.solAmount);
+//         } else {
+//           logger.warn("[TxConfirmWorker] Failed to swap token B to SOL", {
+//             token: tokenBMint,
+//             amount: tokenBAmount,
+//             error: swapResult.error,
+//           });
+//         }
+//       }
+
+//       // Handle direct SOL amounts
+//       if (tokenAMint === SOL_MINT) {
+//         solReceived = solReceived.add(lamportsToUi(tokenAAmount));
+//       }
+//       if (tokenBMint === SOL_MINT) {
+//         solReceived = solReceived.add(lamportsToUi(tokenBAmount));
+//       }
+
+//       const usdValue = solReceived.mul(priceData[SOL_MINT]?.price ?? 0);
+
+//       return {
+//         solAmount: solReceived,
+//         usdValue: usdValue.toNumber(),
+//         success: true,
+//       };
+//     } catch (error) {
+//       logger.error("[TxConfirmWorker] SOL conversion failed", { error });
+//       return {
+//         solAmount: new Decimal(0),
+//         usdValue: 0,
+//         success: false,
+//         error: error instanceof Error ? error.message : String(error),
+//       };
+//     }
+//   }
+
+//   /**
+//    * Calculate estimated USD value from token amounts
+//    */
+//   private calculateEstimatedUSD(
+//     tokenAAmount: string,
+//     tokenBAmount: string,
+//     tokenAPrice: number,
+//     tokenBPrice: number
+//   ): number {
+//     try {
+//       const tokenAValue = new Decimal(tokenAAmount || "0").mul(tokenAPrice);
+//       const tokenBValue = new Decimal(tokenBAmount || "0").mul(tokenBPrice);
+//       return tokenAValue.plus(tokenBValue).toNumber();
+//     } catch (error) {
+//       logger.error("Failed to calculate estimated USD", { error });
+//       return 0;
+//     }
+//   }
+
+//   /**
+//    * Get position initial value from database
+//    */
+//   private async getPositionInitialValue(positionId: string): Promise<number> {
+//     const position = await this.positionRepository.findById(positionId);
+//     return Number(position?.initialValueUSD || "0");
+//   }
+
+//   /**
+//    * Get position total fees claimed from database
+//    */
+//   private async getPositionTotalFeesClaimed(
+//     positionId: string
+//   ): Promise<number> {
+//     const position = await this.positionRepository.findById(positionId);
+//     return Number(position?.totalFeesClaimedUSD || "0");
+//   }
+
+//   /**
+//    * Get current segment number from database
+//    */
+//   private async getCurrentSegmentNumber(positionId: string): Promise<number> {
+//     const position = await this.positionRepository.findById(positionId);
+//     return Number(position?.currentSegmentNumber || 1);
+//   }
+// }
+
 import { Job } from "bullmq";
 import { IWorker } from "../worker-registry";
 import {
@@ -11,7 +754,6 @@ import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
 import { db, pendingTransactions, users, User } from "@/db";
 import { eq } from "drizzle-orm";
 import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
-// import { PositionCreationContext } from "@/application/position/create-position.use-case";
 import { positionPersistenceService } from "@/services/position-persistence.service";
 import { rebalancePersistenceService } from "@/services/rebalance-persistence.service";
 import { closePositionPersistenceService } from "@/services/close-position-persistence.service";
@@ -26,14 +768,14 @@ import {
 } from "@/utils/tx-parser";
 import { ClaimFeesContext, PositionClosureContext } from "@/application";
 import Decimal from "decimal.js";
-import { lamportsToUi } from "@/utils/math";
+// import { lamportsToUi } from "@/utils/math";
 import { Token } from "@/types/token.types";
 import {
   formatPercentage,
   formatPrice,
 } from "@/presentation/formatters/base.formatter";
 import { claimFeesPersistenceService } from "@/services/claim-fees-persistence.service";
-import { SOL_MINT } from "@/config/constants";
+import { MINIMAL_SOL_AMOUNT_IN_LAMPORTS, SOL_MINT } from "@/config/constants";
 import { SwapService } from "@/services/swap.service";
 import { RebalanceSessionMetadata } from "@/types/rebalance.types";
 import { container } from "@/infrastructure/di/container";
@@ -41,6 +783,11 @@ import {
   CreatePositionUseCase,
   PositionCreationContext,
 } from "@/application/position/create-position.use-case";
+import {
+  lamportsToSol,
+  rawToUiAmount,
+  solToLamports,
+} from "@/utils/number-utils";
 
 type CloseInstructionExtractionResult = {
   positionAddress?: string;
@@ -100,7 +847,6 @@ export class TransactionConfirmWorker
             .update(pendingTransactions)
             .set({
               status: "FAILED",
-              updatedAt: new Date(),
               errorMessage: "Timeout while waiting for confirmation",
             })
             .where(eq(pendingTransactions.signature, signature));
@@ -119,7 +865,6 @@ export class TransactionConfirmWorker
           .update(pendingTransactions)
           .set({
             status: "FAILED",
-            updatedAt: new Date(),
             errorMessage: JSON.stringify(status.err),
           })
           .where(eq(pendingTransactions.signature, signature));
@@ -130,7 +875,7 @@ export class TransactionConfirmWorker
       // Consider confirmed once confirmationStatus present and not "processed"
       await db
         .update(pendingTransactions)
-        .set({ status: "COMPLETED", updatedAt: new Date() })
+        .set({ status: "COMPLETED" })
         .where(eq(pendingTransactions.signature, signature));
 
       // Domain side-effects based on operation type
@@ -175,7 +920,6 @@ export class TransactionConfirmWorker
 
   /**
    * Handle CREATE_POSITION confirmation
-   * Parse transaction data and create DB records
    */
   private async handleCreatePosition(
     signature: string,
@@ -304,16 +1048,16 @@ export class TransactionConfirmWorker
         );
 
         if (tokenATransfer) {
-          actualTokenAAmount = lamportsToUi(
+          actualTokenAAmount = rawToUiAmount(
             tokenATransfer.amount,
             context.tokenA.decimals
-          );
+          ).toString();
         }
         if (tokenBTransfer) {
-          actualTokenBAmount = lamportsToUi(
+          actualTokenBAmount = rawToUiAmount(
             tokenBTransfer.amount,
             context.tokenB.decimals
-          );
+          ).toString();
         }
 
         logger.info(
@@ -334,17 +1078,19 @@ export class TransactionConfirmWorker
         upperBinId: undefined,
       };
 
-      const tokenMints = [context.tokenA.address, context.tokenB.address];
-      const solMint = SOL_MINT;
-      if (!tokenMints.includes(solMint)) {
-        tokenMints.push(solMint);
-      }
+      const tokenMints = new Set([
+        context.tokenA.address,
+        context.tokenB.address,
+        SOL_MINT,
+      ]);
 
-      const priceData = await this.priceService.getPrices(tokenMints);
+      const priceData = await this.priceService.getPrices(
+        Array.from(tokenMints)
+      );
       const prices = {
         tokenAUsd: priceData[context.tokenA.address]?.price ?? 0,
         tokenBUsd: priceData[context.tokenB.address]?.price ?? 0,
-        solUsd: priceData[solMint]?.price ?? 0,
+        solUsd: priceData[SOL_MINT]?.price ?? 0,
       };
 
       logger.info("[TxConfirmWorker] Fetched token prices", { prices });
@@ -364,13 +1110,15 @@ export class TransactionConfirmWorker
         return;
       }
 
-      const createdPositionId = await positionPersistenceService.createPosition({
-        signature,
-        positionAddress: effectivePositionAddress,
-        context,
-        onChainData,
-        prices,
-      });
+      const createdPositionId = await positionPersistenceService.createPosition(
+        {
+          signature,
+          positionAddress: effectivePositionAddress,
+          context,
+          onChainData,
+          prices,
+        }
+      );
 
       logger.info("[TxConfirmWorker] Position created in database", {
         positionId: createdPositionId,
@@ -459,8 +1207,6 @@ export class TransactionConfirmWorker
         return;
       }
 
-      const solMint = SOL_MINT;
-
       let effectivePositionId: string | undefined =
         positionId ?? claimContext.positionId ?? undefined;
       const effectiveUserId = claimContext.userId ?? userId;
@@ -544,15 +1290,15 @@ export class TransactionConfirmWorker
         positionAddress = onChainPositionAddress;
       }
 
-      const claimedFeesTokenADecimal = new Decimal(claimedFeesTokenA);
-      const claimedFeesTokenBDecimal = new Decimal(claimedFeesTokenB);
+      // const claimedFeesTokenADecimal = new Decimal(claimedFeesTokenA);
+      // const claimedFeesTokenBDecimal = new Decimal(claimedFeesTokenB);
 
       const priceMints = Array.from(
         new Set(
           [
             claimContext.tokenA.address,
             claimContext.tokenB.address,
-            solMint,
+            SOL_MINT,
           ].filter((mint) => mint && mint.length)
         )
       );
@@ -560,15 +1306,15 @@ export class TransactionConfirmWorker
       const priceData = await this.priceService.getPrices(priceMints);
       const tokenAPriceUsd = priceData[claimContext.tokenA.address]?.price ?? 0;
       const tokenBPriceUsd = priceData[claimContext.tokenB.address]?.price ?? 0;
-      const solPriceUsd = priceData[solMint]?.price ?? 0;
+      const solPriceUsd = priceData[SOL_MINT]?.price ?? 0;
 
       console.log("tokenAPriceUsd", tokenAPriceUsd);
       console.log("tokenBPriceUsd", tokenBPriceUsd);
       console.log("solPriceUsd", solPriceUsd);
 
-      const claimedUsdValue = claimedFeesTokenADecimal
+      const claimedUsdValue = new Decimal(claimedFeesTokenA)
         .mul(tokenAPriceUsd)
-        .add(claimedFeesTokenBDecimal.mul(tokenBPriceUsd));
+        .add(new Decimal(claimedFeesTokenB).mul(tokenBPriceUsd));
       console.log("claimedUsdValue", claimedUsdValue);
 
       let solReceivedDecimal = new Decimal(0);
@@ -668,9 +1414,9 @@ export class TransactionConfirmWorker
           userId: effectiveUserId,
         },
         claimed: {
-          tokenXAmount: claimedFeesTokenADecimal.toFixed(6),
-          tokenYAmount: claimedFeesTokenBDecimal.toFixed(6),
-          claimedUsdValue: claimedUsdValue.toFixed(6),
+          tokenXAmount: claimedFeesTokenA,
+          tokenYAmount: claimedFeesTokenB,
+          claimedUsdValue: claimedUsdValue.toString(),
           solReceived: solReceivedStr,
         },
         prices: {
@@ -732,83 +1478,6 @@ export class TransactionConfirmWorker
       throw error;
     }
   }
-
-  // private async swapTokenToSol(
-  //   user: User,
-  //   tokenMint: string,
-  //   rawAmount: bigint
-  // ): Promise<Decimal> {
-  //   if (!tokenMint || rawAmount <= 0n) {
-  //     return new Decimal(0);
-  //   }
-
-  //   if (tokenMint === SOL_MINT) {
-  //     return this.lamportsToSol(rawAmount);
-  //   }
-
-  //   if (!user.walletAddress || !user.walletId) {
-  //     logger.warn(
-  //       "[TxConfirmWorker] User missing wallet information for swap",
-  //       {
-  //         userId: user.id,
-  //       }
-  //     );
-  //     return new Decimal(0);
-  //   }
-
-  //   try {
-  //     const amountStr = rawAmount.toString();
-  //     const order = await jupiterService.getOrder({
-  //       inputMint: tokenMint,
-  //       outputMint: SOL_MINT,
-  //       amount: amountStr,
-  //       taker: user.walletAddress,
-  //     });
-
-  //     if (!order?.transaction) {
-  //       logger.warn("[TxConfirmWorker] Jupiter order missing transaction", {
-  //         tokenMint,
-  //         userId: user.id,
-  //       });
-  //       return new Decimal(0);
-  //     }
-
-  //     const swapTx = jupiterService.getOrderTransaction(order.transaction);
-  //     const { signedTransaction } = await WalletService.signTransaction(
-  //       user,
-  //       swapTx
-  //     );
-
-  //     const executeResult = await jupiterService.executeOrder({
-  //       requestId: order.requestId,
-  //       signedTransaction: Buffer.from(signedTransaction.serialize()).toString(
-  //         "base64"
-  //       ),
-  //     });
-
-  //     if (executeResult.status !== "Success") {
-  //       logger.warn("[TxConfirmWorker] Jupiter swap execution failed", {
-  //         tokenMint,
-  //         userId: user.id,
-  //         error: executeResult.error,
-  //       });
-  //       return new Decimal(0);
-  //     }
-
-  //     const outputLamports = new Decimal(
-  //       executeResult.outputAmountResult ?? "0"
-  //     );
-
-  //     return outputLamports.div(1_000_000_000);
-  //   } catch (error) {
-  //     logger.warn("[TxConfirmWorker] Jupiter swap failed", {
-  //       error,
-  //       tokenMint,
-  //       userId: user.id,
-  //     });
-  //     return new Decimal(0);
-  //   }
-  // }
 
   /**
    * Handle REBALANCE confirmation
@@ -878,7 +1547,7 @@ export class TransactionConfirmWorker
     session: RebalanceSessionMetadata;
     userId: string;
   }): Promise<void> {
-    const { signature, pendingTxId, metadata, session, userId } = params;
+    const { signature, pendingTxId, metadata, session } = params;
 
     const connection = this.solana.getConnection();
     const parsedTransaction = await connection.getParsedTransaction(signature, {
@@ -899,7 +1568,9 @@ export class TransactionConfirmWorker
         "[TxConfirmWorker] No Meteora instructions found in rebalance close transaction",
         { signature }
       );
-      throw new Error("Missing Meteora instructions in rebalance close transaction");
+      throw new Error(
+        "Missing Meteora instructions in rebalance close transaction"
+      );
     }
 
     const closeExtraction = this.extractCloseInstructionData(
@@ -939,12 +1610,12 @@ export class TransactionConfirmWorker
     }
 
     const closeSummary = {
-      withdrawnTokenA: withdrawnTokenALamports.toFixed(0),
-      withdrawnTokenB: withdrawnTokenBLamports.toFixed(0),
-      claimedFeesTokenA: claimedTokenALamports.toFixed(0),
-      claimedFeesTokenB: claimedTokenBLamports.toFixed(0),
-      totalTokenA: totalTokenALamports.toFixed(0),
-      totalTokenB: totalTokenBLamports.toFixed(0),
+      withdrawnTokenA: withdrawnTokenALamports.toString(),
+      withdrawnTokenB: withdrawnTokenBLamports.toString(),
+      claimedFeesTokenA: claimedTokenALamports.toString(),
+      claimedFeesTokenB: claimedTokenBLamports.toString(),
+      totalTokenA: totalTokenALamports.toString(),
+      totalTokenB: totalTokenBLamports.toString(),
       solFromTokenA: "0",
       solFromTokenB: "0",
       swapSignaturesToSol: {
@@ -969,12 +1640,13 @@ export class TransactionConfirmWorker
           }`
         );
       }
-      const solLamports = solReceived
-        .mul(1_000_000_000)
-        .toDecimalPlaces(0, Decimal.ROUND_DOWN);
-      closeSummary.solFromTokenA = solLamports.toFixed(0);
+      console.log("solReceived", solReceived);
+      // const solLamports = solReceived
+      //   .mul(1_000_000_000)
+      //   .toDecimalPlaces(0, Decimal.ROUND_DOWN);
+      closeSummary.solFromTokenA = solToLamports(solReceived).toString();
       closeSummary.swapSignaturesToSol.tokenA = result.signature;
-      solFromALamports = solLamports;
+      solFromALamports = new Decimal(closeSummary.solFromTokenA);
     }
 
     if (totalTokenBLamports.gt(0)) {
@@ -990,12 +1662,13 @@ export class TransactionConfirmWorker
           }`
         );
       }
-      const solLamports = solReceived
-        .mul(1_000_000_000)
-        .toDecimalPlaces(0, Decimal.ROUND_DOWN);
-      closeSummary.solFromTokenB = solLamports.toFixed(0);
+      console.log("solReceived", solReceived);
+      // const solLamports = solReceived
+      //   .mul(1_000_000_000)
+      //   .toDecimalPlaces(0, Decimal.ROUND_DOWN);
+      closeSummary.solFromTokenB = solToLamports(solReceived).toString();
       closeSummary.swapSignaturesToSol.tokenB = result.signature;
-      solFromBLamports = solLamports;
+      solFromBLamports = new Decimal(closeSummary.solFromTokenB);
     }
 
     const totalSolLamports = solFromALamports
@@ -1009,7 +1682,7 @@ export class TransactionConfirmWorker
 
     const reserveLamports = Decimal.min(
       totalSolLamports,
-      new Decimal(2_000_000)
+      new Decimal(MINIMAL_SOL_AMOUNT_IN_LAMPORTS)
     ).toDecimalPlaces(0, Decimal.ROUND_DOWN);
     const usableLamportsRaw = totalSolLamports.sub(reserveLamports);
     if (usableLamportsRaw.lte(0)) {
@@ -1027,10 +1700,10 @@ export class TransactionConfirmWorker
     const otherHalfLamports = usableLamports.sub(halfLamports);
 
     const conversions = {
-      solBudgetLamports: usableLamports.toFixed(0),
-      reserveLamports: reserveLamports.toFixed(0),
-      solForTokenALamports: halfLamports.toFixed(0),
-      solForTokenBLamports: otherHalfLamports.toFixed(0),
+      solBudgetLamports: usableLamports.toString(),
+      reserveLamports: reserveLamports.toString(),
+      solForTokenALamports: halfLamports.toString(),
+      solForTokenBLamports: otherHalfLamports.toString(),
       solToTokenSignatures: {
         tokenA: undefined as string | undefined,
         tokenB: undefined as string | undefined,
@@ -1041,15 +1714,12 @@ export class TransactionConfirmWorker
     if (session.tokenA.address === SOL_MINT) {
       purchasedTokenALamports = halfLamports;
     } else {
-      const solInput = halfLamports
-        .div(1_000_000_000)
-        .toDecimalPlaces(9, Decimal.ROUND_DOWN)
-        .toString();
-      const { result, tokenAmountLamports } = await this.swapService.swapSolToToken(
-        userRecord,
-        session.tokenA.address,
-        solInput
-      );
+      const { result, tokenAmountLamports } =
+        await this.swapService.swapSolToToken(
+          userRecord,
+          session.tokenA.address,
+          lamportsToSol(halfLamports.toString()).toString()
+        );
       if (!result.success) {
         throw new Error(
           `Failed to convert SOL to ${session.tokenA.symbol ?? "Token A"}: ${
@@ -1065,15 +1735,12 @@ export class TransactionConfirmWorker
     if (session.tokenB.address === SOL_MINT) {
       purchasedTokenBLamports = otherHalfLamports;
     } else {
-      const solInput = otherHalfLamports
-        .div(1_000_000_000)
-        .toDecimalPlaces(9, Decimal.ROUND_DOWN)
-        .toString();
-      const { result, tokenAmountLamports } = await this.swapService.swapSolToToken(
-        userRecord,
-        session.tokenB.address,
-        solInput
-      );
+      const { result, tokenAmountLamports } =
+        await this.swapService.swapSolToToken(
+          userRecord,
+          session.tokenB.address,
+          lamportsToSol(otherHalfLamports.toString()).toString()
+        );
       if (!result.success) {
         throw new Error(
           `Failed to convert SOL to ${session.tokenB.symbol ?? "Token B"}: ${
@@ -1086,7 +1753,9 @@ export class TransactionConfirmWorker
     }
 
     if (purchasedTokenALamports.lte(0) || purchasedTokenBLamports.lte(0)) {
-      throw new Error("Insufficient token amounts after SOL conversions to recreate position");
+      throw new Error(
+        "Insufficient token amounts after SOL conversions to recreate position"
+      );
     }
 
     const purchases = {
@@ -1094,21 +1763,23 @@ export class TransactionConfirmWorker
       tokenBLamports: purchasedTokenBLamports.toFixed(0),
     };
 
-    const tokenADecimals = session.tokenA.decimals ?? 6;
-    const tokenBDecimals = session.tokenB.decimals ?? 6;
+    const tokenADecimals = session.tokenA.decimals;
+    const tokenBDecimals = session.tokenB.decimals;
 
-    const tokenAUi = purchasedTokenALamports
-      .div(new Decimal(10).pow(tokenADecimals))
-      .toDecimalPlaces(tokenADecimals, Decimal.ROUND_DOWN)
-      .toString();
-    const tokenBUi = purchasedTokenBLamports
-      .div(new Decimal(10).pow(tokenBDecimals))
-      .toDecimalPlaces(tokenBDecimals, Decimal.ROUND_DOWN)
-      .toString();
+    const tokenAUi = rawToUiAmount(
+      purchasedTokenALamports.toString(),
+      tokenADecimals
+    ).toString();
+    const tokenBUi = rawToUiAmount(
+      purchasedTokenBLamports.toString(),
+      tokenBDecimals
+    ).toString();
 
     const createUseCase = container.get(CreatePositionUseCase);
     const createResult = await createUseCase.execute({
-      user: userRecord,
+      userId: userRecord.id,
+      walletId: userRecord.walletId,
+      walletAddress: userRecord.walletAddress,
       dex: session.dex,
       poolAddress: session.poolAddress,
       tokenA: session.tokenA,
@@ -1133,8 +1804,7 @@ export class TransactionConfirmWorker
 
     if (!createResult.success || !createResult.signature) {
       throw new Error(
-        createResult.error ||
-          "Failed to submit rebalance creation transaction"
+        createResult.error || "Failed to submit rebalance creation transaction"
       );
     }
 
@@ -1156,14 +1826,17 @@ export class TransactionConfirmWorker
 
     await db
       .update(pendingTransactions)
-      .set({ metadata: updatedMetadata, updatedAt: new Date() })
+      .set({ metadata: updatedMetadata })
       .where(eq(pendingTransactions.id, pendingTxId));
 
-    logger.info("[TxConfirmWorker] Rebalance close processed; creation submitted", {
-      signature,
-      sessionId: session.sessionId,
-      createSignature: createResult.signature,
-    });
+    logger.info(
+      "[TxConfirmWorker] Rebalance close processed; creation submitted",
+      {
+        signature,
+        sessionId: session.sessionId,
+        createSignature: createResult.signature,
+      }
+    );
   }
 
   private async finalizeRebalanceCreation(params: {
@@ -1198,16 +1871,16 @@ export class TransactionConfirmWorker
     }
 
     const claimedFeesXUi = session.closeSummary?.claimedFeesTokenA
-      ? lamportsToUi(
+      ? rawToUiAmount(
           session.closeSummary.claimedFeesTokenA,
-          session.tokenA.decimals ?? 6
-        )
+          session.tokenA.decimals
+        ).toString()
       : undefined;
     const claimedFeesYUi = session.closeSummary?.claimedFeesTokenB
-      ? lamportsToUi(
+      ? rawToUiAmount(
           session.closeSummary.claimedFeesTokenB,
-          session.tokenB.decimals ?? 6
-        )
+          session.tokenB.decimals
+        ).toString()
       : undefined;
 
     const onChainData = {
@@ -1277,7 +1950,7 @@ export class TransactionConfirmWorker
 
     await db
       .update(pendingTransactions)
-      .set({ metadata: updatedMetadata, updatedAt: new Date() })
+      .set({ metadata: updatedMetadata })
       .where(eq(pendingTransactions.signature, signature));
 
     logger.info("[TxConfirmWorker] Rebalance creation finalized", {
@@ -1337,7 +2010,7 @@ export class TransactionConfirmWorker
         return;
       }
 
-      let instructionData: CloseInstructionExtractionResult | undefined;
+      let instructionData: any | undefined;
       try {
         const connection = this.solana.getConnection();
         const parsedTransaction = await connection.getParsedTransaction(
@@ -1520,12 +2193,8 @@ export class TransactionConfirmWorker
     instructions: MeteoraDlmmInstruction[],
     tokenA: Token,
     tokenB: Token
-  ): CloseInstructionExtractionResult {
+  ) {
     const removeTotals = {
-      tokenA: new Decimal(0),
-      tokenB: new Decimal(0),
-    };
-    const removeTotalsLamports = {
       tokenA: new Decimal(0),
       tokenB: new Decimal(0),
     };
@@ -1533,14 +2202,10 @@ export class TransactionConfirmWorker
       tokenA: new Decimal(0),
       tokenB: new Decimal(0),
     };
-    const claimTotalsLamports = {
-      tokenA: new Decimal(0),
-      tokenB: new Decimal(0),
-    };
 
-    let removeInstructionCount = 0;
-    let claimInstructionCount = 0;
-    let closeInstructionCount = 0;
+    // let removeInstructionCount = 0;
+    // let claimInstructionCount = 0;
+    // let closeInstructionCount = 0;
     let positionAddr: string | undefined;
 
     for (const instruction of instructions) {
@@ -1548,13 +2213,13 @@ export class TransactionConfirmWorker
         positionAddr = instruction.accounts.position;
       }
 
-      if (instruction.instructionType === "remove") {
-        removeInstructionCount += 1;
-      } else if (instruction.instructionType === "claim") {
-        claimInstructionCount += 1;
-      } else if (instruction.instructionType === "close") {
-        closeInstructionCount += 1;
-      }
+      // if (instruction.instructionType === "remove") {
+      //   removeInstructionCount += 1;
+      // } else if (instruction.instructionType === "claim") {
+      //   claimInstructionCount += 1;
+      // } else if (instruction.instructionType === "close") {
+      //   closeInstructionCount += 1;
+      // }
 
       if (
         instruction.instructionType !== "remove" &&
@@ -1572,27 +2237,23 @@ export class TransactionConfirmWorker
           const amountLamports = new Decimal(transfer.amount);
           if (instruction.instructionType === "remove") {
             removeTotals.tokenA = removeTotals.tokenA.add(amountLamports);
-            removeTotalsLamports.tokenA = removeTotalsLamports.tokenA.add(
-              amountLamports
-            );
+            // removeTotalsLamports.tokenA =
+            // removeTotalsLamports.tokenA.add(amountLamports);
           } else {
             claimTotals.tokenA = claimTotals.tokenA.add(amountLamports);
-            claimTotalsLamports.tokenA = claimTotalsLamports.tokenA.add(
-              amountLamports
-            );
+            // claimTotalsLamports.tokenA =
+            // claimTotalsLamports.tokenA.add(amountLamports);
           }
         } else if (transfer.mint === tokenB.address) {
           const amountLamports = new Decimal(transfer.amount);
           if (instruction.instructionType === "remove") {
             removeTotals.tokenB = removeTotals.tokenB.add(amountLamports);
-            removeTotalsLamports.tokenB = removeTotalsLamports.tokenB.add(
-              amountLamports
-            );
+            // removeTotalsLamports.tokenB =
+            // removeTotalsLamports.tokenB.add(amountLamports);
           } else {
             claimTotals.tokenB = claimTotals.tokenB.add(amountLamports);
-            claimTotalsLamports.tokenB = claimTotalsLamports.tokenB.add(
-              amountLamports
-            );
+            // claimTotalsLamports.tokenB =
+            // claimTotalsLamports.tokenB.add(amountLamports);
           }
         }
       }
@@ -1600,41 +2261,44 @@ export class TransactionConfirmWorker
 
     return {
       positionAddress: positionAddr,
-      finalTokenAAmount:
-        removeInstructionCount > 0
-          ? lamportsToUi(removeTotals.tokenA.toString(), tokenA.decimals)
-          : undefined,
-      finalTokenBAmount:
-        removeInstructionCount > 0
-          ? lamportsToUi(removeTotals.tokenB.toString(), tokenB.decimals)
-          : undefined,
-      finalTokenAAmountLamports:
-        removeInstructionCount > 0
-          ? removeTotalsLamports.tokenA.toFixed(0)
-          : undefined,
-      finalTokenBAmountLamports:
-        removeInstructionCount > 0
-          ? removeTotalsLamports.tokenB.toFixed(0)
-          : undefined,
-      claimedFeesTokenA:
-        claimInstructionCount > 0
-          ? lamportsToUi(claimTotals.tokenA.toString(), tokenA.decimals)
-          : undefined,
-      claimedFeesTokenB:
-        claimInstructionCount > 0
-          ? lamportsToUi(claimTotals.tokenB.toString(), tokenB.decimals)
-          : undefined,
-      claimedFeesTokenALamports:
-        claimInstructionCount > 0
-          ? claimTotalsLamports.tokenA.toFixed(0)
-          : undefined,
-      claimedFeesTokenBLamports:
-        claimInstructionCount > 0
-          ? claimTotalsLamports.tokenB.toFixed(0)
-          : undefined,
-      removeInstructionCount,
-      claimInstructionCount,
-      closeInstructionCount,
+      finalTokenAAmount: rawToUiAmount(
+        removeTotals.tokenA.toString(),
+        tokenA.decimals
+      ).toString(),
+      finalTokenBAmount: rawToUiAmount(
+        removeTotals.tokenB.toString(),
+        tokenB.decimals
+      ).toString(),
+      finalTokenAAmountLamports: removeTotals.tokenA.toString(),
+      finalTokenBAmountLamports: removeTotals.tokenB.toString(),
+      //   removeInstructionCount > 0
+      //     ? removeTotalsLamports.tokenA.toFixed(0)
+      //     : undefined,
+      // finalTokenBAmountLamports:
+      //   removeInstructionCount > 0
+      //     ? removeTotalsLamports.tokenB.toFixed(0)
+      //     : undefined,
+      claimedFeesTokenA: rawToUiAmount(
+        claimTotals.tokenA.toString(),
+        tokenA.decimals
+      ).toString(),
+      claimedFeesTokenB: rawToUiAmount(
+        claimTotals.tokenB.toString(),
+        tokenB.decimals
+      ).toString(),
+      claimedFeesTokenALamports: claimTotals.tokenA.toString(),
+      claimedFeesTokenBLamports: claimTotals.tokenB.toString(),
+      // claimedFeesTokenALamports:
+      //   claimInstructionCount > 0
+      //     ? claimTotalsLamports.tokenA.toFixed(0)
+      //     : undefined,
+      // claimedFeesTokenBLamports:
+      //   claimInstructionCount > 0
+      //     ? claimTotalsLamports.tokenB.toFixed(0)
+      //     : undefined,
+      // removeInstructionCount,
+      // claimInstructionCount,
+      // closeInstructionCount,
     };
   }
 
@@ -1673,8 +2337,14 @@ export class TransactionConfirmWorker
 
     return {
       positionAddress: positionAddr,
-      claimedFeesTokenA: lamportsToUi(claimTotals.tokenA.toString(), 9),
-      claimedFeesTokenB: lamportsToUi(claimTotals.tokenB.toString(), 9),
+      claimedFeesTokenA: rawToUiAmount(
+        claimTotals.tokenA.toString(),
+        tokenA.decimals
+      ).toString(),
+      claimedFeesTokenB: rawToUiAmount(
+        claimTotals.tokenB.toString(),
+        tokenB.decimals
+      ).toString(),
     };
   }
 }

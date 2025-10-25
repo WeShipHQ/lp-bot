@@ -239,6 +239,76 @@ export class WalletService {
     return result;
   }
 
+  static async signAndSendTransactionWithJitoV2(
+    walletId: string,
+    userWalletAddress: string,
+    instructions: TransactionInstruction[],
+    signers: Signer[] = [],
+    lookupTables: AddressLookupTableAccount[] = [],
+    options: CreateSmartTransactionOptions = {}
+  ): Promise<string> {
+    console.log(
+      `[Wallet] Starting signAndSendTransaction for user ${userWalletAddress}`
+    );
+
+    const connection = new Connection(CONFIG.SOLANA.RPC_URL);
+    const payer = new PublicKey(userWalletAddress);
+
+    // const { transaction } = await createSmartTransaction(
+    //   connection,
+    //   instructions,
+    //   payer,
+    //   signers,
+    //   lookupTables,
+    //   options
+    // );
+
+    // const tipAmount = 1_000_000; // 100k microLamports = 0.0001 SOL
+    // const { transaction, blockhash } = await createSmartTransactionWithTip(
+    //   connection,
+    //   instructions,
+    //   payer,
+    //   signers,
+    //   lookupTables,
+    //   tipAmount,
+    //   options
+    // );
+
+    const filteredIxs = instructions.filter(
+      (ix) => !ix.programId.equals(ComputeBudgetProgram.programId)
+    );
+
+    const { transaction, blockhash } = await createTransactionSender(
+      connection,
+      filteredIxs,
+      payer,
+      signers
+    );
+
+    const { signedTransaction } = await privy.walletApi.solana.signTransaction({
+      walletId: walletId,
+      transaction: transaction,
+    });
+
+    // const result = await broadcastTransaction(connection, signedTransaction);
+    // const result = await sendSmartTransactionWithTip(
+    //   connection,
+    //   signedTransaction,
+    //   blockhash,
+    //   "NY"
+    // );
+
+    const result = await sendWithRetry(
+      signedTransaction,
+      connection,
+      blockhash.lastValidBlockHeight
+    );
+
+    console.log("Sign message result:", result);
+
+    return result;
+  }
+
   static async signTransaction(
     user: User,
     transaction: Transaction | VersionedTransaction
