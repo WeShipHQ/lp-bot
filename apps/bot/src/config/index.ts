@@ -26,6 +26,11 @@ export const CONFIG = {
     HELIUS_API_KEY: process.env.HELIUS_API_KEY || "",
   },
 
+  SANCTUM: {
+    API_KEY: process.env.SANCTUM_API_KEY || "",
+    ENABLED: process.env.SANCTUM_ENABLED === "true",
+  },
+
   REDIS: {
     URL: process.env.REDIS_URL || "redis://localhost:6379",
   },
@@ -39,6 +44,7 @@ export const {
   DATABASE_URL,
   TELEGRAM,
   SOLANA,
+  SANCTUM,
   REDIS,
   LOG_LEVEL,
 } = CONFIG;

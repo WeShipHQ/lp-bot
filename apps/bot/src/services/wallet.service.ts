@@ -23,6 +23,7 @@ import {
   sendSmartTransactionWithTip,
   sendWithRetry,
 } from "@/utils/build-tx";
+import { SanctumGatewayService, SanctumGatewayOptions } from "./sanctum-gateway.service";
 
 export interface WalletExportResult {
   privateKey: string;
@@ -317,5 +318,90 @@ export class WalletService {
       walletId: user.walletId,
       transaction: transaction,
     });
+  }
+
+  /**
+   * Sign and send transaction using Sanctum Gateway
+   * Provides higher reliability and better transaction landing rates
+   */
+  static async signAndSendTransactionWithGateway(
+    user: User,
+    instructions: TransactionInstruction[],
+    signers: Signer[] = [],
+    lookupTables: AddressLookupTableAccount[] = [],
+    options: CreateSmartTransactionOptions = {},
+    gatewayOptions: SanctumGatewayOptions = {}
+  ): Promise<string> {
+    console.log(`[Wallet] Starting signAndSendTransactionWithGateway for user ${user.id}`);
+
+    if (!CONFIG.SANCTUM.API_KEY || !CONFIG.SANCTUM.ENABLED) {
+      console.warn("[Wallet] Sanctum Gateway not configured, falling back to standard method");
+      return this.signAndSendTransaction(user, instructions, signers, lookupTables, options);
+    }
+
+    const connection = new Connection(CONFIG.SOLANA.RPC_URL);
+    const payer = new PublicKey(user.walletAddress!);
+
+    try {
+      // Build and send through Gateway
+      const signature = await SanctumGatewayService.buildAndSendTransaction(
+        connection,
+        instructions,
+        payer,
+        signers,
+        lookupTables,
+        options,
+        gatewayOptions
+      );
+
+      console.log(`[Wallet] Gateway transaction sent: ${signature}`);
+      return signature;
+    } catch (error) {
+      console.error("[Wallet] Gateway transaction failed, falling back to standard method:", error);
+      // Fallback to standard method on Gateway failure
+      return this.signAndSendTransaction(user, instructions, signers, lookupTables, options);
+    }
+  }
+
+  /**
+   * Sign transaction and send via Sanctum Gateway (for pre-built transactions)
+   */
+  static async signAndSendViaGateway(
+    user: User,
+    transaction: Transaction | VersionedTransaction,
+    options: SanctumGatewayOptions = {}
+  ): Promise<string> {
+    console.log(`[Wallet] Starting signAndSendViaGateway for user ${user.id}`);
+
+    if (!CONFIG.SANCTUM.API_KEY || !CONFIG.SANCTUM.ENABLED) {
+      console.warn("[Wallet] Sanctum Gateway not configured, falling back to standard method");
+      const { signedTransaction } = await this.signTransaction(user, transaction);
+      return broadcastTransaction(new Connection(CONFIG.SOLANA.RPC_URL), signedTransaction);
+    }
+
+    try {
+      // Sign the transaction
+      const { signedTransaction } = await this.signTransaction(user, transaction);
+
+      // Send via Gateway
+      const signature = await SanctumGatewayService.sendTransaction(signedTransaction);
+
+      console.log(`[Wallet] Gateway transaction sent: ${signature}`);
+      return signature;
+    } catch (error) {
+      console.error("[Wallet] Gateway transaction failed, falling back to standard method:", error);
+      // Fallback to standard method on Gateway failure
+      const { signedTransaction } = await this.signTransaction(user, transaction);
+      return broadcastTransaction(new Connection(CONFIG.SOLANA.RPC_URL), signedTransaction);
+    }
+  }
+
+  /**
+   * Check if Sanctum Gateway is healthy and configured
+   */
+  static async isGatewayAvailable(): Promise<boolean> {
+    return CONFIG.SANCTUM.ENABLED && 
+           CONFIG.SANCTUM.API_KEY && 
+           await SanctumGatewayService.isHealthy();
   }
 }
