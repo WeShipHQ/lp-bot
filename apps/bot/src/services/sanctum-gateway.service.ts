@@ -8,15 +8,7 @@ import {
 } from "@solana/web3.js";
 import { CONFIG } from "@/config";
 import { CreateSmartTransactionOptions } from "@/types/transaction.types";
-import { 
-  createSmartTransaction,
-  type SmartTransactionContext,
-} from "@/utils/build-tx";
-
-/**
- * Sanctum Gateway configuration and service for optimized transaction delivery
- * Documentation: https://docs.sanctum.so/gateway
- */
+import { createSmartTransaction } from "@/utils/build-tx";
 
 export interface SanctumGatewayOptions {
   /** Override project-level CU price range */
@@ -34,7 +26,7 @@ export interface SanctumGatewayOptions {
 }
 
 export interface SanctumGatewayResponse {
-  transaction: string; // base64 encoded optimized transaction
+  transaction: string;
   latestBlockhash: {
     blockhash: string;
     lastValidBlockHeight: string;
@@ -44,7 +36,7 @@ export interface SanctumGatewayResponse {
 export interface SanctumSendResponse {
   jsonrpc: "2.0";
   id: string;
-  result?: string; // Transaction signature
+  result?: string;
   error?: {
     code: number;
     message: string;
@@ -61,10 +53,6 @@ export class SanctumGatewayService {
     "77N86XfcBSAvcGNPYMAVjjyf2feUJwmUoiJ96HzPtySd",
   ];
 
-  /**
-   * Build transaction using Sanctum Gateway optimization
-   * This handles simulation, priority fees, and tip instructions automatically
-   */
   static async buildGatewayTransaction(
     connection: Connection,
     instructions: TransactionInstruction[],
@@ -79,52 +67,71 @@ export class SanctumGatewayService {
   }> {
     console.log(`[SanctumGateway] Building optimized transaction`);
 
-    // 1. Create initial transaction without compute budget
     const { transaction: baseTransaction } = await createSmartTransaction(
       connection,
-      instructions.filter(ix => !ix.programId.toString().startsWith("ComputeBudget11111111111111111111111111111")),
+      instructions.filter(
+        (ix) =>
+          !ix.programId
+            .toString()
+            .startsWith("ComputeBudget11111111111111111111111111111")
+      ),
       payer,
       signers,
       lookupTables,
       {
         ...options,
-        // We'll let Gateway handle compute budget
       }
     );
 
-    // 2. Convert to base64 for Gateway API
-    const base64Tx = Buffer.from(baseTransaction.serialize()).toString('base64');
+    const base64Tx = Buffer.from(
+      baseTransaction.serialize({
+        verifySignatures: false,
+        requireAllSignatures: false,
+      })
+    ).toString("base64");
 
-    // 3. Call Gateway buildTransaction API
-    const response = await fetch(`${this.GATEWAY_BASE_URL}/v1/${CONFIG.SOLANA.NETWORK}?apiKey=${CONFIG.SANCTUM.API_KEY}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        id: `build-${Date.now()}`,
-        jsonrpc: "2.0",
-        method: "buildGatewayTransaction",
-        params: [
-          base64Tx,
-          {
-            encoding: "base64",
-            skipSimulation: gatewayOptions.skipSimulation || false,
-            skipPriorityFee: gatewayOptions.skipPriorityFee || false,
-            cuPriceRange: gatewayOptions.cuPriceRange,
-            jitoTipRange: gatewayOptions.jitoTipRange,
-            expireInSlots: gatewayOptions.expireInSlots,
-            deliveryMethodType: gatewayOptions.deliveryMethodType,
-          },
-        ],
-      }),
-    });
+    const response = await fetch(
+      `${this.GATEWAY_BASE_URL}/v1/${CONFIG.SOLANA.NETWORK}?apiKey=${CONFIG.SANCTUM.API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: `build-${Date.now()}`,
+          jsonrpc: "2.0",
+          method: "buildGatewayTransaction",
+          params: [
+            base64Tx,
+            // {
+            //   encoding: "base64",
+            //   skipSimulation: gatewayOptions.skipSimulation || false,
+            //   skipPriorityFee: gatewayOptions.skipPriorityFee || false,
+            //   ...(gatewayOptions.cuPriceRange
+            //     ? { cuPriceRange: gatewayOptions.cuPriceRange }
+            //     : {}),
+            //   ...(gatewayOptions.jitoTipRange
+            //     ? { jitoTipRange: gatewayOptions.jitoTipRange }
+            //     : {}),
+            //   ...(gatewayOptions.expireInSlots
+            //     ? { expireInSlots: gatewayOptions.expireInSlots }
+            //     : {}),
+            //   ...(gatewayOptions.deliveryMethodType
+            //     ? { deliveryMethodType: gatewayOptions.deliveryMethodType }
+            //     : {}),
+            // },
+          ],
+        }),
+      }
+    );
 
     if (!response.ok) {
-      throw new Error(`Gateway build failed: ${response.status} ${await response.text()}`);
+      throw new Error(
+        `Gateway build failed: ${response.status} ${await response.text()}`
+      );
     }
 
-    const data = await response.json() as { 
+    const data = (await response.json()) as {
       result?: SanctumGatewayResponse;
       error?: any;
     };
@@ -133,12 +140,10 @@ export class SanctumGatewayService {
       throw new Error(`Gateway build error: ${JSON.stringify(data.error)}`);
     }
 
-    // 4. Decode the optimized transaction
     const optimizedTx = VersionedTransaction.deserialize(
-      Buffer.from(data.result.transaction, 'base64')
+      Buffer.from(data.result.transaction, "base64")
     );
 
-    // 5. Sign the optimized transaction
     if (signers.length > 0) {
       optimizedTx.sign(signers);
     }
@@ -147,50 +152,57 @@ export class SanctumGatewayService {
       transaction: optimizedTx,
       latestBlockhash: {
         blockhash: data.result.latestBlockhash.blockhash,
-        lastValidBlockHeight: parseInt(data.result.latestBlockhash.lastValidBlockHeight),
+        lastValidBlockHeight: parseInt(
+          data.result.latestBlockhash.lastValidBlockHeight
+        ),
       },
     };
   }
 
-  /**
-   * Send signed transaction through Sanctum Gateway
-   * Gateway handles delivery method routing and optimization
-   */
   static async sendTransaction(
     signedTransaction: Transaction | VersionedTransaction,
     startSlot?: number
   ): Promise<string> {
     console.log(`[SanctumGateway] Sending transaction via Gateway`);
 
-    const base64Tx = Buffer.from(signedTransaction.serialize()).toString('base64');
+    const base64Tx = Buffer.from(signedTransaction.serialize()).toString(
+      "base64"
+    );
 
-    const response = await fetch(`${this.GATEWAY_BASE_URL}/v1/${CONFIG.SOLANA.NETWORK}?apiKey=${CONFIG.SANCTUM.API_KEY}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        id: `send-${Date.now()}`,
-        jsonrpc: "2.0",
-        method: "sendTransaction",
-        params: [
-          base64Tx,
-          {
-            encoding: "base64",
-            startSlot,
-          },
-        ],
-      }),
-    });
+    const response = await fetch(
+      `${this.GATEWAY_BASE_URL}/v1/${CONFIG.SOLANA.NETWORK}?apiKey=${CONFIG.SANCTUM.API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: `send-${Date.now()}`,
+          jsonrpc: "2.0",
+          method: "sendTransaction",
+          params: [
+            base64Tx,
+            {
+              encoding: "base64",
+              startSlot,
+            },
+          ],
+        }),
+      }
+    );
 
     if (!response.ok) {
-      throw new Error(`Gateway send failed: ${response.status} ${await response.text()}`);
+      throw new Error(
+        `Gateway send failed: ${response.status} ${await response.text()}`
+      );
     }
 
-    const data = await response.json() as SanctumSendResponse;
+    const data = (await response.json()) as SanctumSendResponse;
 
     if (data.error) {
-      throw new Error(`Gateway send error: ${data.error.message} (code: ${data.error.code})`);
+      throw new Error(
+        `Gateway send error: ${data.error.message} (code: ${data.error.code})`
+      );
     }
 
     if (!data.result) {
@@ -201,9 +213,6 @@ export class SanctumGatewayService {
     return data.result;
   }
 
-  /**
-   * Complete flow: Build and send transaction through Gateway
-   */
   static async buildAndSendTransaction(
     connection: Connection,
     instructions: TransactionInstruction[],
@@ -213,7 +222,6 @@ export class SanctumGatewayService {
     options: CreateSmartTransactionOptions = {},
     gatewayOptions: SanctumGatewayOptions = {}
   ): Promise<string> {
-    // Build optimized transaction
     const { transaction, latestBlockhash } = await this.buildGatewayTransaction(
       connection,
       instructions,
@@ -224,41 +232,41 @@ export class SanctumGatewayService {
       gatewayOptions
     );
 
-    // Send through Gateway
     return this.sendTransaction(transaction);
   }
 
-  /**
-   * Get tip instructions for manual transaction building
-   * Use this if you want to build transactions manually but need Gateway tip instructions
-   */
   static async getTipInstructions(
     feePayer: PublicKey,
     gatewayOptions: SanctumGatewayOptions = {}
   ): Promise<TransactionInstruction[]> {
     console.log(`[SanctumGateway] Getting tip instructions`);
 
-    const response = await fetch(`${this.GATEWAY_BASE_URL}/v1/${CONFIG.SOLANA.NETWORK}?apiKey=${CONFIG.SANCTUM.API_KEY}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        id: `tip-${Date.now()}`,
-        jsonrpc: "2.0",
-        method: "getTipInstructions",
-        params: [
-          {
-            feePayer: feePayer.toBase58(),
-            jitoTipRange: gatewayOptions.jitoTipRange,
-            deliveryMethodType: gatewayOptions.deliveryMethodType,
-          },
-        ],
-      }),
-    });
+    const response = await fetch(
+      `${this.GATEWAY_BASE_URL}/v1/${CONFIG.SOLANA.NETWORK}?apiKey=${CONFIG.SANCTUM.API_KEY}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: `tip-${Date.now()}`,
+          jsonrpc: "2.0",
+          method: "getTipInstructions",
+          params: [
+            {
+              feePayer: feePayer.toBase58(),
+              jitoTipRange: gatewayOptions.jitoTipRange,
+              deliveryMethodType: gatewayOptions.deliveryMethodType,
+            },
+          ],
+        }),
+      }
+    );
 
     if (!response.ok) {
-      throw new Error(`Gateway tip instructions failed: ${response.status} ${await response.text()}`);
+      throw new Error(
+        `Gateway tip instructions failed: ${response.status} ${await response.text()}`
+      );
     }
 
     const data = await response.json();
@@ -267,8 +275,6 @@ export class SanctumGatewayService {
       throw new Error(`Gateway tip error: ${JSON.stringify(data.error)}`);
     }
 
-    // Convert tip instructions to TransactionInstruction format
-    // Note: Gateway returns instructions in a specific format that needs conversion
     return data.result.map((ix: any) => ({
       keys: ix.accounts.map((acc: any) => ({
         pubkey: new PublicKey(acc.pubkey),
@@ -280,23 +286,23 @@ export class SanctumGatewayService {
     }));
   }
 
-  /**
-   * Check if Gateway is properly configured and available
-   */
   static async isHealthy(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.GATEWAY_BASE_URL}/v1/${CONFIG.SOLANA.NETWORK}?apiKey=${CONFIG.SANCTUM.API_KEY}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id: `health-${Date.now()}`,
-          jsonrpc: "2.0",
-          method: "getTipInstructions",
-          params: [{ feePayer: "11111111111111111111111111111111112" }],
-        }),
-      });
+      const response = await fetch(
+        `${this.GATEWAY_BASE_URL}/v1/${CONFIG.SOLANA.NETWORK}?apiKey=${CONFIG.SANCTUM.API_KEY}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            id: `health-${Date.now()}`,
+            jsonrpc: "2.0",
+            method: "getTipInstructions",
+            params: [{ feePayer: "11111111111111111111111111111111112" }],
+          }),
+        }
+      );
 
       return response.ok;
     } catch (error) {
