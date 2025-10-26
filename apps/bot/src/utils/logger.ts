@@ -6,7 +6,7 @@ const createLogger = () => {
     CONFIG.LOG_LEVEL || (CONFIG.NODE_ENV === "production" ? "warn" : "debug");
 
   return pino({
-    level: "debug",
+    level: logLevel,
     transport:
       CONFIG.NODE_ENV === "development"
         ? {

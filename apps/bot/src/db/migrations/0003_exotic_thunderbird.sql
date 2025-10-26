@@ -1,1 +1,0 @@
-ALTER TABLE "User" ADD COLUMN "balancedPositionBinRange" integer DEFAULT 10 NOT NULL;

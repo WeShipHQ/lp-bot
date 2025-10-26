@@ -24,6 +24,7 @@ import { link } from "@/utils/misc";
 import { DISABLE_LINK_PREVIEW } from "../constants/base.constants";
 import { getTokenPriceService } from "@/services/token-price.service";
 import { logger } from "@/utils/logger";
+import { ExtraEditMessageText } from "node_modules/telegraf/typings/telegram-types";
 
 type WizardState = {
   step?:
@@ -52,6 +53,7 @@ type WizardState = {
   awaitingCustomPriceChange?: boolean;
   enteredCustomAmount?: boolean;
   messageId?: number;
+  dialogMessageId?: number;
   tokenAAmountCalculated?: number;
   tokenBAmountCalculated?: number;
   priceRange?: {
@@ -81,7 +83,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         poolAddress,
         dex: dex as DexType,
       });
-      console.log("poolData", poolData);
+
       if (!poolData) {
         await ctx.reply("Pool not found");
         return ctx.scene.leave();
@@ -316,6 +318,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       } else {
         const balanceUc = container.get(GetBalanceUseCase);
         const { sol: balance } = await balanceUc.execute(user.walletAddress!);
+        console.log("balance", balance);
         const guide =
           depositMethod === "sol_auto_convert"
             ? "We'll auto-split this SOL evenly between tokens."
@@ -378,24 +381,6 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
 
     (ctx.scene.state as WizardState).step = "price_change_selection";
 
-    if (state.enteredCustomAmount) {
-      return ctx.reply(message, {
-        parse_mode: "Markdown",
-        ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback("10%", "price_change:10"),
-            Markup.button.callback("25%", "price_change:25"),
-            Markup.button.callback("50%", "price_change:50"),
-          ],
-          [Markup.button.callback("✏️ Custom %", "price_change:custom")],
-          [
-            Markup.button.callback("🔙 Back", "back"),
-            Markup.button.callback("❌ Cancel", "cancel"),
-          ],
-        ]),
-      });
-    }
-
     return ctx.editMessageText(message, {
       parse_mode: "Markdown",
       ...Markup.inlineKeyboard([
@@ -432,7 +417,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       "✅ Auto-Rebalance: Monitor and adjust every 1hr if out of range (fees apply)."
     );
 
-    return ctx.editMessageText(message, {
+    const extra: ExtraEditMessageText = {
       parse_mode: "Markdown",
       ...Markup.inlineKeyboard([
         [
@@ -444,7 +429,13 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
           Markup.button.callback("❌ Cancel", "cancel"),
         ],
       ]),
-    });
+    };
+
+    if (ctx.message?.message_id === state.messageId) {
+      return ctx.editMessageText(message, extra);
+    }
+
+    return ctx.replyWithMarkdown(message, extra);
   },
 
   // Step 7: Summary & Final Confirmation
@@ -519,7 +510,7 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     );
 
     const state = ctx.scene.state as WizardState;
-    // console.log({ state });
+    console.log({ state });
     const { strategy, amount, poolData, autoRebalancing, dex, depositMethod } =
       state;
 
@@ -529,62 +520,6 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     }
 
     try {
-      // const distUc = container.get(CalculateBalancedDistributionUseCase);
-      // const tokenAAmount = state.tokenAAmountCalculated ?? (
-      //   await distUc.execute({ pool: poolData, solAmount: amount || 0 })
-      // ).tokenAAmount;
-      // const tokenBAmount = state.tokenBAmountCalculated ?? (
-      //   await distUc.execute({ pool: poolData, solAmount: amount || 0 })
-      // ).tokenBAmount;
-      // const { tokenAAmount, tokenBAmount } = await distUc.execute({
-      //   pool: poolData,
-      //   solAmount: amount,
-      // });
-
-      // const priceService = getTokenPriceService();
-      // const solMint = "So11111111111111111111111111111111111111112";
-      // const mints = [poolData.tokenA.address, poolData.tokenB.address, solMint];
-      // const priceData = await priceService.getPrices(mints);
-
-      // const priceRange = state.priceRange ?? {
-      //   min: 0,
-      //   max: 0,
-      //   rangeInterval: ctx.user.balancedPositionBinRange,
-      // };
-
-      // const rebalanceThreshold = ctx.user.rebalanceThreshold
-      //   ? Number(ctx.user.rebalanceThreshold)
-      //   : 20;
-
-      // const positionContext: PositionCreationContext = {
-      //   userId: ctx.user.id,
-      //   walletAddress: ctx.user.walletAddress!,
-      //   // walletId: ctx.user.walletId,
-      //   dex: (dex as DexType) || "meteora",
-      //   poolAddress: poolData.address,
-      //   strategy,
-      //   depositMethod: depositMethod || "sol_auto_convert",
-      //   depositSource: state.depositSource,
-      //   solAmount: amount,
-      //   tokenAAmount: String(tokenAAmount),
-      //   tokenBAmount: String(tokenBAmount),
-      //   tokenAMint: poolData.tokenA.address,
-      //   tokenBMint: poolData.tokenB.address,
-      //   tokenASymbol: poolData.tokenA.symbol,
-      //   tokenBSymbol: poolData.tokenB.symbol,
-      //   tokenADecimals: poolData.tokenA.decimals,
-      //   tokenBDecimals: poolData.tokenB.decimals,
-      //   priceRange,
-      //   autoRebalance: autoRebalancing === "yes",
-      //   rebalanceThreshold,
-      //   quotes: {
-      //     solUsd: priceData[solMint]?.price ?? 0,
-      //     tokenAUsd: priceData[poolData.tokenA.address]?.price ?? 0,
-      //     tokenBUsd: priceData[poolData.tokenB.address]?.price ?? 0,
-      //   },
-      //   slippage: SLIPPAGE_SMALL,
-      // };
-
       logger.info("Creating position with context", {
         userId: ctx.user.id,
         poolAddress: poolData.address,
@@ -653,14 +588,6 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
           `📊 Check your portfolio in a few moments to see your new position.`,
         { parse_mode: "Markdown", ...DISABLE_LINK_PREVIEW }
       );
-
-      // await ctx.editMessageText(
-      //   `✅ *Position Transaction Submitted!*\n\n` +
-      //     `${"solScanLink"}\n\n` +
-      //     `⏳ Your position is being confirmed on-chain. You'll receive a notification when it's ready.\n\n` +
-      //     `📊 Check your portfolio in a few moments to see your new position.`,
-      //   { parse_mode: "Markdown", ...DISABLE_LINK_PREVIEW }
-      // );
     } catch (error) {
       logger.error("Error creating position via use case", {
         error,
@@ -811,7 +738,9 @@ createPositionScene.action(
 
 createPositionScene.action(/amount:(\d+\.?\d*)/, async (ctx, next) => {
   await ctx.answerCbQuery();
+  console.log("ctx.match[1]", ctx.match[1]);
   const amount = parseFloat(ctx.match[1]);
+  console.log("amount", amount);
   if (isNaN(amount) || amount <= 0) {
     return ctx.reply("❌ Invalid amount. Try again.");
   }
@@ -820,7 +749,7 @@ createPositionScene.action(/amount:(\d+\.?\d*)/, async (ctx, next) => {
 
   const { isValid, currentBalance, requiredWithBuffer } =
     await validateSOLBalance(user.walletAddress!, amount);
-
+  console.log("isValid", isValid, currentBalance, requiredWithBuffer);
   if (!isValid && !SKIP_VALIDATE) {
     return ctx.replyWithMarkdown(
       `❌ Insufficient SOL balance to create position.\nCurrent balance: *${formatNumber(currentBalance, { maxDecimals: 6 })} SOL*\nRequired: *${formatNumber(requiredWithBuffer, { maxDecimals: 6 })} SOL*`
@@ -829,6 +758,7 @@ createPositionScene.action(/amount:(\d+\.?\d*)/, async (ctx, next) => {
 
   const state = ctx.scene.state as WizardState;
   state.amount = amount;
+  console.log("state.amount", state.amount);
 
   const message = generateProgressMessage(
     state.poolData!,
@@ -1028,11 +958,15 @@ createPositionScene.on(message("text"), async (ctx, next) => {
       await ctx.deleteMessage(ctx.message.reply_to_message?.message_id);
     }
 
-    if (state.messageId) {
-      await ctx.deleteMessage(state.messageId);
-    }
+    // if (state.messageId) {
+    //   await ctx.deleteMessage(state.messageId);
+    // }
 
-    await ctx.deleteMessage();
+    if (ctx.message.message_id !== state.messageId) {
+      console.log("diffff message");
+      // await ctx.deleteMessage(ctx.message.message_id);
+      await ctx.deleteMessage();
+    }
 
     ctx.wizard.next();
     if (typeof ctx.wizard.step === "function") {
@@ -1075,6 +1009,18 @@ createPositionScene.command("back", (ctx: BotContext) => ctx.wizard.back());
 createPositionScene.command("cancel", async (ctx) => {
   await ctx.deleteMessage();
   return ctx.scene.leave();
+});
+
+// Handle confirmation action
+createPositionScene.action(/confirm:yes/, async (ctx) => {
+  await ctx.answerCbQuery();
+
+  // This is handled by the wizard step function
+  // The actual confirmation logic is in Step 8 (Execution step)
+  ctx.wizard.next();
+  if (typeof ctx.wizard.step === "function") {
+    ctx.wizard.step(ctx, () => {});
+  }
 });
 
 // utils

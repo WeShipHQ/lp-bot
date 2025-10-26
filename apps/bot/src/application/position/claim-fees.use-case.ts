@@ -31,6 +31,7 @@ export type ClaimFeesContext = {
   positionId: string;
   positionAddress: string;
   poolAddress: string;
+  dex: DexType;
   userAddress: string;
   tokenA: Token;
   tokenB: Token;
@@ -118,10 +119,6 @@ export class ClaimFeesUseCase {
         };
       }
 
-      // const instructions =
-      //   (txResult.metadata?.instructions as any) ??
-      //   (txResult as any).instructions;
-
       if (
         !Array.isArray(txResult.instructions) ||
         txResult.instructions.length === 0
@@ -134,18 +131,6 @@ export class ClaimFeesUseCase {
           error: "No claim instructions returned by DEX adapter",
         };
       }
-
-      // let signature = "" as string | undefined;
-      // try {
-      //   signature = await WalletService.signAndSendTransactionWithJito(
-      //     command.user,
-      //     txResult.instructions,
-      //     [],
-      //     []
-      //   );
-      // } catch (err) {
-      //   logger.error("Transaction submission failed", { err });
-      // }
 
       let signature = "" as string | undefined;
       try {
@@ -202,6 +187,7 @@ export class ClaimFeesUseCase {
         positionAddress: position.positionAddress,
         poolAddress: position.poolAddress,
         userAddress: user.walletAddress,
+        dex: dexType,
         tokenA: {
           address: position.tokenX.address,
           symbol: position.tokenX.symbol,

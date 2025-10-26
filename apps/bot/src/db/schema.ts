@@ -8,6 +8,7 @@ import {
   uuid,
   integer,
   jsonb,
+  varchar,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { Token } from "@/types/token.types";
@@ -31,6 +32,7 @@ export const transactionTypeEnum = pgEnum("transaction_type", [
 ]);
 export const transactionStatusEnum = pgEnum("transaction_status", [
   "PENDING",
+  "PENDING_SWAPS",
   "CONFIRMED",
   "FAILED",
 ]);
@@ -51,6 +53,7 @@ export const operationTypeEnum = pgEnum("operation_type", [
   "REMOVE_LIQUIDITY",
   "CLAIM_FEES",
   "REBALANCE",
+  "SOL_TO_TOKEN_SWAP",
 ]);
 
 export const pendingTransactionStatusEnum = pgEnum(
@@ -87,11 +90,10 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   telegramId: text("telegram_id").notNull().unique(),
   walletId: text("wallet_id").unique().notNull(),
-  // privyUserId: text("privy_user_id").notNull().unique(),
-  privyUserId: text("privy_user_id"),
+  privyUserId: text("privy_user_id").notNull().unique(),
   username: text("username"),
   walletAddress: text("wallet_address").notNull().unique(),
-  
+
   // Rebalancing settings
   autoRebalanceEnabled: boolean("auto_rebalance_enabled")
     .notNull()
@@ -102,32 +104,30 @@ export const users = pgTable("users", {
   rebalanceStrategy: rebalanceStrategyEnum("rebalance_strategy")
     .notNull()
     .default("STANDARD"),
-  rebalanceSchedule: text("rebalance_schedule")
-    .notNull()
-    .default("15m"), // 5m, 15m, 1h, 3h, disabled
-  
+  rebalanceSchedule: text("rebalance_schedule").notNull().default("15m"), // 5m, 15m, 1h, 3h, disabled
+
   // Position configuration
-  defaultBinRange: integer("default_bin_range")
-    .notNull()
-    .default(10), // 5, 10, 20, or custom 5-100
+  defaultBinRange: integer("default_bin_range").notNull().default(10), // 5, 10, 20, or custom 5-100
   balancedPositionBinRange: integer("balanced_position_bin_range")
     .notNull()
     .default(10),
-  
+
   // Risk management settings
-  stopLossPercentage: decimal("stop_loss_percentage", { precision: 5, scale: 2 })
-    .default("25.00"), // 10, 25, 50, or custom x%, or null for disabled
-  takeProfitPercentage: decimal("take_profit_percentage", { precision: 5, scale: 2 })
-    .default("25.00"), // 10, 25, 50, or custom x%, or null for disabled
-  
+  stopLossPercentage: decimal("stop_loss_percentage", {
+    precision: 5,
+    scale: 2,
+  }).default("25.00"), // 10, 25, 50, or custom x%, or null for disabled
+  takeProfitPercentage: decimal("take_profit_percentage", {
+    precision: 5,
+    scale: 2,
+  }).default("25.00"), // 10, 25, 50, or custom x%, or null for disabled
+
   // Trading settings
-  autoConvertToSol: boolean("auto_convert_to_sol")
-    .notNull()
-    .default(true), // auto convert to SOL when close position or claim fees
+  autoConvertToSol: boolean("auto_convert_to_sol").notNull().default(true), // auto convert to SOL when close position or claim fees
   slippagePercentage: decimal("slippage_percentage", { precision: 5, scale: 2 })
     .notNull()
     .default("3.00"), // proper values for slippage
-  
+
   ...timestamps,
 });
 
@@ -491,7 +491,7 @@ export const transactions = pgTable("transactions", {
   amount: decimal("amount", { precision: 20, scale: 8 }).notNull(),
   tokenAddress: text("token_address").notNull(),
   txHash: text("tx_hash"),
-  status: transactionStatusEnum("status").notNull().default("PENDING"),
+  // status: transactionStatusEnum("status").notNull().default("PENDING"),
   errorMessage: text("error_message"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -526,12 +526,13 @@ export const points = pgTable("points", {
 export const pendingTransactions = pgTable("pending_transactions", {
   id: uuid("id").primaryKey().defaultRandom(),
   signature: text("signature").notNull().unique(),
-  operationType: operationTypeEnum("operation_type").notNull(),
+  // operationType: operationTypeEnum("operation_type").notNull(),
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
   status: pendingTransactionStatusEnum("status").notNull().default("PENDING"),
   metadata: jsonb("metadata"),
+  group: varchar("group"), // use to identify the swap group, e.g. 'CREATE_POSITION'
   retryCount: integer("retry_count").notNull().default(0),
   maxRetries: integer("max_retries").notNull().default(3),
   lastProcessedAt: timestamp("last_processed_at", { withTimezone: true }),

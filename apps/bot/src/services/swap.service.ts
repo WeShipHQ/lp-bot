@@ -4,6 +4,7 @@ import { WalletService } from "./wallet.service";
 import Decimal from "decimal.js";
 import { logger } from "@/utils/logger";
 import { SOL_MINT } from "@/config/constants";
+import { solToLamports } from "@/utils/number-utils";
 
 export interface SwapResult {
   success: boolean;
@@ -13,12 +14,10 @@ export interface SwapResult {
   error?: string;
 }
 
-/**
- * SwapService centralises Jupiter swap flows used by background jobs.
- * It supports token→SOL and SOL→token conversions using Privy wallets.
- */
 export class SwapService {
-  constructor(private readonly jupiter: JupiterService = new JupiterService()) {}
+  constructor(
+    private readonly jupiter: JupiterService = new JupiterService()
+  ) {}
 
   async swapTokenToSol(
     user: User,
@@ -59,7 +58,10 @@ export class SwapService {
       }
 
       const tx = this.jupiter.getOrderTransaction(order.transaction);
-      const { signedTransaction } = await WalletService.signTransaction(user, tx);
+      const { signedTransaction } = await WalletService.signTransaction(
+        user,
+        tx
+      );
 
       const execute = await this.jupiter.executeOrder({
         requestId: order.requestId,
@@ -117,24 +119,22 @@ export class SwapService {
   async swapSolToToken(
     user: User,
     tokenMint: string,
-    rawSolAmount: string
-  ): Promise<{ result: SwapResult; tokenAmountLamports: Decimal }> {
-    const solAmount = new Decimal(rawSolAmount || "0");
-    if (solAmount.lte(0)) {
+    lamports: string
+  ): Promise<{ result: SwapResult; tokenAmountLamports: string }> {
+    const lamportDecimal = new Decimal(lamports || "0");
+    if (lamportDecimal.lte(0)) {
       return {
-        result: { success: true, outputAmount: "0", inputAmount: rawSolAmount },
-        tokenAmountLamports: new Decimal(0),
+        result: { success: true, outputAmount: "0", inputAmount: lamports },
+        tokenAmountLamports: "0",
       };
     }
-
-    const lamports = solAmount.mul(1_000_000_000).toFixed(0);
 
     try {
       const order = await this.jupiter.getOrder({
         inputMint: SOL_MINT,
         outputMint: tokenMint,
         amount: lamports,
-        taker: user.walletAddress ?? "",
+        taker: user.walletAddress,
       });
 
       if (!order.transaction) {
@@ -142,7 +142,10 @@ export class SwapService {
       }
 
       const tx = this.jupiter.getOrderTransaction(order.transaction);
-      const { signedTransaction } = await WalletService.signTransaction(user, tx);
+      const { signedTransaction } = await WalletService.signTransaction(
+        user,
+        tx
+      );
 
       const execute = await this.jupiter.executeOrder({
         requestId: order.requestId,
@@ -158,7 +161,7 @@ export class SwapService {
             error: execute.error || "Swap execution failed",
             inputAmount: order.inAmount,
           },
-          tokenAmountLamports: new Decimal(0),
+          tokenAmountLamports: "0",
         };
       }
 
@@ -170,13 +173,13 @@ export class SwapService {
           inputAmount: order.inAmount,
           outputAmount: tokenLamports.toFixed(0),
         },
-        tokenAmountLamports: tokenLamports,
+        tokenAmountLamports: tokenLamports.toString(),
       };
     } catch (error) {
       logger.warn(
         {
           tokenMint,
-          solAmount: rawSolAmount,
+          solAmount: lamports,
           userId: user.id,
           error: error instanceof Error ? error.message : String(error),
         },
@@ -187,7 +190,7 @@ export class SwapService {
           success: false,
           error: error instanceof Error ? error.message : String(error),
         },
-        tokenAmountLamports: new Decimal(0),
+        tokenAmountLamports: "0",
       };
     }
   }

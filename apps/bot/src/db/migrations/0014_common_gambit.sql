@@ -1,1 +1,0 @@
-ALTER TABLE "PendingTransaction" ADD COLUMN "metadata" jsonb;
