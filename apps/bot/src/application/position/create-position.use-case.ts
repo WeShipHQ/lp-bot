@@ -22,7 +22,6 @@ import {
   getCacheService,
   ICacheService,
 } from "@/infrastructure/cache/cache.service";
-import { SettingsIntegrationService } from "@/services/settings-integration.service";
 import { CachePatterns } from "@/infrastructure/cache/cache-keys";
 import { WalletService } from "@/services/wallet.service";
 import { Token } from "@/types/token.types";
@@ -143,14 +142,14 @@ export interface ITransactionService {
 
 export class CreatePositionUseCase {
   private readonly cache: ICacheService;
-  private readonly settingsIntegration: SettingsIntegrationService;
+  // private readonly settingsIntegration: SettingsIntegrationService;
 
   constructor(
     private readonly dexRegistry: DexRegistryLike,
     cacheService?: ICacheService
   ) {
     this.cache = cacheService ?? getCacheService();
-    this.settingsIntegration = container.get(SettingsIntegrationService);
+    // this.settingsIntegration = container.get(SettingsIntegrationService);
   }
 
   async execute(
@@ -177,9 +176,9 @@ export class CreatePositionUseCase {
       const adapter = this.dexRegistry.get(command.dex);
 
       // Handle SOL auto-convert: Execute swaps first
-      if (command.depositMethod === "sol_auto_convert" && command.solAmount) {
-        return await this.handleSolAutoConvert(command);
-      }
+      // if (command.depositMethod === "sol_auto_convert" && command.solAmount) {
+      //   return await this.handleSolAutoConvert(command);
+      // }
 
       const adapterParams: CreatePositionParams = {
         poolAddress: command.poolAddress,
@@ -193,9 +192,9 @@ export class CreatePositionUseCase {
           command.tokenB.decimals
         ).toString(),
         strategy: command.strategy,
-        slippage: await this.settingsIntegration.getSlippageTolerance(
-          command.userId
-        ),
+        // slippage: await this.settingsIntegration.getSlippageTolerance(
+        //   command.userId
+        // ),
       };
 
       let txResult: CreatePositionResult;
@@ -280,13 +279,14 @@ export class CreatePositionUseCase {
         tokenB: command.tokenB,
         strategy: command.strategy ?? "spot",
 
-        depositMethod:
-          command.depositMethod ??
-          ((await this.settingsIntegration.shouldAutoConvertFeesToSol(
-            command.userId
-          ))
-            ? "sol_auto_convert"
-            : "single_sided"),
+        depositMethod: command.depositMethod ?? "sol_auto_convert",
+        // depositMethod:
+        //   command.depositMethod ??
+        //   ((await this.settingsIntegration.shouldAutoConvertFeesToSol(
+        //     command.userId
+        //   ))
+        //     ? "sol_auto_convert"
+        //     : "single_sided"),
         depositSource: command.depositSource,
         solAmount: command.solAmount,
 
@@ -294,9 +294,9 @@ export class CreatePositionUseCase {
         tokenBAmount: command.tokenBAmount,
 
         autoRebalance: command.autoRebalance ?? false,
-        slippage: await this.settingsIntegration.getSlippageTolerance(
-          command.userId
-        ),
+        // slippage: await this.settingsIntegration.getSlippageTolerance(
+        //   command.userId
+        // ),
 
         positionAddress: adapterPositionAddress,
         priceRange: command.priceRange,

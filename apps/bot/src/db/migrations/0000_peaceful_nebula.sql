@@ -31,6 +31,7 @@ CREATE TABLE "claim_history" (
 CREATE TABLE "pending_transactions" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"signature" text NOT NULL,
+	"operation_type" "operation_type" NOT NULL,
 	"user_id" uuid NOT NULL,
 	"status" "pending_transaction_status" DEFAULT 'PENDING' NOT NULL,
 	"metadata" jsonb,
@@ -177,6 +178,7 @@ CREATE TABLE "transactions" (
 	"amount" numeric(20, 8) NOT NULL,
 	"token_address" text NOT NULL,
 	"tx_hash" text,
+	"status" "transaction_status" DEFAULT 'PENDING' NOT NULL,
 	"error_message" text,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL

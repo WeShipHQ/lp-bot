@@ -27,6 +27,8 @@ interface ClosePositionInDbParams {
     finalTokenBAmount?: string;
     claimedFeesX?: string;
     claimedFeesY?: string;
+    claimedFeesInSol: Decimal;
+    finalTokensInSol: Decimal;
   };
   prices: {
     tokenAUsd: number;
@@ -102,25 +104,36 @@ export class ClosePositionPersistenceService {
       const finalTokenBAmount =
         onChainData?.finalTokenBAmount ?? position.initialTokenYAmount;
 
-      const finalTokenAAmountDecimal = new Decimal(
-        finalTokenAAmount.toString()
-      );
+      let finalValueUSD = new Decimal(0);
+      if (prices.solUsd && onChainData?.finalTokensInSol) {
+        finalValueUSD = onChainData.finalTokensInSol.mul(prices.solUsd);
+        console.log("finalTokensInSol", onChainData.finalTokensInSol);
+      } else {
+        const finalTokenAAmountDecimal = new Decimal(
+          finalTokenAAmount.toString()
+        );
 
-      const finalTokenBAmountDecimal = new Decimal(
-        finalTokenBAmount.toString()
-      );
+        const finalTokenBAmountDecimal = new Decimal(
+          finalTokenBAmount.toString()
+        );
 
-      const finalValueUSD = finalTokenAAmountDecimal
-        .mul(prices.tokenAUsd)
-        .add(finalTokenBAmountDecimal.mul(prices.tokenBUsd));
+        finalValueUSD = finalTokenAAmountDecimal
+          .mul(prices.tokenAUsd)
+          .add(finalTokenBAmountDecimal.mul(prices.tokenBUsd));
+      }
 
       // 3. Calculate and claim remaining fees
       const claimedFeesX = onChainData?.claimedFeesX ?? "0";
       const claimedFeesY = onChainData?.claimedFeesY ?? "0";
-
-      const feesClaimedUSD = new Decimal(claimedFeesX)
-        .mul(prices.tokenAUsd)
-        .add(new Decimal(claimedFeesY).mul(prices.tokenBUsd));
+      let feesClaimedUSD = new Decimal(0);
+      if (prices.solUsd && onChainData?.claimedFeesInSol) {
+        feesClaimedUSD = onChainData.claimedFeesInSol.mul(prices.solUsd);
+        console.log("claimedFeesInSol", onChainData.claimedFeesInSol);
+      } else {
+        feesClaimedUSD = new Decimal(claimedFeesX)
+          .mul(prices.tokenAUsd)
+          .add(new Decimal(claimedFeesY).mul(prices.tokenBUsd));
+      }
 
       console.log("finalTokenAAmount", finalTokenAAmount);
       console.log("finalTokenBAmount", finalTokenBAmount);
