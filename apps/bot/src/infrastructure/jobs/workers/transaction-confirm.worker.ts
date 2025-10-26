@@ -402,7 +402,8 @@ export class TransactionConfirmWorker
           },
           {
             repeat: {
-              every: 60 * 60 * 1000,
+              // every: 60 * 60 * 1000,
+              every: 30 * 1000,
             },
           }
         );

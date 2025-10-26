@@ -50,7 +50,10 @@ export class ConnectWalletUseCase {
     if (!walletId || !walletAddress) {
       const wallet = await privy.walletApi.createWallet({
         chainType: "solana",
-        ownerId: privyUser.id,
+        // owner: {
+        //   userId: privyUser.id,
+        // },
+        ownerId: CONFIG.PRIVY.PRIVY_AUTH_ID,
         additionalSigners: [{ signerId: CONFIG.PRIVY.PRIVY_AUTH_ID }],
       });
 
