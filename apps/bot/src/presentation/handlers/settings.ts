@@ -10,7 +10,7 @@ import {
   getTakeProfitKeyboard,
   getSlippageKeyboard,
 } from "../keyboards/settings-menu";
-import { container } from "@/infrastructure/di/container";
+import { container, DI_TOKENS } from "@/infrastructure/di/container";
 import { UpdateUserSettingUseCase } from "@/application/settings/update-user-setting.use-case";
 import {
   ST_CALLBACKS,
@@ -20,7 +20,16 @@ import {
   RiskPercentage,
   SlippageBps,
 } from "../constants/settings.constants";
-import { UserPreferences } from "@/domain";
+import { UserPreferences, IUserRepository } from "@/domain";
+
+// Helper function to refresh user data from database
+async function refreshUserData(ctx: BotContext): Promise<void> {
+  const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
+  const refreshedUser = await userRepository.findById(ctx.eUser.id);
+  if (refreshedUser) {
+    ctx.eUser = refreshedUser;
+  }
+}
 
 export async function settingsHandler(
   ctx: BotContext,
@@ -155,9 +164,11 @@ export async function handleSettingsCallback(
 
     // Handle refresh
     if (ST_PATTERNS.refresh.test(data)) {
-      console.log("refresh settings", settings);
-      const text = SettingsFormatter.formatOverview(settings);
-      const keyboard = getSettingsKeyboard(settings);
+      await refreshUserData(ctx);
+      const refreshedSettings = ctx.eUser.getPreferences();
+
+      const text = SettingsFormatter.formatOverview(refreshedSettings);
+      const keyboard = getSettingsKeyboard(refreshedSettings);
 
       const messageId = ctx.callbackQuery?.message?.message_id;
       const chatId = ctx.chat?.id;
@@ -185,14 +196,15 @@ export async function handleSettingsCallback(
     if (ST_PATTERNS.toggleRebalance.test(data)) {
       const updater = container.get(UpdateUserSettingUseCase);
       const newState = await updater.toggleAutoRebalance(ctx.eUser.id);
-      // settings.autoRebalanceEnabled = newState;
 
-      const text = SettingsFormatter.formatOverview(settings);
+      await refreshUserData(ctx);
+      const updatedSettings = ctx.eUser.getPreferences();
+      const text = SettingsFormatter.formatOverview(updatedSettings);
 
       await ctx.answerCbQuery(
         `🔄 Auto rebalance ${newState ? "enabled" : "disabled"}`
       );
-      await updateSettingsMessage(ctx, text, settings);
+      await updateSettingsMessage(ctx, text, updatedSettings);
       return;
     }
 
@@ -200,14 +212,16 @@ export async function handleSettingsCallback(
     if (ST_PATTERNS.toggleAutoConvert.test(data)) {
       const updater = container.get(UpdateUserSettingUseCase);
       const newState = await updater.toggleAutoConvertToSol(ctx.eUser.id);
-      settings.autoConvertToSol = newState;
 
-      const text = SettingsFormatter.formatOverview(settings);
+      // Refresh user data to get updated settings
+      await refreshUserData(ctx);
+      const updatedSettings = ctx.eUser.getPreferences();
+      const text = SettingsFormatter.formatOverview(updatedSettings);
 
       await ctx.answerCbQuery(
         `💰 Auto convert ${newState ? "enabled" : "disabled"}`
       );
-      await updateSettingsMessage(ctx, text, settings);
+      await updateSettingsMessage(ctx, text, updatedSettings);
       return;
     }
 
@@ -231,10 +245,13 @@ export async function handleSettingsCallback(
       const updater = container.get(UpdateUserSettingUseCase);
       await updater.setRebalancingSchedule(ctx.eUser.id, value);
 
-      const text = SettingsFormatter.formatOverview(settings);
+      // Refresh user data to get updated settings
+      await refreshUserData(ctx);
+      const updatedSettings = ctx.eUser.getPreferences();
+      const text = SettingsFormatter.formatOverview(updatedSettings);
 
       await ctx.answerCbQuery("⏰ Schedule updated");
-      await updateSettingsMessage(ctx, text, settings);
+      await updateSettingsMessage(ctx, text, updatedSettings);
       return;
     }
 
@@ -258,10 +275,13 @@ export async function handleSettingsCallback(
       const updater = container.get(UpdateUserSettingUseCase);
       await updater.setRebalanceThreshold(ctx.eUser.id, value);
 
-      const text = SettingsFormatter.formatOverview(settings);
+      // Refresh user data to get updated settings
+      await refreshUserData(ctx);
+      const updatedSettings = ctx.eUser.getPreferences();
+      const text = SettingsFormatter.formatOverview(updatedSettings);
 
       await ctx.answerCbQuery("🔄 Threshold updated");
-      await updateSettingsMessage(ctx, text, settings);
+      await updateSettingsMessage(ctx, text, updatedSettings);
       return;
     }
 
@@ -285,10 +305,13 @@ export async function handleSettingsCallback(
       const updater = container.get(UpdateUserSettingUseCase);
       await updater.setDefaultBinRange(ctx.eUser.id, parseInt(value));
 
-      const text = SettingsFormatter.formatOverview(settings);
+      // Refresh user data to get updated settings
+      await refreshUserData(ctx);
+      const updatedSettings = ctx.eUser.getPreferences();
+      const text = SettingsFormatter.formatOverview(updatedSettings);
 
       await ctx.answerCbQuery("📊 Bin range updated");
-      await updateSettingsMessage(ctx, text, settings);
+      await updateSettingsMessage(ctx, text, updatedSettings);
       return;
     }
 
@@ -315,10 +338,13 @@ export async function handleSettingsCallback(
         value === "disabled" ? "disabled" : value
       );
 
-      const text = SettingsFormatter.formatOverview(settings);
+      // Refresh user data to get updated settings
+      await refreshUserData(ctx);
+      const updatedSettings = ctx.eUser.getPreferences();
+      const text = SettingsFormatter.formatOverview(updatedSettings);
 
       await ctx.answerCbQuery("⚠️ Stop loss updated");
-      await updateSettingsMessage(ctx, text, settings);
+      await updateSettingsMessage(ctx, text, updatedSettings);
       return;
     }
 
@@ -345,10 +371,13 @@ export async function handleSettingsCallback(
         value === "disabled" ? "disabled" : value
       );
 
-      const text = SettingsFormatter.formatOverview(settings);
+      // Refresh user data to get updated settings
+      await refreshUserData(ctx);
+      const updatedSettings = ctx.eUser.getPreferences();
+      const text = SettingsFormatter.formatOverview(updatedSettings);
 
       await ctx.answerCbQuery("🎯 Take profit updated");
-      await updateSettingsMessage(ctx, text, settings);
+      await updateSettingsMessage(ctx, text, updatedSettings);
       return;
     }
 
@@ -372,10 +401,13 @@ export async function handleSettingsCallback(
       const updater = container.get(UpdateUserSettingUseCase);
       await updater.setSlippagePercentage(ctx.eUser.id, parseInt(value));
 
-      const text = SettingsFormatter.formatOverview(settings);
+      // Refresh user data to get updated settings
+      await refreshUserData(ctx);
+      const updatedSettings = ctx.eUser.getPreferences();
+      const text = SettingsFormatter.formatOverview(updatedSettings);
 
       await ctx.answerCbQuery("💰 Slippage updated");
-      await updateSettingsMessage(ctx, text, settings);
+      await updateSettingsMessage(ctx, text, updatedSettings);
       return;
     }
 
@@ -414,13 +446,19 @@ export async function handleSettingsInput(
       const updater = container.get(UpdateUserSettingUseCase);
       await updater.setRebalancingSchedule(ctx.eUser.id, value);
 
+      // Refresh user data to get updated settings
+      await refreshUserData(ctx);
+      const updatedSettings = ctx.eUser.getPreferences();
+
       delete ctx.session?.settingsState;
       await ctx.reply(
         SettingsFormatter.updated("Rebalancing schedule updated.")
       );
 
-      const text = SettingsFormatter.formatOverview(settings);
-      await ctx.reply(text, { reply_markup: getSettingsKeyboard(settings) });
+      const text = SettingsFormatter.formatOverview(updatedSettings);
+      await ctx.reply(text, {
+        reply_markup: getSettingsKeyboard(updatedSettings),
+      });
       return true;
     }
 
@@ -429,13 +467,19 @@ export async function handleSettingsInput(
       const updater = container.get(UpdateUserSettingUseCase);
       await updater.setCustomRebalanceThreshold(ctx.eUser.id, raw);
 
+      // Refresh user data to get updated settings
+      await refreshUserData(ctx);
+      const updatedSettings = ctx.eUser.getPreferences();
+
       delete ctx.session?.settingsState;
       await ctx.reply(
         SettingsFormatter.updated("Rebalance threshold updated.")
       );
 
-      const text = SettingsFormatter.formatOverview(settings);
-      await ctx.reply(text, { reply_markup: getSettingsKeyboard(settings) });
+      const text = SettingsFormatter.formatOverview(updatedSettings);
+      await ctx.reply(text, {
+        reply_markup: getSettingsKeyboard(updatedSettings),
+      });
       return true;
     }
 
@@ -444,11 +488,17 @@ export async function handleSettingsInput(
       const updater = container.get(UpdateUserSettingUseCase);
       await updater.setCustomBinRange(ctx.eUser.id, raw);
 
+      // Refresh user data to get updated settings
+      await refreshUserData(ctx);
+      const updatedSettings = ctx.eUser.getPreferences();
+
       delete ctx.session?.settingsState;
       await ctx.reply(SettingsFormatter.updated("Default bin range updated."));
 
-      const text = SettingsFormatter.formatOverview(settings);
-      await ctx.reply(text, { reply_markup: getSettingsKeyboard(settings) });
+      const text = SettingsFormatter.formatOverview(updatedSettings);
+      await ctx.reply(text, {
+        reply_markup: getSettingsKeyboard(updatedSettings),
+      });
       return true;
     }
 
@@ -457,11 +507,17 @@ export async function handleSettingsInput(
       const updater = container.get(UpdateUserSettingUseCase);
       await updater.setCustomStopLoss(ctx.eUser.id, raw);
 
+      // Refresh user data to get updated settings
+      await refreshUserData(ctx);
+      const updatedSettings = ctx.eUser.getPreferences();
+
       delete ctx.session?.settingsState;
       await ctx.reply(SettingsFormatter.updated("Stop loss updated."));
 
-      const text = SettingsFormatter.formatOverview(settings);
-      await ctx.reply(text, { reply_markup: getSettingsKeyboard(settings) });
+      const text = SettingsFormatter.formatOverview(updatedSettings);
+      await ctx.reply(text, {
+        reply_markup: getSettingsKeyboard(updatedSettings),
+      });
       return true;
     }
 
@@ -470,11 +526,17 @@ export async function handleSettingsInput(
       const updater = container.get(UpdateUserSettingUseCase);
       await updater.setCustomTakeProfit(ctx.eUser.id, raw);
 
+      // Refresh user data to get updated settings
+      await refreshUserData(ctx);
+      const updatedSettings = ctx.eUser.getPreferences();
+
       delete ctx.session?.settingsState;
       await ctx.reply(SettingsFormatter.updated("Take profit updated."));
 
-      const text = SettingsFormatter.formatOverview(settings);
-      await ctx.reply(text, { reply_markup: getSettingsKeyboard(settings) });
+      const text = SettingsFormatter.formatOverview(updatedSettings);
+      await ctx.reply(text, {
+        reply_markup: getSettingsKeyboard(updatedSettings),
+      });
       return true;
     }
 
@@ -483,11 +545,17 @@ export async function handleSettingsInput(
       const updater = container.get(UpdateUserSettingUseCase);
       await updater.setCustomSlippage(ctx.eUser.id, raw);
 
+      // Refresh user data to get updated settings
+      await refreshUserData(ctx);
+      const updatedSettings = ctx.eUser.getPreferences();
+
       delete ctx.session?.settingsState;
       await ctx.reply(SettingsFormatter.updated("Slippage updated."));
 
-      const text = SettingsFormatter.formatOverview(settings);
-      await ctx.reply(text, { reply_markup: getSettingsKeyboard(settings) });
+      const text = SettingsFormatter.formatOverview(updatedSettings);
+      await ctx.reply(text, {
+        reply_markup: getSettingsKeyboard(updatedSettings),
+      });
       return true;
     }
 
@@ -505,18 +573,15 @@ export async function handleSettingsInput(
 async function updateSettingsMessage(
   ctx: BotContext,
   text: string,
-  _settings: UserPreferences
+  settings: UserPreferences
 ) {
-  const user = ctx.eUser;
-  if (!user) return;
-  const settings = user.getPreferences();
-  console.log("updateSettingsMessage", settings);
   const messageId = ctx.callbackQuery?.message?.message_id;
   const chatId = ctx.chat?.id;
   if (messageId && chatId) {
     try {
       await ctx.telegram.editMessageText(chatId, messageId, undefined, text, {
         reply_markup: getSettingsKeyboard(settings),
+        parse_mode: "Markdown",
       });
     } catch {
       // If edit fails, send new message

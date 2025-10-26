@@ -1,6 +1,5 @@
 // import { UserSettings } from "@/application/settings/get-user-settings.use-case";
 import {
-  GasPriority,
   RebalanceSchedule,
   BinRange,
   RiskPercentage,
@@ -8,21 +7,6 @@ import {
 } from "../constants/settings.constants";
 import { divider } from "@/utils/misc";
 import { UserPreferences } from "@/domain";
-
-// export interface SettingsMessageModel {
-//   vaultAddress?: string | null;
-//   gasPriority: GasPriority;
-//   rebalancingSchedule: string;
-
-//   // New settings
-//   autoRebalanceEnabled: boolean;
-//   rebalanceThreshold: string;
-//   defaultBinRange: string;
-//   stopLossPercentage: string | null;
-//   takeProfitPercentage: string | null;
-//   autoConvertToSol: boolean;
-//   slippagePercentage: string;
-// }
 
 export class SettingsFormatter {
   static formatOverview(model: UserPreferences): string {
