@@ -10,9 +10,20 @@ import {
 import { RebalanceSessionMetadata } from "@/types/rebalance.types";
 import { IDexAdapter } from "@/types/dex-adapter.interface";
 import { logger } from "@/utils/logger";
-import { db, pendingTransactions, User } from "@/db";
+import { db, pendingTransactions } from "@/db";
 import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 import { JOB_TX_CONFIRM } from "@/infrastructure/jobs/job-definitions";
+import {
+  getCacheService,
+  ICacheService,
+} from "@/infrastructure/cache/cache.service";
+import { SettingsIntegrationService } from "@/services/settings-integration.service";
+import { CachePatterns } from "@/infrastructure/cache/cache-keys";
+import { WalletService } from "@/services/wallet.service";
+import { Token } from "@/types/token.types";
+import { uiToRawAmount } from "@/utils/number-utils";
+import { container } from "@/infrastructure/di/container";
+import { SanctumGatewayOptions } from "@/services/sanctum-gateway.service";
 
 export interface DexRegistryLike {
   get(dexType: DexType): IDexAdapter;
@@ -115,23 +126,16 @@ export interface ITransactionService {
   ): Promise<string>;
 }
 
-import {
-  getCacheService,
-  ICacheService,
-} from "@/infrastructure/cache/cache.service";
-import { CachePatterns } from "@/infrastructure/cache/cache-keys";
-import { WalletService } from "@/services/wallet.service";
-import { Token } from "@/types/token.types";
-import { uiToRawAmount } from "@/utils/number-utils";
-import { SanctumGatewayOptions } from "@/services/sanctum-gateway.service";
-
 export class CreatePositionUseCase {
   private readonly cache: ICacheService;
+  private readonly settingsIntegration: SettingsIntegrationService;
+
   constructor(
     private readonly dexRegistry: DexRegistryLike,
     cacheService?: ICacheService
   ) {
     this.cache = cacheService ?? getCacheService();
+    this.settingsIntegration = container.get(SettingsIntegrationService);
   }
 
   async execute(
@@ -157,6 +161,12 @@ export class CreatePositionUseCase {
 
       const adapter = this.dexRegistry.get(command.dex);
 
+      // Get user settings for defaults
+      const userSettings =
+        await this.settingsIntegration.getPositionCreationSettings(
+          command.userId
+        );
+
       const adapterParams: CreatePositionParams = {
         poolAddress: command.poolAddress,
         userAddress: command.walletAddress,
@@ -169,7 +179,9 @@ export class CreatePositionUseCase {
           command.tokenB.decimals
         ).toString(),
         strategy: command.strategy,
-        slippage: command.slippage,
+        slippage: await this.settingsIntegration.getSlippageTolerance(
+          command.userId
+        ),
       };
 
       let txResult: CreatePositionResult;
@@ -254,7 +266,13 @@ export class CreatePositionUseCase {
         tokenB: command.tokenB,
         strategy: command.strategy ?? "spot",
 
-        depositMethod: command.depositMethod ?? "sol_auto_convert",
+        depositMethod:
+          command.depositMethod ??
+          ((await this.settingsIntegration.shouldAutoConvertFeesToSol(
+            command.userId
+          ))
+            ? "sol_auto_convert"
+            : "single_sided"),
         depositSource: command.depositSource,
         solAmount: command.solAmount,
 
@@ -262,7 +280,9 @@ export class CreatePositionUseCase {
         tokenBAmount: command.tokenBAmount,
 
         autoRebalance: command.autoRebalance ?? false,
-        slippage: command.slippage,
+        slippage: await this.settingsIntegration.getSlippageTolerance(
+          command.userId
+        ),
 
         positionAddress: adapterPositionAddress,
         priceRange: command.priceRange,

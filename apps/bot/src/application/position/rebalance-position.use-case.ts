@@ -12,6 +12,7 @@ import { WalletService } from "@/services/wallet.service";
 import { eq } from "drizzle-orm";
 import { RebalanceSessionMetadata } from "@/types/rebalance.types";
 import { Token } from "@/types/token.types";
+import { SettingsIntegrationService } from "@/services/settings-integration.service";
 
 export interface RebalancePositionCommand {
   userId: string;
@@ -31,10 +32,19 @@ export interface RebalancePositionResult {
   error?: string;
 }
 
+export interface RebalancePositionCommand {
+  userId: string;
+  positionId: string;
+  newStrategy?: string;
+  slippage?: number;
+  forceRebalance?: boolean;
+}
+
 export class RebalancePositionUseCase {
   constructor(
     private readonly positionRepository: IPositionRepository,
     private readonly dexRegistry: DexRegistryLike
+    // private readonly settingsIntegration: SettingsIntegrationService
   ) {}
 
   async execute(

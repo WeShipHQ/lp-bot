@@ -6,8 +6,6 @@ export const SOL_MINT = "So11111111111111111111111111111111111111112";
 
 // bots
 
-// import { DexType } from "@/types/core.types";
-
 export const OPEN_POSITION_FEE = 1; // 1%
 // export const REBALANCING_FEE = 0.15; // 0.15%
 
@@ -17,6 +15,7 @@ export const SLIPPAGE_LARGE = 0.05; // 5%
 
 export const BUFFER_AMOUNT = 0.01;
 
+export const DEFAULT_BIN_RANGE = 10;
 export const MINIMAL_SOL_AMOUNT_IN_LAMPORTS = 10_000_000;
 
 // decimals

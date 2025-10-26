@@ -1,9 +1,10 @@
 import { MiddlewareFn } from "telegraf";
 import { FastifyInstance } from "fastify";
 import { BotContext } from "@/types/bot.types";
-import { container } from "@/infrastructure/di/container";
+import { container, DI_TOKENS } from "@/infrastructure/di/container";
 import { ConnectWalletUseCase } from "@/application/wallet/connect-wallet.use-case";
 import { findUserById } from "@/db/queries";
+import { IUserRepository } from "@/domain";
 
 export function authMiddleware(
   server: FastifyInstance
@@ -24,14 +25,17 @@ export function authMiddleware(
         username
       );
 
+      const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
       const dbUser = await findUserById(userId);
-      if (!dbUser) {
+      const user = await userRepository.findById(userId);
+      if (!user || !dbUser) {
         throw new Error(
           `User record not found after wallet sync for telegramId=${telegramUserId}`
         );
       }
 
       ctx.user = dbUser;
+      ctx.eUser = user;
       ctx.privyUserId = privyUserId;
 
       server.log.debug(
@@ -41,10 +45,7 @@ export function authMiddleware(
 
       return next();
     } catch (error) {
-      server.log.error(
-        { err: error, telegramUserId },
-        "Auth middleware error"
-      );
+      server.log.error({ err: error, telegramUserId }, "Auth middleware error");
 
       try {
         if (ctx.updateType === "callback_query" && "answerCbQuery" in ctx) {

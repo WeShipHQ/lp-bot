@@ -1,3 +1,8 @@
-export { User, UserPreferences, RebalanceStrategy, CreateUserData } from './user.entity';
-export { IUserRepository } from './user.repository';
-export * from './user.validators';
+export type {
+  User,
+  UserPreferences,
+  RebalanceStrategy,
+  CreateUserData,
+} from "./user.entity";
+export type { IUserRepository } from "./user.repository";
+export * from "./user.validators";

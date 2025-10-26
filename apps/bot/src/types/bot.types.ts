@@ -1,4 +1,5 @@
 import { User } from "@/db";
+import { User as UserEntity } from "@/domain/user/user.entity";
 import { StrategyType } from "@meteora-ag/dlmm";
 import type { Context } from "telegraf";
 
@@ -33,6 +34,7 @@ interface SettingsState {
 
 export interface BotContext extends Context {
   user: User;
+  eUser: UserEntity;
   privyUserId?: string;
   session?: {
     transferState?: TransferState;

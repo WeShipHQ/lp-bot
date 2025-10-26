@@ -1,12 +1,27 @@
-import { ValidationError } from '../shared/errors';
+import { ValidationError } from "../shared/errors";
 
-export type RebalanceStrategy = 'STANDARD' | 'DIP_PROTECTION';
+export type RebalanceStrategy = "STANDARD" | "DIP_PROTECTION";
 
 export interface UserPreferences {
+  // Rebalancing settings
   autoRebalanceEnabled: boolean;
   rebalanceThreshold: number;
   rebalanceStrategy: RebalanceStrategy;
+  rebalanceSchedule: string;
+
+  // Position configuration
+  defaultBinRange: number;
   balancedPositionBinRange: number;
+
+  // Risk management
+  stopLossPercentage: number | null;
+  takeProfitPercentage: number | null;
+
+  // Trading settings
+  autoConvertToSol: boolean;
+  slippagePercentage: number;
+
+  // Notification settings
   notificationsEnabled: boolean;
   priceAlertsEnabled: boolean;
   rebalanceAlertsEnabled: boolean;
@@ -36,10 +51,25 @@ export class User {
 
   static create(data: CreateUserData): User {
     const defaultPreferences: UserPreferences = {
+      // Rebalancing settings
       autoRebalanceEnabled: true,
-      rebalanceThreshold: 5,
-      rebalanceStrategy: 'STANDARD',
+      rebalanceThreshold: 20,
+      rebalanceStrategy: "STANDARD",
+      rebalanceSchedule: "15m",
+
+      // Position configuration
+      defaultBinRange: 10,
       balancedPositionBinRange: 10,
+
+      // Risk management
+      stopLossPercentage: 25,
+      takeProfitPercentage: 25,
+
+      // Trading settings
+      autoConvertToSol: true,
+      slippagePercentage: 3.0,
+
+      // Notification settings
       notificationsEnabled: true,
       priceAlertsEnabled: true,
       rebalanceAlertsEnabled: true,
@@ -90,19 +120,19 @@ export class User {
   }
 
   hasNotificationEnabled(
-    type: 'price' | 'rebalance' | 'general' | 'position'
+    type: "price" | "rebalance" | "general" | "position"
   ): boolean {
     if (!this.preferences.notificationsEnabled) {
       return false;
     }
 
     switch (type) {
-      case 'price':
+      case "price":
         return this.preferences.priceAlertsEnabled;
-      case 'rebalance':
+      case "rebalance":
         return this.preferences.rebalanceAlertsEnabled;
-      case 'general':
-      case 'position':
+      case "general":
+      case "position":
         return true;
       default:
         return false;
@@ -119,9 +149,9 @@ export class User {
 
   updateUsername(username: string): void {
     if (username && username.trim().length === 0) {
-      throw new ValidationError('Username cannot be empty');
+      throw new ValidationError("Username cannot be empty");
     }
-    
+
     this.username = username;
     this.updatedAt = new Date();
   }
@@ -138,9 +168,11 @@ export class User {
 
   setRebalanceThreshold(threshold: number): void {
     if (threshold < 0 || threshold > 100) {
-      throw new ValidationError('Rebalance threshold must be between 0 and 100');
+      throw new ValidationError(
+        "Rebalance threshold must be between 0 and 100"
+      );
     }
-    
+
     this.preferences.rebalanceThreshold = threshold;
     this.updatedAt = new Date();
   }
@@ -178,5 +210,80 @@ export class User {
 
   areNotificationsEnabled(): boolean {
     return this.preferences.notificationsEnabled;
+  }
+
+  // New settings methods
+  setRebalanceSchedule(schedule: string): void {
+    this.preferences.rebalanceSchedule = schedule;
+    this.updatedAt = new Date();
+  }
+
+  getRebalanceSchedule(): string {
+    return this.preferences.rebalanceSchedule;
+  }
+
+  setDefaultBinRange(binRange: number): void {
+    if (binRange < 5 || binRange > 100) {
+      throw new ValidationError("Bin range must be between 5 and 100");
+    }
+    this.preferences.defaultBinRange = binRange;
+    this.updatedAt = new Date();
+  }
+
+  getDefaultBinRange(): number {
+    return this.preferences.defaultBinRange;
+  }
+
+  setStopLossPercentage(percentage: number | null): void {
+    if (percentage !== null && (percentage < 1 || percentage > 100)) {
+      throw new ValidationError(
+        "Stop loss percentage must be between 1 and 100"
+      );
+    }
+    this.preferences.stopLossPercentage = percentage;
+    this.updatedAt = new Date();
+  }
+
+  getStopLossPercentage(): number | null {
+    return this.preferences.stopLossPercentage;
+  }
+
+  setTakeProfitPercentage(percentage: number | null): void {
+    if (percentage !== null && (percentage < 1 || percentage > 100)) {
+      throw new ValidationError(
+        "Take profit percentage must be between 1 and 100"
+      );
+    }
+    this.preferences.takeProfitPercentage = percentage;
+    this.updatedAt = new Date();
+  }
+
+  getTakeProfitPercentage(): number | null {
+    return this.preferences.takeProfitPercentage;
+  }
+
+  setAutoConvertToSol(enabled: boolean): void {
+    this.preferences.autoConvertToSol = enabled;
+    this.updatedAt = new Date();
+  }
+
+  getAutoConvertToSol(): boolean {
+    return this.preferences.autoConvertToSol;
+  }
+
+  setSlippagePercentage(percentage: string | number): void {
+    const value =
+      typeof percentage === "number" ? percentage : parseFloat(percentage);
+    if (isNaN(value) || value < 0.1 || value > 10) {
+      throw new ValidationError(
+        "Slippage percentage must be between 0.1 and 10"
+      );
+    }
+    this.preferences.slippagePercentage = value;
+    this.updatedAt = new Date();
+  }
+
+  getSlippagePercentage(): number {
+    return this.preferences.slippagePercentage;
   }
 }
