@@ -1,5 +1,5 @@
 {
-  "id": "34ac2050-86cf-4568-afaa-30e7dab2dd77",
+  "id": "90583ef5-d4de-42d5-b658-aa8e8dd9e375",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -166,6 +166,13 @@
         "signature": {
           "name": "signature",
           "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "operation_type": {
+          "name": "operation_type",
+          "type": "operation_type",
+          "typeSchema": "public",
           "primaryKey": false,
           "notNull": true
         },
@@ -1179,6 +1186,14 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "transaction_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'PENDING'"
         },
         "error_message": {
           "name": "error_message",

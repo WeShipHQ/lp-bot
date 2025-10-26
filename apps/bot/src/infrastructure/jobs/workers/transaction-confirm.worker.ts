@@ -51,6 +51,18 @@ import { CreatePositionParams } from "@/types/core.types";
 import { WalletService } from "@/services/wallet.service";
 import { SanctumGatewayOptions } from "@/services/sanctum-gateway.service";
 
+type ExtractedClosePositionIxsData = {
+  positionAddress?: string;
+  finalTokenAAmount: string;
+  finalTokenBAmount: string;
+  finalTokenAAmountLamports: string;
+  finalTokenBAmountLamports: string;
+  claimedFeesTokenA: string;
+  claimedFeesTokenB: string;
+  claimedFeesTokenALamports: string;
+  claimedFeesTokenBLamports: string;
+};
+
 export class TransactionConfirmWorker
   implements IWorker<TransactionConfirmJobData>
 {
@@ -567,7 +579,7 @@ export class TransactionConfirmWorker
 
       let solReceivedDecimal = new Decimal(0);
 
-      const shouldConvertToSol = claimContext.convertToSol !== false;
+      const shouldConvertToSol = true; //claimContext.convertToSol !== false;
       if (shouldConvertToSol && !userRecord) {
         logger.warn("[TxConfirmWorker] Unable to load user for claim swap", {
           signature,
@@ -575,119 +587,124 @@ export class TransactionConfirmWorker
         });
       }
 
-      // Convert claimed fees to SOL
       if (shouldConvertToSol && userRecord) {
-        // Convert claimed fee amounts from UI amounts to lamports for swapping
-        const claimedFeesTokenALamports = uiToRawAmount(
+        // const claimedFeesTokenALamports = uiToRawAmount(
+        //   claimedFeesTokenA,
+        //   claimContext.tokenA.decimals
+        // );
+        // const claimedFeesTokenBLamports = uiToRawAmount(
+        //   claimedFeesTokenB,
+        //   claimContext.tokenB.decimals
+        // );
+
+        // // Swap token A fees to SOL if not already SOL and amount > 0
+        // if (
+        //   claimedFeesTokenALamports > BigInt(0) &&
+        //   claimContext.tokenA.address !== SOL_MINT
+        // ) {
+        //   try {
+        //     const swapResultA = await this.swapService.swapTokenToSol(
+        //       userRecord,
+        //       claimContext.tokenA.address,
+        //       claimedFeesTokenALamports.toString()
+        //     );
+        //     if (swapResultA.result.success) {
+        //       solReceivedDecimal = solReceivedDecimal.add(
+        //         swapResultA.solReceived
+        //       );
+        //       logger.info("[TxConfirmWorker] Swapped token A fees to SOL", {
+        //         signature,
+        //         tokenA: claimContext.tokenA.address,
+        //         amount: claimedFeesTokenALamports.toString(),
+        //         solReceived: swapResultA.solReceived.toString(),
+        //       });
+        //     } else {
+        //       logger.warn(
+        //         "[TxConfirmWorker] Failed to swap token A fees to SOL",
+        //         {
+        //           signature,
+        //           tokenA: claimContext.tokenA.address,
+        //           error: swapResultA.result.error,
+        //         }
+        //       );
+        //     }
+        //   } catch (error) {
+        //     logger.error(
+        //       "[TxConfirmWorker] Error swapping token A fees to SOL",
+        //       {
+        //         signature,
+        //         tokenA: claimContext.tokenA.address,
+        //         error,
+        //       }
+        //     );
+        //   }
+        // } else if (
+        //   claimedFeesTokenALamports > BigInt(0) &&
+        //   claimContext.tokenA.address === SOL_MINT
+        // ) {
+        //   // Token A is already SOL, just add to total
+        //   solReceivedDecimal = solReceivedDecimal.add(
+        //     lamportsToSol(claimedFeesTokenALamports)
+        //   );
+        // }
+
+        // // Swap token B fees to SOL if not already SOL and amount > 0
+        // if (
+        //   claimedFeesTokenBLamports > BigInt(0) &&
+        //   claimContext.tokenB.address !== SOL_MINT
+        // ) {
+        //   try {
+        //     const swapResultB = await this.swapService.swapTokenToSol(
+        //       userRecord,
+        //       claimContext.tokenB.address,
+        //       claimedFeesTokenBLamports.toString()
+        //     );
+        //     if (swapResultB.result.success) {
+        //       solReceivedDecimal = solReceivedDecimal.add(
+        //         swapResultB.solReceived
+        //       );
+        //       logger.info("[TxConfirmWorker] Swapped token B fees to SOL", {
+        //         signature,
+        //         tokenB: claimContext.tokenB.address,
+        //         amount: claimedFeesTokenBLamports.toString(),
+        //         solReceived: swapResultB.solReceived.toString(),
+        //       });
+        //     } else {
+        //       logger.warn(
+        //         "[TxConfirmWorker] Failed to swap token B fees to SOL",
+        //         {
+        //           signature,
+        //           tokenB: claimContext.tokenB.address,
+        //           error: swapResultB.result.error,
+        //         }
+        //       );
+        //     }
+        //   } catch (error) {
+        //     logger.error(
+        //       "[TxConfirmWorker] Error swapping token B fees to SOL",
+        //       {
+        //         signature,
+        //         tokenB: claimContext.tokenB.address,
+        //         error,
+        //       }
+        //     );
+        //   }
+        // } else if (
+        //   claimedFeesTokenBLamports > BigInt(0) &&
+        //   claimContext.tokenB.address === SOL_MINT
+        // ) {
+        //   // Token B is already SOL, just add to total
+        //   solReceivedDecimal = solReceivedDecimal.add(
+        //     lamportsToSol(claimedFeesTokenBLamports)
+        //   );
+        // }
+        solReceivedDecimal = await this.swapClaimedTokensToSOL(
+          userRecord,
           claimedFeesTokenA,
-          claimContext.tokenA.decimals
-        );
-        const claimedFeesTokenBLamports = uiToRawAmount(
+          claimContext.tokenA,
           claimedFeesTokenB,
-          claimContext.tokenB.decimals
+          claimContext.tokenB
         );
-
-        // Swap token A fees to SOL if not already SOL and amount > 0
-        if (
-          claimedFeesTokenALamports > 0n &&
-          claimContext.tokenA.address !== SOL_MINT
-        ) {
-          try {
-            const swapResultA = await this.swapService.swapTokenToSol(
-              userRecord,
-              claimContext.tokenA.address,
-              claimedFeesTokenALamports.toString()
-            );
-            if (swapResultA.result.success) {
-              solReceivedDecimal = solReceivedDecimal.add(
-                swapResultA.solReceived
-              );
-              logger.info("[TxConfirmWorker] Swapped token A fees to SOL", {
-                signature,
-                tokenA: claimContext.tokenA.address,
-                amount: claimedFeesTokenALamports.toString(),
-                solReceived: swapResultA.solReceived.toString(),
-              });
-            } else {
-              logger.warn(
-                "[TxConfirmWorker] Failed to swap token A fees to SOL",
-                {
-                  signature,
-                  tokenA: claimContext.tokenA.address,
-                  error: swapResultA.result.error,
-                }
-              );
-            }
-          } catch (error) {
-            logger.error(
-              "[TxConfirmWorker] Error swapping token A fees to SOL",
-              {
-                signature,
-                tokenA: claimContext.tokenA.address,
-                error,
-              }
-            );
-          }
-        } else if (
-          claimedFeesTokenALamports > 0n &&
-          claimContext.tokenA.address === SOL_MINT
-        ) {
-          // Token A is already SOL, just add to total
-          solReceivedDecimal = solReceivedDecimal.add(
-            lamportsToSol(claimedFeesTokenALamports)
-          );
-        }
-
-        // Swap token B fees to SOL if not already SOL and amount > 0
-        if (
-          claimedFeesTokenBLamports > 0n &&
-          claimContext.tokenB.address !== SOL_MINT
-        ) {
-          try {
-            const swapResultB = await this.swapService.swapTokenToSol(
-              userRecord,
-              claimContext.tokenB.address,
-              claimedFeesTokenBLamports.toString()
-            );
-            if (swapResultB.result.success) {
-              solReceivedDecimal = solReceivedDecimal.add(
-                swapResultB.solReceived
-              );
-              logger.info("[TxConfirmWorker] Swapped token B fees to SOL", {
-                signature,
-                tokenB: claimContext.tokenB.address,
-                amount: claimedFeesTokenBLamports.toString(),
-                solReceived: swapResultB.solReceived.toString(),
-              });
-            } else {
-              logger.warn(
-                "[TxConfirmWorker] Failed to swap token B fees to SOL",
-                {
-                  signature,
-                  tokenB: claimContext.tokenB.address,
-                  error: swapResultB.result.error,
-                }
-              );
-            }
-          } catch (error) {
-            logger.error(
-              "[TxConfirmWorker] Error swapping token B fees to SOL",
-              {
-                signature,
-                tokenB: claimContext.tokenB.address,
-                error,
-              }
-            );
-          }
-        } else if (
-          claimedFeesTokenBLamports > 0n &&
-          claimContext.tokenB.address === SOL_MINT
-        ) {
-          // Token B is already SOL, just add to total
-          solReceivedDecimal = solReceivedDecimal.add(
-            lamportsToSol(claimedFeesTokenBLamports)
-          );
-        }
       }
 
       // Recalculate USD value based on actual SOL received from swaps
@@ -959,6 +976,27 @@ export class TransactionConfirmWorker
       throw new Error("User not found for rebalance");
     }
 
+    let totalTokensInSol = new Decimal(0);
+    if (userRecord && closeExtraction) {
+      const totalTokenAAmount = new Decimal(
+        closeExtraction.finalTokenAAmount
+      ).add(closeExtraction.claimedFeesTokenA);
+      const totalTokenBAmount = new Decimal(
+        closeExtraction.finalTokenBAmount
+      ).add(closeExtraction.claimedFeesTokenB);
+
+      totalTokensInSol = await this.swapClaimedTokensToSOL(
+        userRecord,
+        totalTokenAAmount.toString(),
+        session.tokenA,
+        totalTokenBAmount.toString(),
+        session.tokenB
+      );
+    }
+    const totalTokensInSolLamports = new Decimal(
+      solToLamports(totalTokensInSol)
+    );
+
     const closeSummary = {
       withdrawnTokenA: withdrawnTokenALamports.toString(),
       withdrawnTokenB: withdrawnTokenBLamports.toString(),
@@ -966,71 +1004,73 @@ export class TransactionConfirmWorker
       claimedFeesTokenB: claimedTokenBLamports.toString(),
       totalTokenA: totalTokenALamports.toString(),
       totalTokenB: totalTokenBLamports.toString(),
-      solFromTokenA: "0",
-      solFromTokenB: "0",
-      swapSignaturesToSol: {
-        tokenA: undefined as string | undefined,
-        tokenB: undefined as string | undefined,
-      },
+      // solFromTokenA: "0",
+      // solFromTokenB: "0",
+      // swapSignaturesToSol: {
+      //   tokenA: undefined as string | undefined,
+      //   tokenB: undefined as string | undefined,
+      // },
     };
 
-    let solFromALamports = new Decimal(0);
-    let solFromBLamports = new Decimal(0);
+    // let solFromALamports = new Decimal(0);
+    // let solFromBLamports = new Decimal(0);
 
-    if (totalTokenALamports.gt(0)) {
-      const { result, solReceived } = await this.swapService.swapTokenToSol(
-        userRecord,
-        session.tokenA.address,
-        totalTokenALamports.toFixed(0)
-      );
-      if (!result.success) {
-        throw new Error(
-          `Failed to convert ${session.tokenA.symbol ?? "Token A"} to SOL: ${
-            result.error ?? "unknown error"
-          }`
-        );
-      }
-      console.log("solReceived", solReceived);
+    // if (totalTokenALamports.gt(0)) {
+    //   const { result, solReceived } = await this.swapService.swapTokenToSol(
+    //     userRecord,
+    //     session.tokenA.address,
+    //     totalTokenALamports.toFixed(0)
+    //   );
+    //   if (!result.success) {
+    //     throw new Error(
+    //       `Failed to convert ${session.tokenA.symbol ?? "Token A"} to SOL: ${
+    //         result.error ?? "unknown error"
+    //       }`
+    //     );
+    //   }
+    //   console.log("solReceived", solReceived);
 
-      closeSummary.solFromTokenA = solToLamports(solReceived).toString();
-      closeSummary.swapSignaturesToSol.tokenA = result.signature;
-      solFromALamports = new Decimal(closeSummary.solFromTokenA);
-    }
+    //   closeSummary.solFromTokenA = solToLamports(solReceived).toString();
+    //   closeSummary.swapSignaturesToSol.tokenA = result.signature;
+    //   solFromALamports = new Decimal(closeSummary.solFromTokenA);
+    // }
 
-    if (totalTokenBLamports.gt(0)) {
-      const { result, solReceived } = await this.swapService.swapTokenToSol(
-        userRecord,
-        session.tokenB.address,
-        totalTokenBLamports.toFixed(0)
-      );
-      if (!result.success) {
-        throw new Error(
-          `Failed to convert ${session.tokenB.symbol ?? "Token B"} to SOL: ${
-            result.error ?? "unknown error"
-          }`
-        );
-      }
-      console.log("solReceived", solReceived);
+    // if (totalTokenBLamports.gt(0)) {
+    //   const { result, solReceived } = await this.swapService.swapTokenToSol(
+    //     userRecord,
+    //     session.tokenB.address,
+    //     totalTokenBLamports.toFixed(0)
+    //   );
+    //   if (!result.success) {
+    //     throw new Error(
+    //       `Failed to convert ${session.tokenB.symbol ?? "Token B"} to SOL: ${
+    //         result.error ?? "unknown error"
+    //       }`
+    //     );
+    //   }
+    //   console.log("solReceived", solReceived);
 
-      closeSummary.solFromTokenB = solToLamports(solReceived).toString();
-      closeSummary.swapSignaturesToSol.tokenB = result.signature;
-      solFromBLamports = new Decimal(closeSummary.solFromTokenB);
-    }
+    //   closeSummary.solFromTokenB = solToLamports(solReceived).toString();
+    //   closeSummary.swapSignaturesToSol.tokenB = result.signature;
+    //   solFromBLamports = new Decimal(closeSummary.solFromTokenB);
+    // }
 
-    const totalSolLamports = solFromALamports
-      .add(solFromBLamports)
-      .toDecimalPlaces(0, Decimal.ROUND_DOWN);
-    if (totalSolLamports.lte(0)) {
+    // const totalSolLamports = solFromALamports
+    //   .add(solFromBLamports)
+    //   .toDecimalPlaces(0, Decimal.ROUND_DOWN);
+
+    if (totalTokensInSol.lte(0)) {
       throw new Error(
         "No SOL recovered from rebalance close; cannot recreate position"
       );
     }
 
     const reserveLamports = Decimal.min(
-      totalSolLamports,
+      totalTokensInSolLamports,
       new Decimal(MINIMAL_SOL_AMOUNT_IN_LAMPORTS)
     ).toDecimalPlaces(0, Decimal.ROUND_DOWN);
-    const usableLamportsRaw = totalSolLamports.sub(reserveLamports);
+
+    const usableLamportsRaw = totalTokensInSolLamports.sub(reserveLamports);
     if (usableLamportsRaw.lte(0)) {
       throw new Error(
         "Insufficient SOL available after reserve to recreate position"
@@ -1141,7 +1181,7 @@ export class TransactionConfirmWorker
         closeSignature: session.closeSignature ?? signature,
         closeSummary: {
           ...closeSummary,
-          totalSol: totalSolLamports.toFixed(0),
+          totalSol: totalTokensInSolLamports.toFixed(0),
         },
         conversions,
         purchases,
@@ -1162,7 +1202,7 @@ export class TransactionConfirmWorker
         closeSignature: session.closeSignature ?? signature,
         closeSummary: {
           ...closeSummary,
-          totalSol: totalSolLamports.toFixed(0),
+          totalSol: totalTokensInSolLamports.toFixed(0),
         },
         conversions,
         purchases,
@@ -1356,7 +1396,7 @@ export class TransactionConfirmWorker
         return;
       }
 
-      let instructionData: any | undefined;
+      let instructionData: ExtractedClosePositionIxsData | undefined;
       try {
         const connection = this.solana.getConnection();
         const parsedTransaction = await connection.getParsedTransaction(
@@ -1394,11 +1434,6 @@ export class TransactionConfirmWorker
 
             logger.info("[TxConfirmWorker] Parsed Meteora close instructions", {
               signature,
-              instructionCounts: {
-                remove: instructionData.removeInstructionCount,
-                claim: instructionData.claimInstructionCount,
-                close: instructionData.closeInstructionCount,
-              },
               finalTokenAAmount: instructionData.finalTokenAAmount,
               finalTokenBAmount: instructionData.finalTokenBAmount,
               claimedFeesTokenA: instructionData.claimedFeesTokenA,
@@ -1437,19 +1472,45 @@ export class TransactionConfirmWorker
         solUsd: priceData[solMint]?.price ?? 0,
       };
 
-      const onChainData =
-        instructionData &&
-        (instructionData.finalTokenAAmount !== undefined ||
-          instructionData.finalTokenBAmount !== undefined ||
-          instructionData.claimedFeesTokenA !== undefined ||
-          instructionData.claimedFeesTokenB !== undefined)
-          ? {
-              finalTokenAAmount: instructionData.finalTokenAAmount,
-              finalTokenBAmount: instructionData.finalTokenBAmount,
-              claimedFeesX: instructionData.claimedFeesTokenA,
-              claimedFeesY: instructionData.claimedFeesTokenB,
-            }
-          : undefined;
+      const effectiveUserId = closeContext.userId ?? userId;
+      const userRecord = effectiveUserId
+        ? await db.query.users.findFirst({
+            where: eq(users.id, effectiveUserId),
+          })
+        : null;
+
+      let claimedFeesInSol = new Decimal(0);
+      if (userRecord && instructionData) {
+        claimedFeesInSol = await this.swapClaimedTokensToSOL(
+          userRecord,
+          instructionData.claimedFeesTokenA,
+          closeContext.tokenA,
+          instructionData.claimedFeesTokenB,
+          closeContext.tokenB
+        );
+      }
+
+      let finalTokensInSol = new Decimal(0);
+      if (userRecord && instructionData) {
+        finalTokensInSol = await this.swapClaimedTokensToSOL(
+          userRecord,
+          instructionData.finalTokenAAmount,
+          closeContext.tokenA,
+          instructionData.finalTokenBAmount,
+          closeContext.tokenB
+        );
+      }
+
+      const onChainData = instructionData
+        ? {
+            finalTokenAAmount: instructionData.finalTokenAAmount,
+            finalTokenBAmount: instructionData.finalTokenBAmount,
+            claimedFeesX: instructionData.claimedFeesTokenA,
+            claimedFeesY: instructionData.claimedFeesTokenB,
+            claimedFeesInSol,
+            finalTokensInSol,
+          }
+        : undefined;
 
       const persistenceResult =
         await closePositionPersistenceService.closePosition({
@@ -1539,7 +1600,7 @@ export class TransactionConfirmWorker
     instructions: MeteoraDlmmInstruction[],
     tokenA: Token,
     tokenB: Token
-  ) {
+  ): ExtractedClosePositionIxsData {
     const removeTotals = {
       tokenA: new Decimal(0),
       tokenB: new Decimal(0),
@@ -1549,9 +1610,6 @@ export class TransactionConfirmWorker
       tokenB: new Decimal(0),
     };
 
-    // let removeInstructionCount = 0;
-    // let claimInstructionCount = 0;
-    // let closeInstructionCount = 0;
     let positionAddr: string | undefined;
 
     for (const instruction of instructions) {
@@ -1617,13 +1675,6 @@ export class TransactionConfirmWorker
       ).toString(),
       finalTokenAAmountLamports: removeTotals.tokenA.toString(),
       finalTokenBAmountLamports: removeTotals.tokenB.toString(),
-      //   removeInstructionCount > 0
-      //     ? removeTotalsLamports.tokenA.toFixed(0)
-      //     : undefined,
-      // finalTokenBAmountLamports:
-      //   removeInstructionCount > 0
-      //     ? removeTotalsLamports.tokenB.toFixed(0)
-      //     : undefined,
       claimedFeesTokenA: rawToUiAmount(
         claimTotals.tokenA.toString(),
         tokenA.decimals
@@ -1634,17 +1685,6 @@ export class TransactionConfirmWorker
       ).toString(),
       claimedFeesTokenALamports: claimTotals.tokenA.toString(),
       claimedFeesTokenBLamports: claimTotals.tokenB.toString(),
-      // claimedFeesTokenALamports:
-      //   claimInstructionCount > 0
-      //     ? claimTotalsLamports.tokenA.toFixed(0)
-      //     : undefined,
-      // claimedFeesTokenBLamports:
-      //   claimInstructionCount > 0
-      //     ? claimTotalsLamports.tokenB.toFixed(0)
-      //     : undefined,
-      // removeInstructionCount,
-      // claimInstructionCount,
-      // closeInstructionCount,
     };
   }
 
@@ -1998,6 +2038,134 @@ export class TransactionConfirmWorker
           errorMessage: error instanceof Error ? error.message : String(error),
         })
         .where(eq(pendingTransactions.signature, positionCreationId));
+    }
+  }
+
+  private async swapClaimedTokensToSOL(
+    user: User,
+    tokenAAmount: string,
+    tokenA: Token,
+    tokenBAmount: string,
+    tokenB: Token
+  ): Promise<Decimal> {
+    try {
+      let solReceivedDecimal = new Decimal(0);
+
+      const claimedFeesTokenALamports = uiToRawAmount(
+        tokenAAmount,
+        tokenA.decimals
+      );
+      const claimedFeesTokenBLamports = uiToRawAmount(
+        tokenBAmount,
+        tokenB.decimals
+      );
+
+      // Swap token A fees to SOL if not already SOL and amount > 0
+      if (
+        claimedFeesTokenALamports > BigInt(0) &&
+        tokenA.address !== SOL_MINT
+      ) {
+        try {
+          const swapResultA = await this.swapService.swapTokenToSol(
+            user,
+            tokenA.address,
+            claimedFeesTokenALamports.toString()
+          );
+          if (swapResultA.result.success) {
+            solReceivedDecimal = solReceivedDecimal.add(
+              swapResultA.solReceived
+            );
+            console.info("[TxConfirmWorker] Swapped token A fees to SOL", {
+              tokenA: tokenA.address,
+              amount: claimedFeesTokenALamports.toString(),
+              solReceived: swapResultA.solReceived.toString(),
+            });
+          } else {
+            console.warn(
+              "[TxConfirmWorker] Failed to swap token A fees to SOL",
+              {
+                tokenA: tokenA.address,
+                error: swapResultA.result.error,
+              }
+            );
+          }
+        } catch (error) {
+          console.error(
+            "[TxConfirmWorker] Error swapping token A fees to SOL",
+            {
+              tokenA: tokenA.address,
+              error,
+            }
+          );
+        }
+      } else if (
+        claimedFeesTokenALamports > BigInt(0) &&
+        tokenA.address === SOL_MINT
+      ) {
+        // Token A is already SOL, just add to total
+        solReceivedDecimal = solReceivedDecimal.add(
+          lamportsToSol(claimedFeesTokenALamports)
+        );
+      }
+
+      // Swap token B fees to SOL if not already SOL and amount > 0
+      if (
+        claimedFeesTokenBLamports > BigInt(0) &&
+        tokenB.address !== SOL_MINT
+      ) {
+        try {
+          const swapResultB = await this.swapService.swapTokenToSol(
+            user,
+            tokenB.address,
+            claimedFeesTokenBLamports.toString()
+          );
+          if (swapResultB.result.success) {
+            solReceivedDecimal = solReceivedDecimal.add(
+              swapResultB.solReceived
+            );
+            console.info("[TxConfirmWorker] Swapped token B fees to SOL", {
+              tokenB: tokenB.address,
+              amount: claimedFeesTokenBLamports.toString(),
+              solReceived: swapResultB.solReceived.toString(),
+            });
+          } else {
+            console.warn(
+              "[TxConfirmWorker] Failed to swap token B fees to SOL",
+              {
+                tokenB: tokenB.address,
+                error: swapResultB.result.error,
+              }
+            );
+          }
+        } catch (error) {
+          console.error(
+            "[TxConfirmWorker] Error swapping token B fees to SOL",
+            {
+              tokenB: tokenB.address,
+              error,
+            }
+          );
+        }
+      } else if (
+        claimedFeesTokenBLamports > BigInt(0) &&
+        tokenB.address === SOL_MINT
+      ) {
+        // Token B is already SOL, just add to total
+        solReceivedDecimal = solReceivedDecimal.add(
+          lamportsToSol(claimedFeesTokenBLamports)
+        );
+      }
+
+      return solReceivedDecimal;
+    } catch (error) {
+      console.error({
+        error,
+      });
+      logger.error("[TxConfirmWorker] Failed to proceed with position claim", {
+        error,
+      });
+
+      return new Decimal(0);
     }
   }
 }

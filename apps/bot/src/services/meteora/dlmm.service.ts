@@ -178,6 +178,11 @@ export class MeteoraDlmmService {
     const minBinId = activeBin.binId - rangeInterval;
     const maxBinId = activeBin.binId + rangeInterval;
 
+    console.log(
+      `[DLMM] Active bin - ID: ${activeBin.binId}, Price: ${activeBin.price.toString()}`,
+      `totalXAmount: ${totalXAmount.toString()}, totalYAmount: ${totalYAmount.toString()} , strategy: ${strategy}`
+    );
+
     if (totalXAmount.isZero() && totalYAmount.isZero()) {
       throw new Error("Invalid amount");
     }

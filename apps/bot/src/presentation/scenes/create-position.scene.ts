@@ -22,7 +22,6 @@ import { BUFFER_AMOUNT, SLIPPAGE_SMALL } from "@/config/constants";
 import { formatNumber } from "../formatters/base.formatter";
 import { link } from "@/utils/misc";
 import { DISABLE_LINK_PREVIEW } from "../constants/base.constants";
-import { getTokenPriceService } from "@/services/token-price.service";
 import { logger } from "@/utils/logger";
 import { ExtraEditMessageText } from "node_modules/telegraf/typings/telegram-types";
 
@@ -590,6 +589,12 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       );
     } catch (error) {
       logger.error("Error creating position via use case", {
+        error,
+        userId: ctx.user.id,
+        poolAddress: poolData?.address,
+      });
+
+      console.error("Error creating position via use case", {
         error,
         userId: ctx.user.id,
         poolAddress: poolData?.address,

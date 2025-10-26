@@ -346,7 +346,6 @@ export const claimHistory = pgTable("claim_history", {
   isDuringRebalance: boolean("is_during_rebalance").default(false),
   notes: text("notes"),
 
-  // createdAt: timestamp("created_at").notNull().defaultNow(),
   ...timestamps,
 });
 
@@ -358,7 +357,6 @@ export const rebalanceEvents = pgTable("RebalanceEvent", {
     .references(() => positions.id, { onDelete: "cascade" }),
 
   // Rebalance timing
-  // timestamp: timestamp("timestamp").notNull().defaultNow(),
   triggerReason: text("trigger_reason").notNull(),
 
   // Position addresses
@@ -491,7 +489,7 @@ export const transactions = pgTable("transactions", {
   amount: decimal("amount", { precision: 20, scale: 8 }).notNull(),
   tokenAddress: text("token_address").notNull(),
   txHash: text("tx_hash"),
-  // status: transactionStatusEnum("status").notNull().default("PENDING"),
+  status: transactionStatusEnum("status").notNull().default("PENDING"),
   errorMessage: text("error_message"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -519,14 +517,13 @@ export const points = pgTable("points", {
   type: pointTypeEnum("type").notNull(),
   description: text("description"),
   referralId: uuid("referral_id").references(() => referrals.id),
-  // createdAt: timestamp("created_at").notNull().defaultNow(),
   ...timestamps,
 });
 
 export const pendingTransactions = pgTable("pending_transactions", {
   id: uuid("id").primaryKey().defaultRandom(),
   signature: text("signature").notNull().unique(),
-  // operationType: operationTypeEnum("operation_type").notNull(),
+  operationType: operationTypeEnum("operation_type").notNull(),
   userId: uuid("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
