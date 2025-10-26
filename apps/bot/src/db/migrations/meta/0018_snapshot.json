@@ -1,5 +1,9 @@
 {
+<<<<<<< HEAD
   "id": "0e2bba0b-e269-4138-a2ff-fe3cb727a6cb",
+=======
+  "id": "bcddc860-2281-4d4f-9e4c-864d6576cb1b",
+>>>>>>> 46592c2 (chore: swap sol)
   "prevId": "25fab8ac-272d-4cc5-8349-7b9b042a4a74",
   "version": "7",
   "dialect": "postgresql",
@@ -196,6 +200,15 @@
           "primaryKey": false,
           "notNull": false
         },
+<<<<<<< HEAD
+=======
+        "group": {
+          "name": "group",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+>>>>>>> 46592c2 (chore: swap sol)
         "retry_count": {
           "name": "retry_count",
           "type": "integer",
@@ -1285,7 +1298,11 @@
           "type": "numeric(5, 2)",
           "primaryKey": false,
           "notNull": true,
+<<<<<<< HEAD
           "default": "'20.00'"
+=======
+          "default": "'5.00'"
+>>>>>>> 46592c2 (chore: swap sol)
         },
         "rebalance_strategy": {
           "name": "rebalance_strategy",
@@ -1295,6 +1312,7 @@
           "notNull": true,
           "default": "'STANDARD'"
         },
+<<<<<<< HEAD
         "rebalance_schedule": {
           "name": "rebalance_schedule",
           "type": "text",
@@ -1309,6 +1327,8 @@
           "notNull": true,
           "default": 10
         },
+=======
+>>>>>>> 46592c2 (chore: swap sol)
         "balanced_position_bin_range": {
           "name": "balanced_position_bin_range",
           "type": "integer",
@@ -1316,6 +1336,7 @@
           "notNull": true,
           "default": 10
         },
+<<<<<<< HEAD
         "stop_loss_percentage": {
           "name": "stop_loss_percentage",
           "type": "numeric(5, 2)",
@@ -1344,6 +1365,8 @@
           "notNull": true,
           "default": "'3.00'"
         },
+=======
+>>>>>>> 46592c2 (chore: swap sol)
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -1482,7 +1505,12 @@
         "ADD_LIQUIDITY",
         "REMOVE_LIQUIDITY",
         "CLAIM_FEES",
+<<<<<<< HEAD
         "REBALANCE"
+=======
+        "REBALANCE",
+        "SOL_TO_TOKEN_SWAP"
+>>>>>>> 46592c2 (chore: swap sol)
       ]
     },
     "public.pending_transaction_status": {
@@ -1547,6 +1575,10 @@
       "schema": "public",
       "values": [
         "PENDING",
+<<<<<<< HEAD
+=======
+        "PENDING_SWAPS",
+>>>>>>> 46592c2 (chore: swap sol)
         "CONFIRMED",
         "FAILED"
       ]

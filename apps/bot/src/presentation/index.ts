@@ -40,11 +40,15 @@ export async function setupBotCommands(
   registerCommands(bot, server);
 
   bot.catch((err, ctx) => {
+    console.log("err", err);
     const { errorHandler } = require("@/shared/errors/error-handler");
     const result = errorHandler.handle(err, { updateType: ctx.updateType });
-    if (result.logLevel === "error") logger.error(err, `Bot error for ${ctx.updateType}:`);
-    else if (result.logLevel === "warn") logger.warn(err, `Bot warning for ${ctx.updateType}:`);
-    else if (result.logLevel === "info") logger.info({ err }, `Bot info for ${ctx.updateType}:`);
+    if (result.logLevel === "error")
+      logger.error(err, `Bot error for ${ctx.updateType}:`);
+    else if (result.logLevel === "warn")
+      logger.warn(err, `Bot warning for ${ctx.updateType}:`);
+    else if (result.logLevel === "info")
+      logger.info({ err }, `Bot info for ${ctx.updateType}:`);
     ctx.reply(result.userMessage);
   });
 }

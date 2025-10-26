@@ -1,10 +1,16 @@
 import { OPEN_POSITION_FEE, SOL_MINT } from "@/config/constants";
 import { JupiterAdapter } from "@/adapters/external-api/jupiter.adapter";
 import { UnifiedPool } from "@/types/core.types";
+import {
+  lamportsToSol,
+  rawToUiAmount,
+  solToLamports,
+} from "@/utils/number-utils";
+import Decimal from "decimal.js";
 
 export interface CalculateBalancedDistributionInput {
   pool: UnifiedPool;
-  solAmount: number; // UI amount in SOL
+  solAmount: number;
 }
 
 export interface CalculateBalancedDistributionResult {
@@ -25,23 +31,21 @@ export class CalculateBalancedDistributionUseCase {
     input: CalculateBalancedDistributionInput
   ): Promise<CalculateBalancedDistributionResult> {
     const { pool, solAmount } = input;
-
+    
     const feeAmount = solAmount * (OPEN_POSITION_FEE / 100);
     const netAmount = solAmount - feeAmount;
-
     const halfAmount = netAmount / 2;
-    const halfAmountLamports = Math.floor(halfAmount * 1e9);
 
     const tokenAAmount = await this.convertSolToToken(
       pool.tokenA.address,
       pool.tokenA.decimals,
-      halfAmountLamports
+      halfAmount
     );
 
     const tokenBAmount = await this.convertSolToToken(
       pool.tokenB.address,
       pool.tokenB.decimals,
-      halfAmountLamports
+      netAmount - halfAmount
     );
 
     return { tokenAAmount, tokenBAmount };
@@ -50,20 +54,24 @@ export class CalculateBalancedDistributionUseCase {
   private async convertSolToToken(
     outputMint: string,
     decimals: number,
-    lamports: number
+    amount: number
   ): Promise<number> {
     if (outputMint === SOL_MINT) {
-      return lamports / 1e9;
+      return amount;
     }
 
     const route = await this.jupiter.getSwapRoute({
       inputMint: SOL_MINT,
       outputMint,
-      amount: String(lamports),
-    } as any);
+      amount: String(solToLamports(amount)),
+    });
 
-    const outAmount = parseInt(route.outAmount || "0", 10);
+    if (!route.outAmount || Number.isNaN(Number(route.outAmount))) return 0;
+
+    const outAmount = new Decimal(route.outAmount || "0");
+
     if (!outAmount) return 0;
-    return outAmount / Math.pow(10, decimals);
+
+    return rawToUiAmount(outAmount.toString(), decimals).toNumber();
   }
 }

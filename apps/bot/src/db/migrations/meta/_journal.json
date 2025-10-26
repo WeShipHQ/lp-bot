@@ -131,8 +131,13 @@
     {
       "idx": 18,
       "version": "7",
+<<<<<<< HEAD
       "when": 1761406049620,
       "tag": "0018_happy_king_bedlam",
+=======
+      "when": 1761467953000,
+      "tag": "0018_optimal_crystal",
+>>>>>>> 46592c2 (chore: swap sol)
       "breakpoints": true
     }
   ]

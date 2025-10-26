@@ -8,6 +8,7 @@ import {
   uuid,
   integer,
   jsonb,
+  varchar,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
 import { Token } from "@/types/token.types";
@@ -52,6 +53,7 @@ export const operationTypeEnum = pgEnum("operation_type", [
   "REMOVE_LIQUIDITY",
   "CLAIM_FEES",
   "REBALANCE",
+  "SOL_TO_TOKEN_SWAP",
 ]);
 
 export const pendingTransactionStatusEnum = pgEnum(
@@ -533,6 +535,7 @@ export const pendingTransactions = pgTable("pending_transactions", {
     .references(() => users.id, { onDelete: "cascade" }),
   status: pendingTransactionStatusEnum("status").notNull().default("PENDING"),
   metadata: jsonb("metadata"),
+  group: varchar("group"), // use to identify the swap group, e.g. 'CREATE_POSITION'
   retryCount: integer("retry_count").notNull().default(0),
   maxRetries: integer("max_retries").notNull().default(3),
   lastProcessedAt: timestamp("last_processed_at", { withTimezone: true }),

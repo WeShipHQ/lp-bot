@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from "uuid";
 import {
   validatePoolAddress,
   validateWalletAddress,
@@ -15,6 +16,7 @@ import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 import {
   JOB_TX_CONFIRM,
   JOB_SWAP_EXECUTION,
+  SwapExecutionJobData,
 } from "@/infrastructure/jobs/job-definitions";
 import {
   getCacheService,
@@ -77,6 +79,19 @@ export interface PositionCreationContext {
 
   // Optional rebalance metadata when creation is part of a rebalance flow
   rebalanceSession?: RebalanceSessionMetadata;
+}
+
+export interface SolSwapMetadata {
+  positionCreationId: string;
+  swapIndex: "first" | "second";
+  inputMint: string;
+  outputMint: string;
+  outputDecimals: number;
+  inputAmount: number | string;
+  outputAmount: number | string;
+  expectedOutputAmount?: number | string;
+  dex: DexType;
+  poolAddress: string;
 }
 
 export interface CreatePositionCommand {
@@ -384,7 +399,7 @@ export class CreatePositionUseCase {
     command: CreatePositionCommand
   ): Promise<CreatePositionUCResult> {
     try {
-      const positionCreationId = `pos-create-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      const positionCreationId = uuidv4();
 
       logger.info("[CreatePosition] Starting SOL auto-convert flow", {
         userId: command.userId,
@@ -395,10 +410,10 @@ export class CreatePositionUseCase {
       });
 
       // Calculate SOL amounts for each swap (50/50 split after fees)
-      const feeAmount = (command.solAmount || 0) * (OPEN_POSITION_FEE / 100);
-      const netAmount = (command.solAmount || 0) - feeAmount;
+      const solAmount = command.solAmount || 0;
+      const feeAmount = solAmount * (OPEN_POSITION_FEE / 100);
+      const netAmount = solAmount - feeAmount;
       const halfAmount = netAmount / 2;
-      const halfAmountLamports = Math.floor(halfAmount * 1e9);
 
       // Store position creation context for later position creation after swaps complete
       const swapContext = {
@@ -433,7 +448,7 @@ export class CreatePositionUseCase {
 
       // Store the pending position creation context
       await db.insert(pendingTransactions).values({
-        signature: positionCreationId, // Use ID as signature for tracking
+        signature: positionCreationId,
         operationType: "CREATE_POSITION",
         userId: command.userId,
         status: "PENDING",
@@ -452,13 +467,14 @@ export class CreatePositionUseCase {
         walletAddress: command.walletAddress,
         inputMint: SOL_MINT,
         outputMint: command.tokenA.address,
-        inputAmount: halfAmountLamports.toString(),
+        inputAmount: halfAmount,
+        outputDecimals: command.tokenA.decimals,
         expectedOutputAmount: command.tokenAAmount,
         positionCreationId,
         swapIndex: "first",
         dex: command.dex,
         poolAddress: command.poolAddress,
-      });
+      } as SwapExecutionJobData);
 
       // Second swap: SOL → TokenB
       await jobQueue.enqueue(JOB_SWAP_EXECUTION, {
@@ -467,18 +483,19 @@ export class CreatePositionUseCase {
         walletAddress: command.walletAddress,
         inputMint: SOL_MINT,
         outputMint: command.tokenB.address,
-        inputAmount: halfAmountLamports.toString(),
+        outputDecimals: command.tokenB.decimals,
+        inputAmount: netAmount - halfAmount,
         expectedOutputAmount: command.tokenBAmount,
         positionCreationId,
         swapIndex: "second",
         dex: command.dex,
         poolAddress: command.poolAddress,
-      });
+      } as SwapExecutionJobData);
 
       logger.info("[CreatePosition] Swap jobs enqueued", {
         positionCreationId,
-        firstSwap: `${halfAmountLamports} SOL → ${command.tokenA.address}`,
-        secondSwap: `${halfAmountLamports} SOL → ${command.tokenB.address}`,
+        firstSwap: `${halfAmount} SOL → ${command.tokenA.address}`,
+        secondSwap: `${halfAmount} SOL → ${command.tokenB.address}`,
       });
 
       return {

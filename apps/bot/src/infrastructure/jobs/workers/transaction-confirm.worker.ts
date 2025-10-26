@@ -4,18 +4,18 @@ import {
   TransactionConfirmJobData,
   JOB_POSITION_MONITOR,
   JOB_NOTIFICATION,
+  JOB_TX_CONFIRM,
 } from "../job-definitions";
 import type { NotificationMessagePayload } from "../job-definitions";
 import { logger } from "@/utils/logger";
 import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
-import { db, pendingTransactions, users, User } from "@/db";
-import { eq } from "drizzle-orm";
+import { db, pendingTransactions, users, User, PendingTransaction } from "@/db";
+import { and, eq } from "drizzle-orm";
 import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
 import { positionPersistenceService } from "@/services/position-persistence.service";
 import { rebalancePersistenceService } from "@/services/rebalance-persistence.service";
 import { closePositionPersistenceService } from "@/services/close-position-persistence.service";
 import { getTokenPriceService } from "@/services/token-price.service";
-import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
 import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 import { getCacheService } from "@/infrastructure/cache/cache.service";
 import { CachePatterns } from "@/infrastructure/cache/cache-keys";
@@ -34,22 +34,27 @@ import { claimFeesPersistenceService } from "@/services/claim-fees-persistence.s
 import { MINIMAL_SOL_AMOUNT_IN_LAMPORTS, SOL_MINT } from "@/config/constants";
 import { SwapService } from "@/services/swap.service";
 import { RebalanceSessionMetadata } from "@/types/rebalance.types";
-import { container } from "@/infrastructure/di/container";
+import { container, DI_TOKENS } from "@/infrastructure/di/container";
 import {
   CreatePositionUseCase,
   PositionCreationContext,
+  SolSwapMetadata,
 } from "@/application/position/create-position.use-case";
 import {
   lamportsToSol,
   rawToUiAmount,
   solToLamports,
+  uiToRawAmount,
 } from "@/utils/number-utils";
+import { dexRegistry } from "@/services/dex-registry.service";
+import { CreatePositionParams } from "@/types/core.types";
+import { WalletService } from "@/services/wallet.service";
+import { SanctumGatewayOptions } from "@/services/sanctum-gateway.service";
 
 export class TransactionConfirmWorker
   implements IWorker<TransactionConfirmJobData>
 {
   private readonly priceService = getTokenPriceService();
-  private readonly meteoraAdapter = new MeteoraAdapter();
   private readonly cache = getCacheService();
   private readonly swapService = new SwapService();
 
@@ -536,9 +541,6 @@ export class TransactionConfirmWorker
         positionAddress = onChainPositionAddress;
       }
 
-      // const claimedFeesTokenADecimal = new Decimal(claimedFeesTokenA);
-      // const claimedFeesTokenBDecimal = new Decimal(claimedFeesTokenB);
-
       const priceMints = Array.from(
         new Set(
           [
@@ -573,32 +575,6 @@ export class TransactionConfirmWorker
         });
       }
 
-      // if (shouldConvertToSol && userRecord) {
-      //   if (rawAmountABig > 0n && tokenAMint && tokenAMint !== solMint) {
-      //     const solFromA = await this.swapTokenToSol(
-      //       userRecord,
-      //       tokenAMint,
-      //       rawAmountABig
-      //     );
-      //     solReceivedDecimal = solReceivedDecimal.add(solFromA);
-      //   }
-
-      //   if (rawAmountBBig > 0n && tokenBMint && tokenBMint !== solMint) {
-      //     const solFromB = await this.swapTokenToSol(
-      //       userRecord,
-      //       tokenBMint,
-      //       rawAmountBBig
-      //     );
-      //     solReceivedDecimal = solReceivedDecimal.add(solFromB);
-      //   }
-      // }
-
-      // let claimedUsdDecimal = estimatedUsdDecimal;
-      // if (solReceivedDecimal.gt(0) && solPriceUsd > 0) {
-      //   claimedUsdDecimal = solReceivedDecimal.mul(solPriceUsd);
-      // }
-      // const claimedUsdValue = claimedUsdDecimal.toFixed(2);
-
       const solReceivedStr = solReceivedDecimal.gt(0)
         ? solReceivedDecimal.toDecimalPlaces(9, Decimal.ROUND_DOWN).toString()
         : undefined;
@@ -617,7 +593,14 @@ export class TransactionConfirmWorker
 
       if (claimContext.poolAddress && claimContext.userAddress) {
         try {
-          const onchainPosition = await this.meteoraAdapter.getPosition(
+          const dexRegistryInstance = container.get<typeof dexRegistry>(
+            DI_TOKENS.DexRegistry
+          );
+          const adapter = dexRegistryInstance.get(
+            claimContext.dex || "meteora"
+          );
+
+          const onchainPosition = await adapter.getPosition(
             effectivePositionAddress,
             {
               userAddress: claimContext.userAddress,
@@ -887,9 +870,7 @@ export class TransactionConfirmWorker
         );
       }
       console.log("solReceived", solReceived);
-      // const solLamports = solReceived
-      //   .mul(1_000_000_000)
-      //   .toDecimalPlaces(0, Decimal.ROUND_DOWN);
+
       closeSummary.solFromTokenA = solToLamports(solReceived).toString();
       closeSummary.swapSignaturesToSol.tokenA = result.signature;
       solFromALamports = new Decimal(closeSummary.solFromTokenA);
@@ -909,9 +890,7 @@ export class TransactionConfirmWorker
         );
       }
       console.log("solReceived", solReceived);
-      // const solLamports = solReceived
-      //   .mul(1_000_000_000)
-      //   .toDecimalPlaces(0, Decimal.ROUND_DOWN);
+
       closeSummary.solFromTokenB = solToLamports(solReceived).toString();
       closeSummary.swapSignaturesToSol.tokenB = result.signature;
       solFromBLamports = new Decimal(closeSummary.solFromTokenB);
@@ -973,7 +952,7 @@ export class TransactionConfirmWorker
           }`
         );
       }
-      purchasedTokenALamports = tokenAmountLamports;
+      purchasedTokenALamports = new Decimal(tokenAmountLamports);
       conversions.solToTokenSignatures.tokenA = result.signature;
     }
 
@@ -994,7 +973,7 @@ export class TransactionConfirmWorker
           }`
         );
       }
-      purchasedTokenBLamports = tokenAmountLamports;
+      purchasedTokenBLamports = new Decimal(tokenAmountLamports);
       conversions.solToTokenSignatures.tokenB = result.signature;
     }
 
@@ -1605,11 +1584,9 @@ export class TransactionConfirmWorker
     userId: string
   ): Promise<{ confirmed: boolean; timeout?: boolean }> {
     try {
-      // Get the pending transaction for this swap
-      const [ptx] = await db
-        .select()
-        .from(pendingTransactions)
-        .where(eq(pendingTransactions.signature, signature));
+      const ptx = await db.query.pendingTransactions.findFirst({
+        where: eq(pendingTransactions.signature, signature),
+      });
 
       if (!ptx || !ptx.metadata) {
         logger.error(
@@ -1624,17 +1601,7 @@ export class TransactionConfirmWorker
           ? JSON.parse(ptx.metadata)
           : ptx.metadata;
 
-      const swapContext = metadata as {
-        positionCreationId: string;
-        swapIndex: "first" | "second";
-        inputMint: string;
-        outputMint: string;
-        inputAmount: string;
-        outputAmount: string;
-        expectedOutputAmount?: string;
-        dex: string;
-        poolAddress: string;
-      };
+      const swapContext = metadata as SolSwapMetadata;
 
       if (!swapContext.positionCreationId) {
         logger.error("[TxConfirmWorker] Swap missing position creation ID", {
@@ -1649,42 +1616,36 @@ export class TransactionConfirmWorker
         swapIndex: swapContext.swapIndex,
         outputAmount: swapContext.outputAmount,
       });
+      console.log("[TxConfirmWorker] Processing swap confirmation", {
+        signature,
+        positionCreationId: swapContext.positionCreationId,
+        swapIndex: swapContext.swapIndex,
+        outputAmount: swapContext.outputAmount,
+        outputDecimals: swapContext.outputDecimals,
+        expectedOutputAmount: swapContext.expectedOutputAmount,
+      });
 
-      // Update the swap transaction status
       await db
         .update(pendingTransactions)
         .set({
-          status: "CONFIRMED",
+          status: "COMPLETED",
         })
         .where(eq(pendingTransactions.signature, signature));
 
       // Check if both swaps are confirmed for this position creation
-      const [allSwapTxs] = await db
+      const positionCreationSwaps = await db
         .select()
         .from(pendingTransactions)
         .where(
-          eq(
-            pendingTransactions.operationType,
-            "SOL_TO_TOKEN_SWAP"
+          and(
+            eq(pendingTransactions.operationType, "SOL_TO_TOKEN_SWAP"),
+            eq(pendingTransactions.group, swapContext.positionCreationId)
           )
         );
 
-      const positionCreationSwaps = allSwapTxs.filter(
-        (tx) => {
-          const txMetadata =
-            typeof tx.metadata === "string"
-              ? JSON.parse(tx.metadata)
-              : tx.metadata;
-          return (
-            txMetadata.positionCreationId === swapContext.positionCreationId &&
-            tx.status === "CONFIRMED"
-          );
-        }
-      );
-
       logger.info("[TxConfirmWorker] Checking swap completion", {
         positionCreationId: swapContext.positionCreationId,
-        totalSwaps: allSwapTxs.length,
+        totalSwaps: positionCreationSwaps.length,
         confirmedSwaps: positionCreationSwaps.length,
       });
 
@@ -1712,7 +1673,7 @@ export class TransactionConfirmWorker
    */
   private async proceedWithPositionCreation(
     positionCreationId: string,
-    confirmedSwaps: any[]
+    confirmedSwaps: PendingTransaction[]
   ): Promise<void> {
     try {
       logger.info(
@@ -1723,11 +1684,9 @@ export class TransactionConfirmWorker
         }
       );
 
-      // Get the original position creation context
-      const [positionTx] = await db
-        .select()
-        .from(pendingTransactions)
-        .where(eq(pendingTransactions.signature, positionCreationId));
+      const positionTx = await db.query.pendingTransactions.findFirst({
+        where: eq(pendingTransactions.signature, positionCreationId),
+      });
 
       if (!positionTx || !positionTx.metadata) {
         logger.error(
@@ -1742,33 +1701,40 @@ export class TransactionConfirmWorker
           ? JSON.parse(positionTx.metadata)
           : positionTx.metadata;
 
-      const positionContext = positionMetadata.positionContext as PositionCreationContext;
+      const positionContext =
+        positionMetadata.positionContext as PositionCreationContext;
       const command = positionMetadata.command;
 
       if (!positionContext || !command) {
-        logger.error(
-          "[TxConfirmWorker] Invalid position creation context",
-          { positionCreationId }
-        );
+        logger.error("[TxConfirmWorker] Invalid position creation context", {
+          positionCreationId,
+        });
         return;
       }
 
       // Extract actual received amounts from swap confirmations
       const firstSwap = confirmedSwaps.find(
-        (s) => JSON.parse(s.metadata).swapIndex === "first"
+        (s) => (s.metadata as SolSwapMetadata).swapIndex === "first"
       );
       const secondSwap = confirmedSwaps.find(
-        (s) => JSON.parse(s.metadata).swapIndex === "second"
+        (s) => (s.metadata as SolSwapMetadata).swapIndex === "second"
       );
 
       const actualTokenAAmount = firstSwap
-        ? JSON.parse(firstSwap.metadata).outputAmount
+        ? (firstSwap.metadata as SolSwapMetadata).outputAmount
         : command.tokenAAmount;
       const actualTokenBAmount = secondSwap
-        ? JSON.parse(secondSwap.metadata).outputAmount
+        ? (secondSwap.metadata as SolSwapMetadata).outputAmount
         : command.tokenBAmount;
 
       logger.info("[TxConfirmWorker] Using actual swap amounts", {
+        positionCreationId,
+        actualTokenAAmount,
+        actualTokenBAmount,
+        expectedTokenAAmount: command.tokenAAmount,
+        expectedTokenBAmount: command.tokenBAmount,
+      });
+      console.log("[TxConfirmWorker] Using actual swap amounts", {
         positionCreationId,
         actualTokenAAmount,
         actualTokenBAmount,
@@ -1781,7 +1747,10 @@ export class TransactionConfirmWorker
       positionContext.tokenBAmount = actualTokenBAmount;
 
       // Create the position using received tokens
-      const adapter = this.meteoraAdapter;
+      const dexRegistryInstance = container.get<typeof dexRegistry>(
+        DI_TOKENS.DexRegistry
+      );
+      const adapter = dexRegistryInstance.get(command.dex);
       const adapterParams: CreatePositionParams = {
         poolAddress: command.poolAddress,
         userAddress: positionContext.walletAddress,
@@ -1794,8 +1763,10 @@ export class TransactionConfirmWorker
           positionContext.tokenB.decimals
         ).toString(),
         strategy: command.strategy,
-        slippage: positionContext.slippage,
+        // slippage: positionContext.slippage,
       };
+
+      console.log("adapterParams", adapterParams);
 
       const txResult = await adapter.createPositionIx(adapterParams);
 
@@ -1889,6 +1860,7 @@ export class TransactionConfirmWorker
         positionAddress: txResult.positionKp.publicKey.toBase58(),
       });
     } catch (error) {
+      console.error(error);
       logger.error(
         "[TxConfirmWorker] Failed to proceed with position creation",
         {

@@ -1,6 +1,9 @@
 // Job definitions and names for background processing
 // Documenting job purposes and data structures
 
+import { SolSwapMetadata } from "@/application";
+import { DexType } from "@/types/core.types";
+
 // Position monitoring job: checks on-chain position status and triggers notifications/rebalancing if needed
 export const JOB_POSITION_MONITOR = "position-monitor" as const;
 export interface PositionMonitorJobData {
@@ -41,21 +44,20 @@ export interface NotificationJobData {
 
 // Swap execution job: executes SOL→Token swaps for position creation
 export const JOB_SWAP_EXECUTION = "swap-execution" as const;
-export interface SwapExecutionJobData {
+export type SwapExecutionJobData = Pick<
+  SolSwapMetadata,
+  | "positionCreationId"
+  | "swapIndex"
+  | "inputMint"
+  | "outputMint"
+  | "outputDecimals"
+  | "inputAmount"
+  | "expectedOutputAmount"
+  | "dex"
+  | "poolAddress"
+> & {
   userId: string;
-  walletId: string;
-  walletAddress: string;
-  // Swap details
-  inputMint: string; // Should be SOL_MINT
-  outputMint: string;
-  inputAmount: string; // in lamports
-  expectedOutputAmount?: string;
-  // Position creation context
-  positionCreationId: string; // Links swaps to position creation
-  swapIndex: "first" | "second"; // Which swap in the pair
-  dex: DexType;
-  poolAddress: string;
-}
+};
 
 // Transaction confirmation job: polls/queries chain for a tx signature confirmation and updates persistence
 export const JOB_TX_CONFIRM = "transaction-confirm" as const;
