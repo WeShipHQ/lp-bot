@@ -1,462 +1,490 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Position PnL Verification Tool</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f5f5f5;
-            color: #333;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        
-        .header {
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-        
-        .input-section {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        
-        .input-section input {
-            flex: 1;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 16px;
-        }
-        
-        .input-section button {
-            padding: 12px 24px;
-            background: #007bff;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 16px;
-        }
-        
-        .input-section button:hover {
-            background: #0056b3;
-        }
-        
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-            gap: 20px;
-        }
-        
-        .card {
-            background: white;
-            padding: 20px;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        .card h2 {
-            margin-bottom: 15px;
-            color: #333;
-            border-bottom: 2px solid #007bff;
-            padding-bottom: 10px;
-        }
-        
-        .metric {
-            display: flex;
-            justify-content: space-between;
-            padding: 10px 0;
-            border-bottom: 1px solid #f0f0f0;
-        }
-        
-        .metric:last-child {
-            border-bottom: none;
-        }
-        
-        .metric-label {
-            font-weight: 500;
-            color: #666;
-        }
-        
-        .metric-value {
-            font-weight: 600;
-            font-size: 18px;
-        }
-        
-        .positive {
-            color: #28a745;
-        }
-        
-        .negative {
-            color: #dc3545;
-        }
-        
-        .neutral {
-            color: #6c757d;
-        }
-        
-        .history-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-        }
-        
-        .history-table th,
-        .history-table td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #e0e0e0;
-        }
-        
-        .history-table th {
-            background: #f8f9fa;
-            font-weight: 600;
-        }
-        
-        .calculation-step {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 10px 0;
-            border-left: 4px solid #007bff;
-        }
-        
-        .formula {
-            font-family: 'Courier New', monospace;
-            background: #f0f0f0;
-            padding: 10px;
-            border-radius: 4px;
-            margin: 10px 0;
-        }
-        
-        .chart-container {
-            position: relative;
-            height: 300px;
-            margin: 20px 0;
-        }
-        
-        .error {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 10px 0;
-        }
-        
-        .warning {
-            background: #fff3cd;
-            color: #856404;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 10px 0;
-        }
-        
-        .info {
-            background: #d1ecf1;
-            color: #0c5460;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 10px 0;
-        }
-        
-        .loading {
-            text-align: center;
-            padding: 40px;
-            font-size: 18px;
-            color: #666;
-        }
-        
-        .hidden {
-            display: none;
-        }
-        
-        .badge {
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-        
-        .badge-success {
-            background: #d4edda;
-            color: #155724;
-        }
-        
-        .badge-warning {
-            background: #fff3cd;
-            color: #856404;
-        }
-        
-        .badge-danger {
-            background: #f8d7da;
-            color: #721c24;
-        }
-        
-        .verification-section {
-            background: #e7f3ff;
-            border: 2px solid #0056b3;
-            border-radius: 8px;
-            padding: 15px;
-            margin: 20px 0;
-        }
-        
-        .check-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 0;
-            border-bottom: 1px solid #dee2e6;
-        }
-        
-        .check-item:last-child {
-            border-bottom: none;
-        }
-        
-        .check-status {
-            font-weight: 600;
-            font-size: 18px;
-        }
-        
-        .check-pass {
-            color: #28a745;
-        }
-        
-        .check-fail {
-            color: #dc3545;
-        }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: #f5f5f5;
+        color: #333;
+      }
+
+      .container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      .header {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+      }
+
+      .input-section {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        margin-bottom: 20px;
+      }
+
+      .input-section input {
+        flex: 1;
+        padding: 12px;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        font-size: 16px;
+      }
+
+      .input-section button {
+        padding: 12px 24px;
+        background: #007bff;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+      }
+
+      .input-section button:hover {
+        background: #0056b3;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        gap: 20px;
+      }
+
+      .card {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      .card h2 {
+        margin-bottom: 15px;
+        color: #333;
+        border-bottom: 2px solid #007bff;
+        padding-bottom: 10px;
+      }
+
+      .metric {
+        display: flex;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid #f0f0f0;
+      }
+
+      .metric:last-child {
+        border-bottom: none;
+      }
+
+      .metric-label {
+        font-weight: 500;
+        color: #666;
+      }
+
+      .metric-value {
+        font-weight: 600;
+        font-size: 18px;
+      }
+
+      .positive {
+        color: #28a745;
+      }
+
+      .negative {
+        color: #dc3545;
+      }
+
+      .neutral {
+        color: #6c757d;
+      }
+
+      .history-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+      }
+
+      .history-table th,
+      .history-table td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #e0e0e0;
+      }
+
+      .history-table th {
+        background: #f8f9fa;
+        font-weight: 600;
+      }
+
+      .calculation-step {
+        background: #f8f9fa;
+        padding: 15px;
+        border-radius: 8px;
+        margin: 10px 0;
+        border-left: 4px solid #007bff;
+      }
+
+      .formula {
+        font-family: "Courier New", monospace;
+        background: #f0f0f0;
+        padding: 10px;
+        border-radius: 4px;
+        margin: 10px 0;
+      }
+
+      .chart-container {
+        position: relative;
+        height: 300px;
+        margin: 20px 0;
+      }
+
+      .error {
+        background: #f8d7da;
+        color: #721c24;
+        padding: 15px;
+        border-radius: 8px;
+        margin: 10px 0;
+      }
+
+      .warning {
+        background: #fff3cd;
+        color: #856404;
+        padding: 15px;
+        border-radius: 8px;
+        margin: 10px 0;
+      }
+
+      .info {
+        background: #d1ecf1;
+        color: #0c5460;
+        padding: 15px;
+        border-radius: 8px;
+        margin: 10px 0;
+      }
+
+      .loading {
+        text-align: center;
+        padding: 40px;
+        font-size: 18px;
+        color: #666;
+      }
+
+      .hidden {
+        display: none;
+      }
+
+      .badge {
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .badge-success {
+        background: #d4edda;
+        color: #155724;
+      }
+
+      .badge-warning {
+        background: #fff3cd;
+        color: #856404;
+      }
+
+      .badge-danger {
+        background: #f8d7da;
+        color: #721c24;
+      }
+
+      .verification-section {
+        background: #e7f3ff;
+        border: 2px solid #0056b3;
+        border-radius: 8px;
+        padding: 15px;
+        margin: 20px 0;
+      }
+
+      .check-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 1px solid #dee2e6;
+      }
+
+      .check-item:last-child {
+        border-bottom: none;
+      }
+
+      .check-status {
+        font-weight: 600;
+        font-size: 18px;
+      }
+
+      .check-pass {
+        color: #28a745;
+      }
+
+      .check-fail {
+        color: #dc3545;
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div class="container">
-        <div class="header">
-            <h1>🔍 Position PnL Verification Tool</h1>
-            <p>Enter a position ID to analyze and verify PnL calculations</p>
-            
-            <div class="input-section">
-                <input type="text" id="positionId" placeholder="Enter Position ID (UUID)">
-                <button onclick="analyzePosition()">Analyze Position</button>
-                <button onclick="clearResults()">Clear</button>
-            </div>
-            
-            <div id="statusSection" class="info hidden"></div>
+      <div class="header">
+        <h1>🔍 Position PnL Verification Tool</h1>
+        <p>Enter a position ID to analyze and verify PnL calculations</p>
+
+        <div class="input-section">
+          <input
+            type="text"
+            id="positionId"
+            placeholder="Enter Position ID (UUID)"
+          />
+          <button onclick="analyzePosition()">Analyze Position</button>
+          <button onclick="clearResults()">Clear</button>
         </div>
 
-        <div id="loadingSection" class="loading hidden">
-            Analyzing position... Please wait.
+        <div id="statusSection" class="info hidden"></div>
+      </div>
+
+      <div id="loadingSection" class="loading hidden">
+        Analyzing position... Please wait.
+      </div>
+
+      <div id="errorSection" class="error hidden"></div>
+
+      <div id="resultsSection" class="hidden">
+        <!-- Position Overview -->
+        <div class="card">
+          <h2>📊 Position Overview</h2>
+          <div id="positionOverview"></div>
         </div>
 
-        <div id="errorSection" class="error hidden"></div>
-
-        <div id="resultsSection" class="hidden">
-            <!-- Position Overview -->
-            <div class="card">
-                <h2>📊 Position Overview</h2>
-                <div id="positionOverview"></div>
-            </div>
-
-            <!-- PnL Verification -->
-            <div class="card">
-                <h2>✅ PnL Verification Results</h2>
-                <div id="pnlVerification"></div>
-            </div>
-
-            <!-- PnL Breakdown -->
-            <div class="card">
-                <h2>💰 PnL Calculation Breakdown</h2>
-                <div id="pnlBreakdown"></div>
-                <div class="chart-container">
-                    <canvas id="pnlChart"></canvas>
-                </div>
-            </div>
-
-            <!-- Current PnL -->
-            <div class="card">
-                <h2>📈 Current PnL Status</h2>
-                <div id="currentPnl"></div>
-            </div>
-
-            <!-- Segments History -->
-            <div class="card">
-                <h2>🔄 Position Segments History</h2>
-                <div id="segmentsHistory"></div>
-            </div>
-
-            <!-- Claim History -->
-            <div class="card">
-                <h2>💸 Fee Claim History</h2>
-                <div id="claimHistory"></div>
-            </div>
-
-            <!-- Rebalance History -->
-            <div class="card">
-                <h2>⚖️ Rebalance History</h2>
-                <div id="rebalanceHistory"></div>
-            </div>
-
-            <!-- Recent Snapshots -->
-            <div class="card">
-                <h2>📸 Recent Snapshots</h2>
-                <div id="snapshotsHistory"></div>
-            </div>
+        <!-- PnL Verification -->
+        <div class="card">
+          <h2>✅ PnL Verification Results</h2>
+          <div id="pnlVerification"></div>
         </div>
+
+        <!-- PnL Breakdown -->
+        <div class="card">
+          <h2>💰 PnL Calculation Breakdown</h2>
+          <div id="pnlBreakdown"></div>
+          <div class="chart-container">
+            <canvas id="pnlChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Current PnL -->
+        <div class="card">
+          <h2>📈 Current PnL Status</h2>
+          <div id="currentPnl"></div>
+        </div>
+
+        <!-- Segments History -->
+        <div class="card">
+          <h2>🔄 Position Segments History</h2>
+          <div id="segmentsHistory"></div>
+        </div>
+
+        <!-- Claim History -->
+        <div class="card">
+          <h2>💸 Fee Claim History</h2>
+          <div id="claimHistory"></div>
+        </div>
+
+        <!-- Rebalance History -->
+        <div class="card">
+          <h2>⚖️ Rebalance History</h2>
+          <div id="rebalanceHistory"></div>
+        </div>
+
+        <!-- Recent Snapshots -->
+        <div class="card">
+          <h2>📸 Recent Snapshots</h2>
+          <div id="snapshotsHistory"></div>
+        </div>
+      </div>
     </div>
 
     <script type="module">
-        // Database connection state
-        let currentPosition = null;
-        const API_BASE = window.location.origin; // Assumes API server is serving HTML
+      // Database connection state
+      let currentPosition = null;
+      const API_BASE = window.location.origin; // Assumes API server is serving HTML
 
-        // Show database connection status
-        document.addEventListener('DOMContentLoaded', function() {
-            checkDatabaseConnection();
-        });
+      // Show database connection status
+      document.addEventListener("DOMContentLoaded", function () {
+        checkDatabaseConnection();
+      });
 
-        // Check database connection
-        async function checkDatabaseConnection() {
-            try {
-                const response = await fetch(`${API_BASE}/api/health`);
-                const result = await response.json();
-                
-                if (result.status === 'healthy') {
-                    showStatus('✅ Database connected successfully', 'success');
-                } else {
-                    showStatus('❌ Database connection failed', 'error');
-                }
-            } catch (error) {
-                showStatus('❌ Cannot connect to API server. Make sure pnl-api-server.js is running.', 'error');
-            }
+      // Check database connection
+      async function checkDatabaseConnection() {
+        try {
+          const response = await fetch(`${API_BASE}/api/pnl/health`);
+          const result = await response.json();
+
+          if (result.status === "healthy") {
+            showStatus("✅ Database connected successfully", "success");
+          } else {
+            showStatus("❌ Database connection failed", "error");
+          }
+        } catch (error) {
+          showStatus(
+            "❌ Cannot connect to API server. Make sure pnl-api-server.js is running.",
+            "error"
+          );
+        }
+      }
+
+      // Main analysis function
+      window.analyzePosition = async function () {
+        const positionId = document.getElementById("positionId").value.trim();
+        if (!positionId) {
+          showError("Please enter a Position ID");
+          return;
         }
 
-        // Main analysis function
-        window.analyzePosition = async function() {
-            const positionId = document.getElementById('positionId').value.trim();
-            if (!positionId) {
-                showError('Please enter a Position ID');
-                return;
-            }
+        showLoading(true);
+        hideError();
 
-            showLoading(true);
-            hideError();
+        try {
+          // Fetch all data from API
+          const [
+            position,
+            segments,
+            claims,
+            rebalances,
+            snapshots,
+            // verification,
+          ] = await Promise.all([
+            fetchWithErrorHandling(
+              `${API_BASE}/api/pnl/position/${positionId}`
+            ),
+            fetchWithErrorHandling(
+              `${API_BASE}/api/pnl/position/${positionId}/segments`
+            ),
+            fetchWithErrorHandling(
+              `${API_BASE}/api/pnl/position/${positionId}/claims`
+            ),
+            fetchWithErrorHandling(
+              `${API_BASE}/api/pnl/position/${positionId}/rebalances`
+            ),
+            fetchWithErrorHandling(
+              `${API_BASE}/api/pnl/position/${positionId}/snapshots`
+            ),
+            // fetchWithErrorHandling(
+            //   `${API_BASE}/api/pnl/position/${positionId}/pnl-verification`
+            // ),
+          ]);
 
-            try {
-                // Fetch all data from API
-                const [position, segments, claims, rebalances, snapshots, verification] = await Promise.all([
-                    fetchWithErrorHandling(`${API_BASE}/api/position/${positionId}`),
-                    fetchWithErrorHandling(`${API_BASE}/api/position/${positionId}/segments`),
-                    fetchWithErrorHandling(`${API_BASE}/api/position/${positionId}/claims`),
-                    fetchWithErrorHandling(`${API_BASE}/api/position/${positionId}/rebalances`),
-                    fetchWithErrorHandling(`${API_BASE}/api/position/${positionId}/snapshots`),
-                    fetchWithErrorHandling(`${API_BASE}/api/position/${positionId}/pnl-verification`)
-                ]);
+          currentPosition = position;
 
-                currentPosition = position;
-                
-                displayPositionOverview(position);
-                displayPnlVerification(verification);
-                displayPnlBreakdown(position, segments);
-                displayCurrentPnl(position, segments);
-                displaySegmentsHistory(segments);
-                displayClaimHistory(claims);
-                displayRebalanceHistory(rebalances);
-                displaySnapshotsHistory(snapshots);
-                
-                document.getElementById('resultsSection').classList.remove('hidden');
-            } catch (error) {
-                if (error.message?.includes('404')) {
-                    showError('Position not found. Please check the Position ID.');
-                } else {
-                    showError(`Analysis failed: ${error.message}`);
-                }
-            } finally {
-                showLoading(false);
-            }
-        };
+          displayPositionOverview(position);
+        //   displayPnlVerification(verification);
+          displayPnlBreakdown(position, segments);
+          displayCurrentPnl(position, segments);
+          displaySegmentsHistory(segments);
+          displayClaimHistory(claims);
+          displayRebalanceHistory(rebalances);
+          displaySnapshotsHistory(snapshots);
 
-        // Helper function for fetch with error handling
-        async function fetchWithErrorHandling(url) {
-            const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-            }
-            return response.json();
+          document.getElementById("resultsSection").classList.remove("hidden");
+        } catch (error) {
+          if (error.message?.includes("404")) {
+            showError("Position not found. Please check the Position ID.");
+          } else {
+            showError(`Analysis failed: ${error.message}`);
+          }
+        } finally {
+          showLoading(false);
         }
+      };
 
-        // Display functions
-        function displayPositionOverview(position) {
-            const html = `
+      // Helper function for fetch with error handling
+      async function fetchWithErrorHandling(url) {
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+      }
+
+      // Display functions
+      function displayPositionOverview(position) {
+        const html = `
                 <div class="metric">
                     <span class="metric-label">Position ID:</span>
                     <span class="metric-value">${position.id.substring(0, 8)}...</span>
                 </div>
                 <div class="metric">
                     <span class="metric-label">Pool:</span>
-                    <span class="metric-value">${position.tokenX?.symbol || 'TokenX'}-${position.tokenY?.symbol || 'TokenY'}</span>
+                    <span class="metric-value">${position.tokenX?.symbol || "TokenX"}-${position.tokenY?.symbol || "TokenY"}</span>
                 </div>
                 <div class="metric">
                     <span class="metric-label">DEX:</span>
-                    <span class="metric-value">${position.dex?.toUpperCase() || 'Unknown'}</span>
+                    <span class="metric-value">${position.dex?.toUpperCase() || "Unknown"}</span>
                 </div>
                 <div class="metric">
                     <span class="metric-label">Status:</span>
                     <span class="metric-value">
-                        <span class="badge badge-${position.status === 'ACTIVE' ? 'success' : 'warning'}">
-                            ${position.status || 'Unknown'}
+                        <span class="badge badge-${position.status === "ACTIVE" ? "success" : "warning"}">
+                            ${position.status || "Unknown"}
                         </span>
                     </span>
                 </div>
                 <div class="metric">
                     <span class="metric-label">Created:</span>
-                    <span class="metric-value">${position.createdAt ? new Date(position.createdAt).toLocaleDateString() : 'N/A'}</span>
+                    <span class="metric-value">${position.createdAt ? new Date(position.createdAt).toLocaleDateString() : "N/A"}</span>
                 </div>
             `;
-            document.getElementById('positionOverview').innerHTML = html;
+        document.getElementById("positionOverview").innerHTML = html;
+      }
+
+      function displayPnlVerification(verification) {
+        if (!verification || !verification.consistencyChecks) {
+          document.getElementById("pnlVerification").innerHTML =
+            "<p>Verification data not available</p>";
+          return;
         }
 
-        function displayPnlVerification(verification) {
-            if (!verification || !verification.consistencyChecks) {
-                document.getElementById('pnlVerification').innerHTML = '<p>Verification data not available</p>';
-                return;
-            }
-
-            const checks = verification.consistencyChecks;
-            const html = `
+        const checks = verification.consistencyChecks;
+        const html = `
                 <div class="verification-section">
                     <h3>🔍 Consistency Checks</h3>
                     <div class="check-item">
                         <span>Realized PnL matches closed segments:</span>
-                        <span class="check-status ${checks.realizedPnLMatches ? 'check-pass' : 'check-fail'}">
-                            ${checks.realizedPnLMatches ? '✅ PASS' : '❌ FAIL'}
+                        <span class="check-status ${checks.realizedPnLMatches ? "check-pass" : "check-fail"}">
+                            ${checks.realizedPnLMatches ? "✅ PASS" : "❌ FAIL"}
                         </span>
                     </div>
                     <div class="check-item">
                         <span>Fees claimed matches records:</span>
-                        <span class="check-status ${checks.feesClaimedMatches ? 'check-pass' : 'check-fail'}">
-                            ${checks.feesClaimedMatches ? '✅ PASS' : '❌ FAIL'}
+                        <span class="check-status ${checks.feesClaimedMatches ? "check-pass" : "check-fail"}">
+                            ${checks.feesClaimedMatches ? "✅ PASS" : "❌ FAIL"}
                         </span>
                     </div>
                     <div class="check-item">
                         <span>Total PnL calculation consistent:</span>
-                        <span class="check-status ${checks.totalPnLMatches ? 'check-pass' : 'check-fail'}">
-                            ${checks.totalPnLMatches ? '✅ PASS' : '❌ FAIL'}
+                        <span class="check-status ${checks.totalPnLMatches ? "check-pass" : "check-fail"}">
+                            ${checks.totalPnLMatches ? "✅ PASS" : "❌ FAIL"}
                         </span>
                     </div>
                 </div>
@@ -464,31 +492,33 @@
                 <div class="calculation-step">
                     <h4>📊 Independent Verification</h4>
                     <div class="formula">
-                        Documented Total PnL: $${verification.documentedCalculation?.totalPnlUSD?.toFixed(2) || '0.00'}
+                        Documented Total PnL: $${verification.documentedCalculation?.totalPnlUSD?.toFixed(2) || "0.00"}
                     </div>
                     <div class="formula">
-                        Verified Total PnL: $${verification.independentVerification?.verifiedTotalPnl?.toFixed(2) || '0.00'}
+                        Verified Total PnL: $${verification.independentVerification?.verifiedTotalPnl?.toFixed(2) || "0.00"}
                     </div>
                     <div class="formula">
                         Difference: $${Math.abs((verification.documentedCalculation?.totalPnlUSD || 0) - (verification.independentVerification?.verifiedTotalPnl || 0)).toFixed(2)}
                     </div>
                 </div>
             `;
-            document.getElementById('pnlVerification').innerHTML = html;
-        }
+        document.getElementById("pnlVerification").innerHTML = html;
+      }
 
-        function displayPnlBreakdown(position, segments) {
-            const currentValueUSD = position.currentValueUSD || 0;
-            const currentSegmentInitialUSD = position.currentSegmentInitialUSD || 0;
-            const totalRealizedPnlUSD = position.totalRealizedPnlUSD || 0;
-            const totalFeesClaimedUSD = position.totalFeesClaimedUSD || 0;
-            const initialValueUSD = position.initialValueUSD || 0;
+      function displayPnlBreakdown(position, segments) {
+        const currentValueUSD = position.currentValueUSD || 0;
+        const currentSegmentInitialUSD = position.currentSegmentInitialUSD || 0;
+        const totalRealizedPnlUSD = position.totalRealizedPnlUSD || 0;
+        const totalFeesClaimedUSD = position.totalFeesClaimedUSD || 0;
+        const initialValueUSD = position.initialValueUSD || 0;
 
-            const unrealizedPnl = currentValueUSD - currentSegmentInitialUSD;
-            const totalPnl = unrealizedPnl + totalRealizedPnlUSD + totalFeesClaimedUSD;
-            const totalPnlPercentage = initialValueUSD > 0 ? (totalPnl / initialValueUSD) * 100 : 0;
+        const unrealizedPnl = currentValueUSD - currentSegmentInitialUSD;
+        const totalPnl =
+          unrealizedPnl + totalRealizedPnlUSD + totalFeesClaimedUSD;
+        const totalPnlPercentage =
+          initialValueUSD > 0 ? (totalPnl / initialValueUSD) * 100 : 0;
 
-            const html = `
+        const html = `
                 <div class="calculation-step">
                     <strong>PnL Formula:</strong>
                     <div class="formula">
@@ -512,13 +542,13 @@
                 </div>
                 <div class="metric">
                     <span class="metric-label">Unrealized PnL:</span>
-                    <span class="metric-value ${unrealizedPnl >= 0 ? 'positive' : 'negative'}">
+                    <span class="metric-value ${unrealizedPnl >= 0 ? "positive" : "negative"}">
                         $${unrealizedPnl.toFixed(2)}
                     </span>
                 </div>
                 <div class="metric">
                     <span class="metric-label">Realized PnL (Closed Segments):</span>
-                    <span class="metric-value ${totalRealizedPnlUSD >= 0 ? 'positive' : 'negative'}">
+                    <span class="metric-value ${totalRealizedPnlUSD >= 0 ? "positive" : "negative"}">
                         $${totalRealizedPnlUSD.toFixed(2)}
                     </span>
                 </div>
@@ -528,32 +558,35 @@
                 </div>
                 <div class="metric" style="border-top: 2px solid #007bff; padding-top: 15px;">
                     <span class="metric-label"><strong>Total PnL:</strong></span>
-                    <span class="metric-value ${totalPnl >= 0 ? 'positive' : 'negative'}">
+                    <span class="metric-value ${totalPnl >= 0 ? "positive" : "negative"}">
                         <strong>$${totalPnl.toFixed(2)} (${totalPnlPercentage.toFixed(2)}%)</strong>
                     </span>
                 </div>
             `;
-            document.getElementById('pnlBreakdown').innerHTML = html;
+        document.getElementById("pnlBreakdown").innerHTML = html;
 
-            // Create PnL chart
-            createPnlChart(unrealizedPnl, totalRealizedPnlUSD, totalFeesClaimedUSD);
+        // Create PnL chart
+        createPnlChart(unrealizedPnl, totalRealizedPnlUSD, totalFeesClaimedUSD);
+      }
+
+      function displayCurrentPnl(position, segments) {
+        const currentSegment =
+          segments.find((s) => !s.endTimestamp) ||
+          segments[segments.length - 1];
+        if (!currentSegment) {
+          document.getElementById("currentPnl").innerHTML =
+            "<p>No segment data available</p>";
+          return;
         }
 
-        function displayCurrentPnl(position, segments) {
-            const currentSegment = segments.find(s => !s.endTimestamp) || segments[segments.length - 1];
-            if (!currentSegment) {
-                document.getElementById('currentPnl').innerHTML = '<p>No segment data available</p>';
-                return;
-            }
-
-            const html = `
+        const html = `
                 <div class="metric">
                     <span class="metric-label">Current Segment:</span>
                     <span class="metric-value">#${currentSegment.segmentNumber}</span>
                 </div>
                 <div class="metric">
                     <span class="metric-label">Segment Started:</span>
-                    <span class="metric-value">${currentSegment.startTimestamp ? new Date(currentSegment.startTimestamp).toLocaleDateString() : 'N/A'}</span>
+                    <span class="metric-value">${currentSegment.startTimestamp ? new Date(currentSegment.startTimestamp).toLocaleDateString() : "N/A"}</span>
                 </div>
                 <div class="metric">
                     <span class="metric-label">Segment Initial Value:</span>
@@ -566,22 +599,23 @@
                 <div class="metric">
                     <span class="metric-label">Status:</span>
                     <span class="metric-value">
-                        <span class="badge badge-${currentSegment.endTimestamp ? 'success' : 'warning'}">
-                            ${currentSegment.endTimestamp ? 'Closed' : 'Active'}
+                        <span class="badge badge-${currentSegment.endTimestamp ? "success" : "warning"}">
+                            ${currentSegment.endTimestamp ? "Closed" : "Active"}
                         </span>
                     </span>
                 </div>
             `;
-            document.getElementById('currentPnl').innerHTML = html;
+        document.getElementById("currentPnl").innerHTML = html;
+      }
+
+      function displaySegmentsHistory(segments) {
+        if (!segments || segments.length === 0) {
+          document.getElementById("segmentsHistory").innerHTML =
+            "<p>No segments data available</p>";
+          return;
         }
 
-        function displaySegmentsHistory(segments) {
-            if (!segments || segments.length === 0) {
-                document.getElementById('segmentsHistory').innerHTML = '<p>No segments data available</p>';
-                return;
-            }
-
-            const html = `
+        const html = `
                 <table class="history-table">
                     <thead>
                         <tr>
@@ -595,40 +629,45 @@
                         </tr>
                     </thead>
                     <tbody>
-                        ${segments.map(segment => `
+                        ${segments
+                          .map(
+                            (segment) => `
                             <tr>
                                 <td>#${segment.segmentNumber}</td>
                                 <td>
-                                    ${segment.startTimestamp ? new Date(segment.startTimestamp).toLocaleDateString() : 'N/A'} - 
-                                    ${segment.endTimestamp ? new Date(segment.endTimestamp).toLocaleDateString() : 'Active'}
+                                    ${segment.startTimestamp ? new Date(segment.startTimestamp).toLocaleDateString() : "N/A"} - 
+                                    ${segment.endTimestamp ? new Date(segment.endTimestamp).toLocaleDateString() : "Active"}
                                 </td>
                                 <td>$${(segment.initialValueUSD || 0).toFixed(2)}</td>
-                                <td>${segment.finalValueUSD ? `$${segment.finalValueUSD.toFixed(2)}` : '-'}</td>
-                                <td class="${(segment.realizedPnlUSD || 0) >= 0 ? 'positive' : 'negative'}">
-                                    ${segment.realizedPnlUSD ? `$${segment.realizedPnlUSD.toFixed(2)}` : '-'}
+                                <td>${segment.finalValueUSD ? `$${segment.finalValueUSD.toFixed(2)}` : "-"}</td>
+                                <td class="${(segment.realizedPnlUSD || 0) >= 0 ? "positive" : "negative"}">
+                                    ${segment.realizedPnlUSD ? `$${segment.realizedPnlUSD.toFixed(2)}` : "-"}
                                 </td>
                                 <td class="positive">$${(segment.feesClaimedUSD || 0).toFixed(2)}</td>
                                 <td>
-                                    <span class="badge badge-${segment.endTimestamp ? 'success' : 'warning'}">
-                                        ${segment.endTimestamp ? 'Closed' : 'Active'}
+                                    <span class="badge badge-${segment.endTimestamp ? "success" : "warning"}">
+                                        ${segment.endTimestamp ? "Closed" : "Active"}
                                     </span>
-                                    ${segment.closureReason ? `<br><small>${segment.closureReason}</small>` : ''}
+                                    ${segment.closureReason ? `<br><small>${segment.closureReason}</small>` : ""}
                                 </td>
                             </tr>
-                        `).join('')}
+                        `
+                          )
+                          .join("")}
                     </tbody>
                 </table>
             `;
-            document.getElementById('segmentsHistory').innerHTML = html;
+        document.getElementById("segmentsHistory").innerHTML = html;
+      }
+
+      function displayClaimHistory(claims) {
+        if (!claims || claims.length === 0) {
+          document.getElementById("claimHistory").innerHTML =
+            "<p>No claim history available</p>";
+          return;
         }
 
-        function displayClaimHistory(claims) {
-            if (!claims || claims.length === 0) {
-                document.getElementById('claimHistory').innerHTML = '<p>No claim history available</p>';
-                return;
-            }
-
-            const html = `
+        const html = `
                 <table class="history-table">
                     <thead>
                         <tr>
@@ -640,32 +679,37 @@
                         </tr>
                     </thead>
                     <tbody>
-                        ${claims.map(claim => `
+                        ${claims
+                          .map(
+                            (claim) => `
                             <tr>
-                                <td>${claim.createdAt ? new Date(claim.createdAt).toLocaleDateString() : 'N/A'}</td>
+                                <td>${claim.createdAt ? new Date(claim.createdAt).toLocaleDateString() : "N/A"}</td>
                                 <td>
-                                    <span class="badge badge-${claim.claimType === 'manual' ? 'success' : 'warning'}">
-                                        ${claim.claimType || 'Unknown'}
+                                    <span class="badge badge-${claim.claimType === "manual" ? "success" : "warning"}">
+                                        ${claim.claimType || "Unknown"}
                                     </span>
                                 </td>
                                 <td class="positive">$${(claim.claimedUSDValue || 0).toFixed(2)}</td>
-                                <td>${claim.solReceived ? claim.solReceived.toFixed(4) : '-'}</td>
+                                <td>${claim.solReceived ? claim.solReceived.toFixed(4) : "-"}</td>
                                 <td>${(claim.tokenXPriceUSD || 0).toFixed(2)} / ${(claim.tokenYPriceUSD || 0).toFixed(2)}</td>
                             </tr>
-                        `).join('')}
+                        `
+                          )
+                          .join("")}
                     </tbody>
                 </table>
             `;
-            document.getElementById('claimHistory').innerHTML = html;
+        document.getElementById("claimHistory").innerHTML = html;
+      }
+
+      function displayRebalanceHistory(rebalances) {
+        if (!rebalances || rebalances.length === 0) {
+          document.getElementById("rebalanceHistory").innerHTML =
+            "<p>No rebalance history available</p>";
+          return;
         }
 
-        function displayRebalanceHistory(rebalances) {
-            if (!rebalances || rebalances.length === 0) {
-                document.getElementById('rebalanceHistory').innerHTML = '<p>No rebalance history available</p>';
-                return;
-            }
-
-            const html = `
+        const html = `
                 <table class="history-table">
                     <thead>
                         <tr>
@@ -677,30 +721,35 @@
                         </tr>
                     </thead>
                     <tbody>
-                        ${rebalances.map(rebalance => `
+                        ${rebalances
+                          .map(
+                            (rebalance) => `
                             <tr>
-                                <td>${rebalance.createdAt ? new Date(rebalance.createdAt).toLocaleDateString() : 'N/A'}</td>
-                                <td>${rebalance.triggerReason || 'Unknown'}</td>
-                                <td class="${(rebalance.segmentPnlUSD || 0) >= 0 ? 'positive' : 'negative'}">
+                                <td>${rebalance.createdAt ? new Date(rebalance.createdAt).toLocaleDateString() : "N/A"}</td>
+                                <td>${rebalance.triggerReason || "Unknown"}</td>
+                                <td class="${(rebalance.segmentPnlUSD || 0) >= 0 ? "positive" : "negative"}">
                                     $${(rebalance.segmentPnlUSD || 0).toFixed(2)} (${(rebalance.segmentPnlPercentage || 0).toFixed(2)}%)
                                 </td>
                                 <td class="positive">$${(rebalance.feesCollectedUSD || 0).toFixed(2)}</td>
                                 <td>$${(rebalance.newSegmentInitialUSD || 0).toFixed(2)}</td>
                             </tr>
-                        `).join('')}
+                        `
+                          )
+                          .join("")}
                     </tbody>
                 </table>
             `;
-            document.getElementById('rebalanceHistory').innerHTML = html;
+        document.getElementById("rebalanceHistory").innerHTML = html;
+      }
+
+      function displaySnapshotsHistory(snapshots) {
+        if (!snapshots || snapshots.length === 0) {
+          document.getElementById("snapshotsHistory").innerHTML =
+            "<p>No snapshot data available</p>";
+          return;
         }
 
-        function displaySnapshotsHistory(snapshots) {
-            if (!snapshots || snapshots.length === 0) {
-                document.getElementById('snapshotsHistory').innerHTML = '<p>No snapshot data available</p>';
-                return;
-            }
-
-            const html = `
+        const html = `
                 <table class="history-table">
                     <thead>
                         <tr>
@@ -713,98 +762,106 @@
                         </tr>
                     </thead>
                     <tbody>
-                        ${snapshots.map(snapshot => `
+                        ${snapshots
+                          .map(
+                            (snapshot) => `
                             <tr>
-                                <td>${snapshot.createdAt ? new Date(snapshot.createdAt).toLocaleDateString() : 'N/A'}</td>
+                                <td>${snapshot.createdAt ? new Date(snapshot.createdAt).toLocaleDateString() : "N/A"}</td>
                                 <td>
                                     <span class="badge badge-info">
-                                        ${snapshot.snapshotType || 'Unknown'}
+                                        ${snapshot.snapshotType || "Unknown"}
                                     </span>
                                 </td>
                                 <td>$${(snapshot.currentValueUSD || 0).toFixed(2)}</td>
-                                <td class="${(snapshot.unrealizedPnlUSD || 0) >= 0 ? 'positive' : 'negative'}">
+                                <td class="${(snapshot.unrealizedPnlUSD || 0) >= 0 ? "positive" : "negative"}">
                                     $${(snapshot.unrealizedPnlUSD || 0).toFixed(2)}
                                 </td>
-                                <td class="${(snapshot.totalPnlUSD || 0) >= 0 ? 'positive' : 'negative'}">
+                                <td class="${(snapshot.totalPnlUSD || 0) >= 0 ? "positive" : "negative"}">
                                     $${(snapshot.totalPnlUSD || 0).toFixed(2)}
                                 </td>
                                 <td>
-                                    ${(snapshot.tokenXAmount || 0).toFixed(4)} ${snapshot.tokenXSymbol || 'X'} / 
-                                    ${(snapshot.tokenYAmount || 0).toFixed(2)} ${snapshot.tokenYSymbol || 'Y'}
+                                    ${(snapshot.tokenXAmount || 0).toFixed(4)} ${snapshot.tokenXSymbol || "X"} / 
+                                    ${(snapshot.tokenYAmount || 0).toFixed(2)} ${snapshot.tokenYSymbol || "Y"}
                                 </td>
                             </tr>
-                        `).join('')}
+                        `
+                          )
+                          .join("")}
                     </tbody>
                 </table>
             `;
-            document.getElementById('snapshotsHistory').innerHTML = html;
-        }
+        document.getElementById("snapshotsHistory").innerHTML = html;
+      }
 
-        function createPnlChart(unrealized, realized, fees) {
-            const ctx = document.getElementById('pnlChart').getContext('2d');
-            new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Unrealized PnL', 'Realized PnL', 'Fees Claimed'],
-                    datasets: [{
-                        data: [unrealized, realized, fees],
-                        backgroundColor: [
-                            unrealized >= 0 ? '#28a745' : '#dc3545',
-                            realized >= 0 ? '#17a2b8' : '#dc3545',
-                            '#ffc107'
-                        ],
-                        borderWidth: 2,
-                        borderColor: '#fff'
-                    }]
+      function createPnlChart(unrealized, realized, fees) {
+        const ctx = document.getElementById("pnlChart").getContext("2d");
+        new Chart(ctx, {
+          type: "doughnut",
+          data: {
+            labels: ["Unrealized PnL", "Realized PnL", "Fees Claimed"],
+            datasets: [
+              {
+                data: [unrealized, realized, fees],
+                backgroundColor: [
+                  unrealized >= 0 ? "#28a745" : "#dc3545",
+                  realized >= 0 ? "#17a2b8" : "#dc3545",
+                  "#ffc107",
+                ],
+                borderWidth: 2,
+                borderColor: "#fff",
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: "bottom",
+              },
+              tooltip: {
+                callbacks: {
+                  label: function (context) {
+                    return context.label + ": $" + context.parsed.toFixed(2);
+                  },
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom'
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return context.label + ': $' + context.parsed.toFixed(2);
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        }
+              },
+            },
+          },
+        });
+      }
 
-        // Utility functions
-        function showLoading(show) {
-            document.getElementById('loadingSection').classList.toggle('hidden', !show);
-        }
+      // Utility functions
+      function showLoading(show) {
+        document
+          .getElementById("loadingSection")
+          .classList.toggle("hidden", !show);
+      }
 
-        function showError(message) {
-            const errorSection = document.getElementById('errorSection');
-            errorSection.textContent = message;
-            errorSection.className = 'error';
-            errorSection.classList.remove('hidden');
-        }
+      function showError(message) {
+        const errorSection = document.getElementById("errorSection");
+        errorSection.textContent = message;
+        errorSection.className = "error";
+        errorSection.classList.remove("hidden");
+      }
 
-        function hideError() {
-            document.getElementById('errorSection').classList.add('hidden');
-        }
+      function hideError() {
+        document.getElementById("errorSection").classList.add("hidden");
+      }
 
-        function showStatus(message, type) {
-            const statusSection = document.getElementById('statusSection');
-            statusSection.textContent = message;
-            statusSection.className = `${type} hidden`;
-            statusSection.classList.remove('hidden');
-        }
+      function showStatus(message, type) {
+        const statusSection = document.getElementById("statusSection");
+        statusSection.textContent = message;
+        statusSection.className = `${type} hidden`;
+        statusSection.classList.remove("hidden");
+      }
 
-        window.clearResults = function() {
-            document.getElementById('positionId').value = '';
-            document.getElementById('resultsSection').classList.add('hidden');
-            hideError();
-            currentPosition = null;
-        };
+      window.clearResults = function () {
+        document.getElementById("positionId").value = "";
+        document.getElementById("resultsSection").classList.add("hidden");
+        hideError();
+        currentPosition = null;
+      };
     </script>
-</body>
+  </body>
 </html>
