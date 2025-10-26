@@ -1,7 +1,11 @@
 import { Telegraf } from "telegraf";
 import { BotContext } from "@/types/bot.types";
 import { FastifyInstance } from "fastify";
-import { settingsHandler, handleSettingsCallback, handleSettingsInput } from "../handlers/settings";
+import {
+  settingsHandler,
+  handleSettingsCallback,
+  handleSettingsInput,
+} from "../handlers/settings";
 import { ST_PATTERNS } from "../constants/settings.constants";
 import { message } from "telegraf/filters";
 
@@ -15,10 +19,8 @@ export function settingsCommand(
   const combined = new RegExp(
     [
       ST_PATTERNS.refresh.source,
-      ST_PATTERNS.vaultSet.source,
-      ST_PATTERNS.gasSet.source,
       ST_PATTERNS.scheduleSet.source,
-      
+
       // New settings patterns
       ST_PATTERNS.toggleRebalance.source,
       ST_PATTERNS.rebalanceThreshold.source,
@@ -27,10 +29,10 @@ export function settingsCommand(
       ST_PATTERNS.takeProfit.source,
       ST_PATTERNS.toggleAutoConvert.source,
       ST_PATTERNS.slippage.source,
-      
+
       // Menu navigation patterns
       "schedule_menu",
-      "threshold_menu", 
+      "threshold_menu",
       "bin_menu",
       "sl_menu",
       "tp_menu",

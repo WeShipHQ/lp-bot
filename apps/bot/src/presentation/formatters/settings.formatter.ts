@@ -1,4 +1,4 @@
-import { UserSettings } from "@/application/settings/get-user-settings.use-case";
+// import { UserSettings } from "@/application/settings/get-user-settings.use-case";
 import {
   GasPriority,
   RebalanceSchedule,
@@ -7,34 +7,25 @@ import {
   SlippageBps,
 } from "../constants/settings.constants";
 import { divider } from "@/utils/misc";
+import { UserPreferences } from "@/domain";
 
-export interface SettingsMessageModel {
-  vaultAddress?: string | null;
-  gasPriority: GasPriority;
-  rebalancingSchedule: string;
+// export interface SettingsMessageModel {
+//   vaultAddress?: string | null;
+//   gasPriority: GasPriority;
+//   rebalancingSchedule: string;
 
-  // New settings
-  autoRebalanceEnabled: boolean;
-  rebalanceThreshold: string;
-  defaultBinRange: string;
-  stopLossPercentage: string | null;
-  takeProfitPercentage: string | null;
-  autoConvertToSol: boolean;
-  slippagePercentage: string;
-}
+//   // New settings
+//   autoRebalanceEnabled: boolean;
+//   rebalanceThreshold: string;
+//   defaultBinRange: string;
+//   stopLossPercentage: string | null;
+//   takeProfitPercentage: string | null;
+//   autoConvertToSol: boolean;
+//   slippagePercentage: string;
+// }
 
 export class SettingsFormatter {
-  static formatOverview(model: UserSettings): string {
-    const vault =
-      model.vaultAddress && model.vaultAddress.trim().length > 0
-        ? model.vaultAddress
-        : "Not set";
-    // const gasLabel = model.gasPriority === "low"
-    //   ? "Low (0.00005 SOL)"
-    //   : model.gasPriority === "high"
-    //     ? "High (0.0002 SOL)"
-    //     : "Medium (0.0001 SOL)";
-
+  static formatOverview(model: UserPreferences): string {
     const lines: string[] = [];
     lines.push("⚙️ *Settings*\n");
 
@@ -43,7 +34,7 @@ export class SettingsFormatter {
     lines.push(
       `• Auto Rebalance: ${model.autoRebalanceEnabled ? "✅ Enabled" : "❌ Disabled"}`
     );
-    lines.push(`• Schedule: ${model.rebalancingSchedule}`);
+    lines.push(`• Schedule: ${model.rebalanceSchedule}`);
     lines.push(`• Threshold: ${model.rebalanceThreshold}%`);
 
     // Position Configuration
@@ -62,11 +53,7 @@ export class SettingsFormatter {
     );
     lines.push(`• Slippage: ${model.slippagePercentage}%`);
 
-    // Legacy settings
     lines.push(divider("-", 50));
-    lines.push("\n🔧 *Legacy Settings*");
-    lines.push(`• Vault Address: ${vault}`);
-    // lines.push(`• Gas Priority: ${gasLabel}`);
 
     return lines.join("\n");
   }

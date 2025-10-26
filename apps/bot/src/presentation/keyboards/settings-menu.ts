@@ -1,31 +1,15 @@
 import { InlineKeyboardMarkup } from "@telegraf/types";
 import {
-  GasPriority,
   RebalanceSchedule,
   BinRange,
   RiskPercentage,
   SlippageBps,
   ST_CALLBACKS,
 } from "../constants/settings.constants";
-import { UserSettings } from "@/application/settings/get-user-settings.use-case";
-
-// export interface SettingsViewModel {
-//   vaultAddress?: string | null;
-//   gasPriority: GasPriority;
-//   rebalancingSchedule: RebalanceSchedule | string;
-
-//   // New settings
-//   autoRebalanceEnabled: boolean;
-//   rebalanceThreshold: string;
-//   defaultBinRange: number | string;
-//   stopLossPercentage: number | string | null;
-//   takeProfitPercentage: number | string | null;
-//   autoConvertToSol: boolean;
-//   slippagePercentage: number | string;
-// }
+import { UserPreferences } from "@/domain";
 
 export function getSettingsKeyboard(
-  settings: UserSettings
+  settings: UserPreferences
 ): InlineKeyboardMarkup {
   const keyboard = [];
 
@@ -39,7 +23,7 @@ export function getSettingsKeyboard(
   if (settings.autoRebalanceEnabled) {
     keyboard.push([
       {
-        text: `⏰ Schedule: ${settings.rebalancingSchedule}`,
+        text: `⏰ Schedule: ${settings.rebalanceSchedule}`,
         callback_data: "schedule_menu",
       },
       {
@@ -82,17 +66,6 @@ export function getSettingsKeyboard(
       text: `💰 Slippage: ${formatSlippage(settings.slippagePercentage)}`,
       callback_data: "slippage_menu",
     },
-  ]);
-
-  // Legacy Settings
-  keyboard.push([
-    { text: "🔑 Set Vault Address", callback_data: ST_CALLBACKS.vaultSet },
-  ]);
-
-  keyboard.push([
-    { text: "⛽ Gas: Low", callback_data: ST_CALLBACKS.gasSet("low") },
-    { text: "Medium", callback_data: ST_CALLBACKS.gasSet("medium") },
-    { text: "High", callback_data: ST_CALLBACKS.gasSet("high") },
   ]);
 
   keyboard.push([{ text: "🔄 Refresh", callback_data: ST_CALLBACKS.refresh }]);
@@ -141,7 +114,7 @@ export function getBinRangeKeyboard(
 }
 
 export function getRebalanceThresholdKeyboard(
-  current: string
+  current: number
 ): InlineKeyboardMarkup {
   return {
     inline_keyboard: [

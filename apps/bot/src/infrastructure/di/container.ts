@@ -37,8 +37,8 @@ import { GetPoolTokenBalancesUseCase } from "@/application/wallet/get-pool-token
 import { ConnectWalletUseCase } from "@/application/wallet/connect-wallet.use-case";
 import { SendTokensUseCase } from "@/application/wallet/send-tokens.use-case";
 import { GetTopTokenBalancesUseCase } from "@/application/wallet/get-top-token-balances.use-case";
-import { SettingsService } from "@/services/settings.service";
-import { SettingsIntegrationService } from "@/services/settings-integration.service";
+// import { SettingsService } from "@/services/settings.service";
+// import { SettingsIntegrationService } from "@/services/settings-integration.service";
 import { UserRebalanceScheduleService } from "@/services/user-rebalance-schedule.service";
 
 import { GetTrendingPoolsUseCase } from "@/application/trending/get-trending-pools.use-case";
@@ -50,9 +50,9 @@ import { GetPriceRangeUseCase } from "@/application/position/get-price-range.use
 import { ParseFreeTextMessageUseCase } from "@/application/message/parse-free-text.use-case";
 import { RouteFreeTextMessageUseCase } from "@/application/message/route-free-text.use-case";
 import { MessageService } from "@/application/message/message.service";
-import { GetUserSettingsUseCase } from "@/application/settings/get-user-settings.use-case";
+// import { GetUserSettingsUseCase } from "@/application/settings/get-user-settings.use-case";
 import { UpdateUserSettingUseCase } from "@/application/settings/update-user-setting.use-case";
-import { GetUserByTelegramIdUseCase } from "@/application/user/get-user-by-telegram-id.use-case";
+// import { GetUserByTelegramIdUseCase } from "@/application/user/get-user-by-telegram-id.use-case";
 
 // Adapters
 import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
@@ -204,16 +204,14 @@ function registerBase() {
         )
     );
 
-  container
-    .bind(RebalancePositionUseCase)
-    .toDynamicValue(
-      (c) =>
-        new RebalancePositionUseCase(
-          c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
-          c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
-          c.container.get(SettingsIntegrationService)
-        )
-    );
+  container.bind(RebalancePositionUseCase).toDynamicValue(
+    (c) =>
+      new RebalancePositionUseCase(
+        c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
+        c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry)
+        // c.container.get(SettingsIntegrationService)
+      )
+  );
 
   container
     .bind(CalculateBalancedDistributionUseCase)
@@ -302,26 +300,26 @@ function registerBase() {
     .toDynamicValue(() => new RouteFreeTextMessageUseCase());
 
   // Settings use-cases
-  container
-    .bind(GetUserSettingsUseCase)
-    .toDynamicValue(() => new GetUserSettingsUseCase());
+  // container
+  //   .bind(GetUserSettingsUseCase)
+  //   .toDynamicValue(() => new GetUserSettingsUseCase());
   container
     .bind(UpdateUserSettingUseCase)
     .toDynamicValue(() => new UpdateUserSettingUseCase());
   container
     .bind(UpdateUserUseCase)
     .toDynamicValue(() => new UpdateUserUseCase());
-  container
-    .bind(GetUserByTelegramIdUseCase)
-    .toDynamicValue(() => new GetUserByTelegramIdUseCase());
+  // container
+  //   .bind(GetUserByTelegramIdUseCase)
+  //   .toDynamicValue(() => new GetUserByTelegramIdUseCase());
 
   // Additional services
-  container.bind(SettingsService).toDynamicValue(() => new SettingsService());
-  container
-    .bind(SettingsIntegrationService)
-    .toDynamicValue(
-      () => new SettingsIntegrationService(container.get(SettingsService))
-    );
+  // container.bind(SettingsService).toDynamicValue(() => new SettingsService());
+  // container
+  //   .bind(SettingsIntegrationService)
+  //   .toDynamicValue(
+  //     () => new SettingsIntegrationService(container.get(SettingsService))
+  // );
   container
     .bind(UserRebalanceScheduleService)
     .toDynamicValue(() => new UserRebalanceScheduleService());

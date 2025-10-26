@@ -43,8 +43,8 @@ export interface RebalancePositionCommand {
 export class RebalancePositionUseCase {
   constructor(
     private readonly positionRepository: IPositionRepository,
-    private readonly dexRegistry: DexRegistryLike,
-    private readonly settingsIntegration: SettingsIntegrationService
+    private readonly dexRegistry: DexRegistryLike
+    // private readonly settingsIntegration: SettingsIntegrationService
   ) {}
 
   async execute(

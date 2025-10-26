@@ -1,9 +1,7 @@
 import { container, DI_TOKENS } from "@/infrastructure/di/container";
 import { IUserRepository } from "@/domain/user/user.repository";
-import { User } from "@/domain/user/user.entity";
 
 export interface UpdateUserParams {
-  gasPriority?: string;
   autoRebalanceEnabled?: boolean;
   rebalanceThreshold?: string;
   rebalanceStrategy?: string;
@@ -17,19 +15,12 @@ export interface UpdateUserParams {
 }
 
 export class UpdateUserUseCase {
-  async execute(telegramId: string, updates: UpdateUserParams): Promise<void> {
+  async execute(userId: string, updates: UpdateUserParams): Promise<void> {
     const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
 
-    // Get current user by telegramId
-    const currentUser = await userRepository.findByTelegramId(telegramId);
+    const currentUser = await userRepository.findById(userId);
     if (!currentUser) {
       throw new Error("User not found");
-    }
-
-    // Update user preferences with new values
-    if (updates.gasPriority !== undefined) {
-      // Note: gasPriority is not in UserPreferences yet, would need to add it
-      // For now, we'll skip this or use metadata
     }
 
     if (updates.autoRebalanceEnabled !== undefined) {
