@@ -1,1 +1,0 @@
-ALTER TABLE "users" ADD COLUMN "privy_user_id" text;
