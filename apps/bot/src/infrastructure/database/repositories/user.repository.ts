@@ -1,39 +1,66 @@
 import { eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
-import * as schema from "../../../db/schema";
+
+import { DEFAULT_BIN_RANGE } from "@/config/constants";
+import * as schema from "@/db/schema";
+import {
+  UserNotFoundException,
+  UserPersistenceError,
+} from "@/domain/shared/errors";
+import { IUserRepository } from "@/domain/user/user.repository";
+import { createChildLogger } from "@/utils/logger";
 import {
   User,
   UserPreferences,
   RebalanceStrategy,
-} from "../../../domain/user/user.entity";
-import { IUserRepository } from "../../../domain/user/user.repository";
-import { DEFAULT_BIN_RANGE } from "@/config/constants";
+  DEFAULT_SLIPPAGE_PERCENTAGE,
+} from "@/domain";
 
 export class UserRepository implements IUserRepository {
+  private readonly logger = createChildLogger({ context: "UserRepository" });
+
   constructor(private readonly db: PostgresJsDatabase<typeof schema>) {}
 
   async findById(id: string): Promise<User | null> {
-    const user = await this.db.query.users.findFirst({
-      where: eq(schema.users.id, id),
-    });
+    try {
+      const user = await this.db.query.users.findFirst({
+        where: eq(schema.users.id, id),
+      });
 
-    if (!user) {
-      return null;
+      if (!user) {
+        return null;
+      }
+
+      return this.toDomain(user);
+    } catch (error) {
+      throw this.mapToDomainError(
+        error,
+        "findById",
+        `Failed to find user by id: ${id}`,
+        { id }
+      );
     }
-
-    return this.toDomain(user);
   }
 
   async findByTelegramId(telegramId: string): Promise<User | null> {
-    const user = await this.db.query.users.findFirst({
-      where: eq(schema.users.telegramId, telegramId),
-    });
+    try {
+      const user = await this.db.query.users.findFirst({
+        where: eq(schema.users.telegramId, telegramId),
+      });
 
-    if (!user) {
-      return null;
+      if (!user) {
+        return null;
+      }
+
+      return this.toDomain(user);
+    } catch (error) {
+      throw this.mapToDomainError(
+        error,
+        "findByTelegramId",
+        `Failed to find user by telegram id: ${telegramId}`,
+        { telegramId }
+      );
     }
-
-    return this.toDomain(user);
   }
 
   async findByReferralCode(referralCode: string): Promise<User | null> {
@@ -49,86 +76,174 @@ export class UserRepository implements IUserRepository {
   }
 
   async findByWalletAddress(address: string): Promise<User | null> {
-    const user = await this.db.query.users.findFirst({
-      where: eq(schema.users.walletAddress, address),
-    });
+    try {
+      const user = await this.db.query.users.findFirst({
+        where: eq(schema.users.walletAddress, address),
+      });
 
-    if (!user) {
-      return null;
+      if (!user) {
+        return null;
+      }
+
+      return this.toDomain(user);
+    } catch (error) {
+      throw this.mapToDomainError(
+        error,
+        "findByWalletAddress",
+        `Failed to find user by wallet address: ${address}`,
+        { address }
+      );
     }
-
-    return this.toDomain(user);
   }
 
   async findByWalletId(walletId: string): Promise<User | null> {
-    const user = await this.db.query.users.findFirst({
-      where: eq(schema.users.walletId, walletId),
-    });
+    try {
+      const user = await this.db.query.users.findFirst({
+        where: eq(schema.users.walletId, walletId),
+      });
 
-    if (!user) {
-      return null;
+      if (!user) {
+        return null;
+      }
+
+      return this.toDomain(user);
+    } catch (error) {
+      throw this.mapToDomainError(
+        error,
+        "findByWalletId",
+        `Failed to find user by wallet id: ${walletId}`,
+        { walletId }
+      );
     }
-
-    return this.toDomain(user);
   }
 
   async save(user: User): Promise<void> {
-    const persistenceData = this.toPersistence(user);
+    try {
+      const persistenceData = this.toPersistence(user);
 
-    await this.db.insert(schema.users).values(persistenceData);
+      await this.db.insert(schema.users).values(persistenceData);
+    } catch (error) {
+      throw this.mapToDomainError(
+        error,
+        "save",
+        `Failed to save user with id: ${user.id}`,
+        { userId: user.id, telegramId: user.telegramId }
+      );
+    }
   }
 
   async update(user: User): Promise<void> {
-    const persistenceData = this.toPersistence(user);
+    try {
+      const persistenceData = this.toPersistence(user);
 
-    await this.db
-      .update(schema.users)
-      .set({
-        username: persistenceData.username,
-        referralCode: persistenceData.referralCode,
-        referredBy: persistenceData.referredBy,
-        walletId: persistenceData.walletId,
-        walletAddress: persistenceData.walletAddress,
-        referralCode: persistenceData.referralCode,
-        referredBy: persistenceData.referredBy,
+      const updatedRows = await this.db
+        .update(schema.users)
+        .set({
+          username: persistenceData.username,
+          walletId: persistenceData.walletId,
+          walletAddress: persistenceData.walletAddress,
+          referralCode: persistenceData.referralCode,
+          referredBy: persistenceData.referredBy,
 
-        // Rebalancing settings
-        autoRebalanceEnabled: persistenceData.autoRebalanceEnabled,
-        rebalanceThreshold: persistenceData.rebalanceThreshold,
-        rebalanceStrategy: persistenceData.rebalanceStrategy,
-        rebalanceSchedule: persistenceData.rebalanceSchedule,
+          // Rebalancing settings
+          autoRebalanceEnabled: persistenceData.autoRebalanceEnabled,
+          rebalanceThreshold: persistenceData.rebalanceThreshold,
+          rebalanceStrategy: persistenceData.rebalanceStrategy,
+          rebalanceSchedule: persistenceData.rebalanceSchedule,
 
-        // Position configuration
-        defaultBinRange: persistenceData.defaultBinRange,
-        balancedPositionBinRange: persistenceData.balancedPositionBinRange,
+          // Position configuration
+          defaultBinRange: persistenceData.defaultBinRange,
+          balancedPositionBinRange: persistenceData.balancedPositionBinRange,
 
-        // Risk management
-        stopLossPercentage: persistenceData.stopLossPercentage,
-        takeProfitPercentage: persistenceData.takeProfitPercentage,
+          // Risk management
+          stopLossPercentage: persistenceData.stopLossPercentage,
+          takeProfitPercentage: persistenceData.takeProfitPercentage,
 
-        // Trading settings
-        autoConvertToSol: persistenceData.autoConvertToSol,
-        slippagePercentage: persistenceData.slippagePercentage,
+          // Trading settings
+          autoConvertToSol: persistenceData.autoConvertToSol,
+          slippagePercentage: persistenceData.slippagePercentage,
 
-        // Notification settings
-        notificationsEnabled: persistenceData.notificationsEnabled,
-        priceAlertsEnabled: persistenceData.priceAlertsEnabled,
-        rebalanceAlertsEnabled: persistenceData.rebalanceAlertsEnabled,
-      })
-      .where(eq(schema.users.id, user.id));
+          // Notification settings
+          notificationsEnabled: persistenceData.notificationsEnabled,
+          priceAlertsEnabled: persistenceData.priceAlertsEnabled,
+          rebalanceAlertsEnabled: persistenceData.rebalanceAlertsEnabled,
+        })
+        .where(eq(schema.users.id, user.id))
+        .returning({ id: schema.users.id });
+
+      if (updatedRows.length === 0) {
+        throw new UserNotFoundException(
+          `User with id ${user.id} not found for update`
+        );
+      }
+    } catch (error) {
+      throw this.mapToDomainError(
+        error,
+        "update",
+        `Failed to update user with id: ${user.id}`,
+        { userId: user.id }
+      );
+    }
   }
 
   async delete(id: string): Promise<void> {
-    await this.db.delete(schema.users).where(eq(schema.users.id, id));
+    try {
+      const deletedRows = await this.db
+        .delete(schema.users)
+        .where(eq(schema.users.id, id))
+        .returning({ id: schema.users.id });
+
+      if (deletedRows.length === 0) {
+        throw new UserNotFoundException(
+          `User with id ${id} not found for delete`
+        );
+      }
+    } catch (error) {
+      throw this.mapToDomainError(
+        error,
+        "delete",
+        `Failed to delete user with id: ${id}`,
+        { userId: id }
+      );
+    }
   }
 
   async exists(telegramId: string): Promise<boolean> {
-    const result = await this.db
-      .select({ count: sql<number>`count(*)` })
-      .from(schema.users)
-      .where(eq(schema.users.telegramId, telegramId));
+    try {
+      const result = await this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.users)
+        .where(eq(schema.users.telegramId, telegramId));
 
-    return Number(result[0]?.count ?? 0) > 0;
+      return Number(result[0]?.count ?? 0) > 0;
+    } catch (error) {
+      throw this.mapToDomainError(
+        error,
+        "exists",
+        `Failed to check user existence for telegram id: ${telegramId}`,
+        { telegramId }
+      );
+    }
+  }
+
+  private mapToDomainError(
+    error: unknown,
+    method: string,
+    message: string,
+    context: Record<string, unknown> = {}
+  ): Error {
+    if (error instanceof UserNotFoundException) {
+      this.logger.warn({ method, ...context }, error.message);
+      return error;
+    }
+
+    if (error instanceof UserPersistenceError) {
+      this.logger.error({ err: error, method, ...context }, error.message);
+      return error;
+    }
+
+    this.logger.error({ err: error, method, ...context }, message);
+    return new UserPersistenceError(message, { cause: error });
   }
 
   /**
@@ -156,7 +271,9 @@ export class UserRepository implements IUserRepository {
 
       // Trading settings
       autoConvertToSol: row.autoConvertToSol ?? true,
-      slippagePercentage: row.slippagePercentage?.toString() || "3.00",
+      slippagePercentage: Number(
+        row.slippagePercentage?.toString() || DEFAULT_SLIPPAGE_PERCENTAGE
+      ),
 
       // Notification settings
       notificationsEnabled: row.notificationsEnabled ?? true,
@@ -211,7 +328,7 @@ export class UserRepository implements IUserRepository {
 
       // Trading settings
       autoConvertToSol: preferences.autoConvertToSol,
-      slippagePercentage: preferences.slippagePercentage,
+      slippagePercentage: preferences.slippagePercentage?.toString() || "3.00",
 
       // Notification settings
       notificationsEnabled: preferences.notificationsEnabled,

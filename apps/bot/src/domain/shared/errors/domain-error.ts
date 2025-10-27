@@ -40,3 +40,25 @@ export class InsufficientBalanceError extends DomainError {
     Object.setPrototypeOf(this, InsufficientBalanceError.prototype);
   }
 }
+
+export class UserNotFoundException extends DomainError {
+  public readonly cause?: unknown;
+
+  constructor(message: string, options?: { cause?: unknown; code?: string }) {
+    super(message, options?.code);
+    this.name = 'UserNotFoundException';
+    Object.setPrototypeOf(this, UserNotFoundException.prototype);
+    this.cause = options?.cause;
+  }
+}
+
+export class UserPersistenceError extends DomainError {
+  public readonly cause?: unknown;
+
+  constructor(message: string, options?: { cause?: unknown; code?: string }) {
+    super(message, options?.code);
+    this.name = 'UserPersistenceError';
+    Object.setPrototypeOf(this, UserPersistenceError.prototype);
+    this.cause = options?.cause;
+  }
+}

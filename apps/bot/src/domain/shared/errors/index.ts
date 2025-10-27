@@ -4,4 +4,6 @@ export {
   InvalidStateError,
   InvalidAmountError,
   InsufficientBalanceError,
+  UserNotFoundException,
+  UserPersistenceError,
 } from './domain-error';
