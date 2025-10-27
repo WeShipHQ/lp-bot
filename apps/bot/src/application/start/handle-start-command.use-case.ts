@@ -1,16 +1,18 @@
-import { 
-  StartCommandExecutedEvent, 
-  DeepLinkProcessedEvent, 
+import {
+  StartCommandExecutedEvent,
+  DeepLinkProcessedEvent,
   WelcomeMessageSentEvent,
-  UserCreationError 
+  UserCreationError,
 } from '../../domain/start';
 import { ParseDeepLinkUseCase, ParseDeepLinkRequest } from './parse-deep-link.use-case';
 import { GetWelcomeDataUseCase, GetWelcomeDataRequest } from './get-welcome-data.use-case';
 import { RouteDeepLinkUseCase, RouteDeepLinkRequest } from './route-deep-link.use-case';
+import type { User } from '@/domain/user/user.entity';
 
 export interface HandleStartCommandRequest {
   userId: string;
   telegramId: string;
+  privyUserId?: string;
   username?: string;
   walletAddress?: string;
   walletId?: string;
@@ -32,10 +34,11 @@ export interface UserSyncService {
   getUserByTelegramIdOrCreate(userData: {
     id: string;
     telegramId: string;
+    privyUserId?: string;
     username?: string;
     walletAddress?: string;
     walletId?: string;
-  }): Promise<any>;
+  }): Promise<User | null>;
 }
 
 export class HandleStartCommandUseCase {
@@ -118,6 +121,7 @@ export class HandleStartCommandUseCase {
     const localUser = await this.userSyncService.getUserByTelegramIdOrCreate({
       id: request.userId,
       telegramId: request.telegramId,
+      privyUserId: request.privyUserId,
       username: request.username,
       walletAddress: request.walletAddress,
       walletId: request.walletId,

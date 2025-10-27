@@ -34,6 +34,7 @@ export function startCommand(
       const result = await handleStartCommandUseCase.execute({
         userId: ctx.user.id,
         telegramId: ctx.user.telegramId,
+        privyUserId: ctx.privyUserId,
         username: ctx.from?.username,
         walletAddress: ctx.user.walletAddress,
         walletId: ctx.user.walletId,
