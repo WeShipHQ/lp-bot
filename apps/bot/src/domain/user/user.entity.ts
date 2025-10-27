@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import { ValidationError } from "../shared/errors";
 import type {
   RebalanceStrategy,
   UserPreferences,
@@ -26,18 +25,9 @@ import {
   DEFAULT_NOTIFICATIONS_ENABLED,
   DEFAULT_PRICE_ALERTS_ENABLED,
   DEFAULT_REBALANCE_ALERTS_ENABLED,
-  MIN_REBALANCE_THRESHOLD,
-  MAX_REBALANCE_THRESHOLD,
-  MIN_BIN_RANGE,
-  MAX_BIN_RANGE,
-  MIN_STOP_LOSS_PERCENTAGE,
-  MAX_STOP_LOSS_PERCENTAGE,
-  MIN_TAKE_PROFIT_PERCENTAGE,
-  MAX_TAKE_PROFIT_PERCENTAGE,
-  MIN_SLIPPAGE_PERCENTAGE,
-  MAX_SLIPPAGE_PERCENTAGE,
-  MAX_USERNAME_LENGTH,
 } from "./constants";
+import { UserValidator } from "./user.validator.class";
+import { validateUsername } from "./user.validators";
 
 export class User {
   private constructor(
@@ -157,15 +147,7 @@ export class User {
   }
 
   updateUsername(username: string): void {
-    if (!username || username.trim().length === 0) {
-      throw new ValidationError("Username cannot be empty");
-    }
-
-    if (username.length > MAX_USERNAME_LENGTH) {
-      throw new ValidationError(
-        `Username cannot exceed ${MAX_USERNAME_LENGTH} characters`
-      );
-    }
+    validateUsername(username);
 
     this.username = username;
     this.updatedAt = new Date();
@@ -182,11 +164,7 @@ export class User {
   }
 
   setRebalanceThreshold(threshold: number): void {
-    if (threshold < MIN_REBALANCE_THRESHOLD || threshold > MAX_REBALANCE_THRESHOLD) {
-      throw new ValidationError(
-        `Rebalance threshold must be between ${MIN_REBALANCE_THRESHOLD} and ${MAX_REBALANCE_THRESHOLD}`
-      );
-    }
+    UserValidator.validateRebalanceThreshold(threshold);
 
     this.preferences.rebalanceThreshold = threshold;
     this.updatedAt = new Date();
@@ -229,9 +207,7 @@ export class User {
 
   // New settings methods
   setRebalanceSchedule(schedule: RebalanceSchedule): void {
-    if (!schedule || String(schedule).trim().length === 0) {
-      throw new ValidationError("Rebalance schedule cannot be empty");
-    }
+    UserValidator.validateRebalanceSchedule(schedule);
 
     this.preferences.rebalanceSchedule = schedule;
     this.updatedAt = new Date();
@@ -242,11 +218,8 @@ export class User {
   }
 
   setDefaultBinRange(binRange: number): void {
-    if (binRange < MIN_BIN_RANGE || binRange > MAX_BIN_RANGE) {
-      throw new ValidationError(
-        `Bin range must be between ${MIN_BIN_RANGE} and ${MAX_BIN_RANGE}`
-      );
-    }
+    UserValidator.validateBinRange(binRange);
+
     this.preferences.defaultBinRange = binRange;
     this.updatedAt = new Date();
   }
@@ -256,11 +229,8 @@ export class User {
   }
 
   setStopLossPercentage(percentage: number | null): void {
-    if (percentage !== null && (percentage < MIN_STOP_LOSS_PERCENTAGE || percentage > MAX_STOP_LOSS_PERCENTAGE)) {
-      throw new ValidationError(
-        `Stop loss percentage must be between ${MIN_STOP_LOSS_PERCENTAGE} and ${MAX_STOP_LOSS_PERCENTAGE}`
-      );
-    }
+    UserValidator.validateStopLossPercentage(percentage);
+
     this.preferences.stopLossPercentage = percentage;
     this.updatedAt = new Date();
   }
@@ -270,11 +240,8 @@ export class User {
   }
 
   setTakeProfitPercentage(percentage: number | null): void {
-    if (percentage !== null && (percentage < MIN_TAKE_PROFIT_PERCENTAGE || percentage > MAX_TAKE_PROFIT_PERCENTAGE)) {
-      throw new ValidationError(
-        `Take profit percentage must be between ${MIN_TAKE_PROFIT_PERCENTAGE} and ${MAX_TAKE_PROFIT_PERCENTAGE}`
-      );
-    }
+    UserValidator.validateTakeProfitPercentage(percentage);
+
     this.preferences.takeProfitPercentage = percentage;
     this.updatedAt = new Date();
   }
@@ -293,13 +260,8 @@ export class User {
   }
 
   setSlippagePercentage(percentage: string | number): void {
-    const value =
-      typeof percentage === "number" ? percentage : parseFloat(percentage);
-    if (isNaN(value) || value < MIN_SLIPPAGE_PERCENTAGE || value > MAX_SLIPPAGE_PERCENTAGE) {
-      throw new ValidationError(
-        `Slippage percentage must be between ${MIN_SLIPPAGE_PERCENTAGE} and ${MAX_SLIPPAGE_PERCENTAGE}`
-      );
-    }
+    const value = UserValidator.validateSlippagePercentage(percentage);
+
     this.preferences.slippagePercentage = value;
     this.updatedAt = new Date();
   }
