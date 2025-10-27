@@ -59,3 +59,11 @@ export class TransactionError extends InfrastructureError {
     Object.setPrototypeOf(this, TransactionError.prototype);
   }
 }
+
+export class OptimisticLockError extends InfrastructureError {
+  constructor(message: string, code = 'OPTIMISTIC_LOCK_FAILED', cause?: Error) {
+    super(message, code, cause);
+    this.name = 'OptimisticLockError';
+    Object.setPrototypeOf(this, OptimisticLockError.prototype);
+  }
+}

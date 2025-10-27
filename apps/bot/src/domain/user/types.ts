@@ -102,4 +102,5 @@ export interface UserData {
   preferences: UserPreferences;
   createdAt: Date;
   updatedAt: Date;
+  version: number;
 }

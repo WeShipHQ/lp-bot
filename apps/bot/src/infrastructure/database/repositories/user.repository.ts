@@ -1,4 +1,4 @@
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import * as schema from "../../../db/schema";
 import {
@@ -8,6 +8,7 @@ import {
 } from "../../../domain/user/user.entity";
 import { IUserRepository } from "../../../domain/user/user.repository";
 import { DEFAULT_BIN_RANGE } from "@/config/constants";
+import { OptimisticLockError } from "@/shared/errors";
 
 export class UserRepository implements IUserRepository {
   constructor(private readonly db: PostgresJsDatabase<typeof schema>) {}
@@ -68,8 +69,9 @@ export class UserRepository implements IUserRepository {
 
   async update(user: User): Promise<void> {
     const persistenceData = this.toPersistence(user);
+    const currentVersion = persistenceData.version ?? 0;
 
-    await this.db
+    const result = await this.db
       .update(schema.users)
       .set({
         username: persistenceData.username,
@@ -93,8 +95,23 @@ export class UserRepository implements IUserRepository {
         // Trading settings
         autoConvertToSol: persistenceData.autoConvertToSol,
         slippagePercentage: persistenceData.slippagePercentage,
+        version: currentVersion + 1,
       })
-      .where(eq(schema.users.id, user.id));
+      .where(
+        and(
+          eq(schema.users.id, user.id),
+          eq(schema.users.version, currentVersion)
+        )
+      )
+      .returning({ version: schema.users.version });
+
+    if (result.length === 0) {
+      throw new OptimisticLockError(
+        `Failed to update user ${user.id} due to version mismatch`
+      );
+    }
+
+    user.updatePersistedVersion(result[0].version);
   }
 
   async delete(id: string): Promise<void> {
@@ -153,6 +170,7 @@ export class UserRepository implements IUserRepository {
       preferences,
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt),
+      version: row.version ?? 0,
     });
   }
 
@@ -190,6 +208,7 @@ export class UserRepository implements IUserRepository {
 
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.getUpdatedAt().toISOString(),
+      version: user.getVersion(),
     };
   }
 }
