@@ -2,6 +2,7 @@ import { IUserRepository } from "@/domain/user/user.repository";
 import { User } from "@/domain/user/user.entity";
 import { privy } from "@/services/privy.service";
 import { CONFIG } from "@/config";
+import { OptimisticLockError } from "@/shared/errors";
 
 export interface ConnectWalletResult {
   walletId: string;
@@ -9,6 +10,8 @@ export interface ConnectWalletResult {
   userId: string;
   privyUserId: string;
 }
+
+const MAX_OPTIMISTIC_RETRIES = 3;
 
 export class ConnectWalletUseCase {
   constructor(private readonly userRepository: IUserRepository) {}
@@ -102,41 +105,73 @@ export class ConnectWalletUseCase {
       };
     }
 
-    let shouldPersist = false;
-    let domainUser = existing;
+    for (let attempt = 0; attempt < MAX_OPTIMISTIC_RETRIES; attempt++) {
+      const latestUser =
+        attempt === 0
+          ? existing
+          : await this.userRepository.findByTelegramId(telegramId);
 
-    if (
-      existing.walletAddress !== walletAddress ||
-      existing.walletId !== walletId
-    ) {
-      domainUser = User.reconstitute({
-        id: existing.id,
-        telegramId: existing.telegramId,
-        privyUserId: existing.privyUserId,
-        walletId,
-        walletAddress,
-        username: existing.getUsername(),
-        preferences: existing.getPreferences(),
-        createdAt: existing.createdAt,
-        updatedAt: new Date(),
-      });
-      shouldPersist = true;
+      if (!latestUser) {
+        throw new Error("User not found");
+      }
+
+      let shouldPersist = false;
+      let domainUser = latestUser;
+
+      if (
+        latestUser.walletAddress !== walletAddress ||
+        latestUser.walletId !== walletId
+      ) {
+        domainUser = User.reconstitute({
+          id: latestUser.id,
+          telegramId: latestUser.telegramId,
+          privyUserId: latestUser.privyUserId,
+          walletId,
+          walletAddress,
+          username: latestUser.getUsername(),
+          referralCode: latestUser.getReferralCode() ?? undefined,
+          referredBy: latestUser.getReferredBy() ?? undefined,
+          preferences: latestUser.getPreferences(),
+          createdAt: latestUser.createdAt,
+          updatedAt: new Date(),
+          version: latestUser.getVersion(),
+        });
+        shouldPersist = true;
+      }
+
+      if (trimmedUsername && trimmedUsername !== domainUser.getUsername()) {
+        domainUser.updateUsername(trimmedUsername);
+        shouldPersist = true;
+      }
+
+      if (!shouldPersist) {
+        return {
+          walletId: domainUser.walletId,
+          walletAddress: domainUser.walletAddress,
+          userId: domainUser.id,
+          privyUserId: privyUser.id,
+        };
+      }
+
+      try {
+        await this.userRepository.update(domainUser);
+
+        return {
+          walletId: domainUser.walletId,
+          walletAddress: domainUser.walletAddress,
+          userId: domainUser.id,
+          privyUserId: privyUser.id,
+        };
+      } catch (error) {
+        if (error instanceof OptimisticLockError && attempt < MAX_OPTIMISTIC_RETRIES - 1) {
+          continue;
+        }
+        throw error;
+      }
     }
 
-    if (trimmedUsername && trimmedUsername !== domainUser.getUsername()) {
-      domainUser.updateUsername(trimmedUsername);
-      shouldPersist = true;
-    }
-
-    if (shouldPersist) {
-      await this.userRepository.update(domainUser);
-    }
-
-    return {
-      walletId,
-      walletAddress,
-      userId: domainUser.id,
-      privyUserId: privyUser.id,
-    };
+    throw new OptimisticLockError(
+      "Failed to update user after multiple attempts"
+    );
   }
 }

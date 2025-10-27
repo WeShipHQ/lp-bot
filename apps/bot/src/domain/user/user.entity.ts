@@ -51,7 +51,8 @@ export class User {
     private referredBy: string | null,
     private preferences: UserPreferences,
     public readonly createdAt: Date,
-    private updatedAt: Date
+    private updatedAt: Date,
+    private version: number
   ) {}
 
   static create(data: CreateUserData): User {
@@ -98,7 +99,8 @@ export class User {
       data.referredBy ?? null,
       preferences,
       now,
-      now
+      now,
+      0
     );
   }
 
@@ -114,6 +116,7 @@ export class User {
     preferences: UserPreferences;
     createdAt: Date;
     updatedAt: Date;
+    version: number;
   }): User {
     return new User(
       data.id,
@@ -126,7 +129,8 @@ export class User {
       data.referredBy ?? null,
       data.preferences,
       data.createdAt,
-      data.updatedAt
+      data.updatedAt,
+      data.version
     );
   }
 
@@ -324,5 +328,13 @@ export class User {
 
   hasBeenReferred(): boolean {
     return this.referredBy !== null;
+  }
+
+  getVersion(): number {
+    return this.version;
+  }
+
+  updatePersistedVersion(newVersion: number): void {
+    this.version = newVersion;
   }
 }

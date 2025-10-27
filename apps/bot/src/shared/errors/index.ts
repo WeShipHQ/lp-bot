@@ -14,4 +14,5 @@ export {
   CacheError,
   BlockchainError,
   TransactionError,
+  OptimisticLockError,
 } from './infrastructure-error';
