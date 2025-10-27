@@ -92,6 +92,8 @@ export const users = pgTable("users", {
   walletId: text("wallet_id").unique().notNull(),
   privyUserId: text("privy_user_id").notNull().unique(),
   username: text("username"),
+  referralCode: text("referral_code").unique(),
+  referredBy: text("referred_by"),
   walletAddress: text("wallet_address").notNull().unique(),
   referralCode: text("referral_code"),
   referredBy: text("referred_by"),

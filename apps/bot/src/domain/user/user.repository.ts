@@ -5,6 +5,8 @@ export interface IUserRepository {
   
   findByTelegramId(telegramId: string): Promise<User | null>;
   
+  findByReferralCode(referralCode: string): Promise<User | null>;
+  
   findByWalletAddress(address: string): Promise<User | null>;
   
   findByWalletId(walletId: string): Promise<User | null>;

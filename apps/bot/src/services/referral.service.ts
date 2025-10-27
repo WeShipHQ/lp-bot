@@ -1,7 +1,9 @@
 import { db } from "@/db";
-import { users, referrals, points } from "@/db/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { referrals, points } from "@/db/schema";
+import { eq, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import { IUserRepository } from "@/domain/user/user.repository";
+import { UserRepository } from "@/infrastructure/database/repositories/user.repository";
 
 export interface ReferralStats {
   totalReferrals: number;
@@ -16,6 +18,7 @@ export interface ReferralInfo {
 }
 
 export class ReferralService {
+  constructor(private readonly userRepository: IUserRepository) {}
 
   private generateReferralCode(): string {
     return nanoid(8).toUpperCase();
@@ -23,13 +26,15 @@ export class ReferralService {
 
 
   async getOrCreateReferralCode(telegramId: string): Promise<string> {
-    const user = await db.query.users.findFirst({
-      where: eq(users.telegramId, telegramId),
-      columns: { referralCode: true },
-    });
+    const user = await this.userRepository.findByTelegramId(telegramId);
 
-    if (user?.referralCode) {
-      return user.referralCode;
+    if (!user) {
+      throw new Error(`User not found for telegram id ${telegramId}`);
+    }
+
+    const existingCode = user.getReferralCode();
+    if (existingCode) {
+      return existingCode;
     }
 
     let referralCode = "";
@@ -37,19 +42,17 @@ export class ReferralService {
 
     while (!isUnique) {
       referralCode = this.generateReferralCode();
-      const existingUser = await db.query.users.findFirst({
-        where: eq(users.referralCode, referralCode),
-      });
+      const existingUser = await this.userRepository.findByReferralCode(
+        referralCode
+      );
 
       if (!existingUser) {
         isUnique = true;
       }
     }
 
-    await db
-      .update(users)
-      .set({ referralCode })
-      .where(eq(users.telegramId, telegramId));
+    user.setReferralCode(referralCode);
+    await this.userRepository.update(user);
 
     return referralCode;
   }
@@ -64,17 +67,22 @@ export class ReferralService {
         `Processing referral: code=${referralCode}, newUser=${newUserTelegramId}`
       );
 
-      const referrer = await db.query.users.findFirst({
-        where: eq(users.referralCode, referralCode),
-      });
+      const referrer = await this.userRepository.findByReferralCode(
+        referralCode
+      );
 
       if (!referrer) {
         console.log(`Referrer not found for code: ${referralCode}`);
         return false;
       }
 
+      if (referrer.telegramId === newUserTelegramId) {
+        console.log("User cannot refer themselves");
+        return false;
+      }
+
       console.log(
-        `Found referrer: ${referrer.telegramId} (${referrer.username})`
+        `Found referrer: ${referrer.telegramId} (${referrer.getUsername() ?? "unknown"})`
       );
 
       const existingReferral = await db.query.referrals.findFirst({
@@ -86,10 +94,24 @@ export class ReferralService {
         return false;
       }
 
+      const newUser = await this.userRepository.findByTelegramId(
+        newUserTelegramId
+      );
+
+      if (!newUser) {
+        console.log(`New user not found for telegram id ${newUserTelegramId}`);
+        return false;
+      }
+
+      if (newUser.hasBeenReferred()) {
+        console.log(`User ${newUserTelegramId} already has a referrer`);
+        return false;
+      }
+
       const [newReferral] = await db
         .insert(referrals)
         .values({
-          referrerId: referrer.telegramId, 
+          referrerId: referrer.telegramId,
           referredId: newUserTelegramId,
           referralCode,
           status: "ACTIVE",
@@ -98,15 +120,13 @@ export class ReferralService {
 
       console.log(`Created referral record: ${newReferral.id}`);
 
-      await db
-        .update(users)
-        .set({ referredBy: referralCode })
-        .where(eq(users.telegramId, newUserTelegramId));
+      newUser.setReferredBy(referralCode);
+      await this.userRepository.update(newUser);
 
       console.log(`Updated new user's referredBy field`);
 
       await db.insert(points).values({
-        userId: referrer.telegramId, 
+        userId: referrer.telegramId,
         amount: 100,
         type: "REFERRAL_BONUS",
         description: `Referral bonus for user ${newUserTelegramId}`,
@@ -270,4 +290,5 @@ export class ReferralService {
   }
 }
 
-export const referralService = new ReferralService();
+const userRepository: IUserRepository = new UserRepository(db);
+export const referralService = new ReferralService(userRepository);
