@@ -8,6 +8,13 @@
       "when": 1761477655485,
       "tag": "0000_peaceful_nebula",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1761551095985,
+      "tag": "0001_nosy_caretaker",
+      "breakpoints": true
     }
   ]
 }

@@ -128,6 +128,13 @@ export const users = pgTable("users", {
     .notNull()
     .default("3.00"), // proper values for slippage
 
+  // Notification settings
+  notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
+  priceAlertsEnabled: boolean("price_alerts_enabled").notNull().default(true),
+  rebalanceAlertsEnabled: boolean("rebalance_alerts_enabled")
+    .notNull()
+    .default(true),
+
   ...timestamps,
 });
 
