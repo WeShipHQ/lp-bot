@@ -638,7 +638,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
 
       const strategy = this.mapStrategy(params.strategy);
       const rangeInterval = Number(params?.rangeInterval ?? 10);
-      console.log("rangeInterval", strategy, rangeInterval);
+      
       const res = await this.dlmm.buildCreatePositionIxs(
         params.poolAddress,
         params.userAddress,

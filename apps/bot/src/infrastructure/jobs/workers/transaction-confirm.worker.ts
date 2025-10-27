@@ -1105,7 +1105,7 @@ export class TransactionConfirmWorker
         await this.swapService.swapSolToToken(
           userRecord,
           session.tokenA.address,
-          lamportsToSol(halfLamports.toString()).toString()
+          halfLamports.toString()
         );
       if (!result.success) {
         throw new Error(
@@ -1126,7 +1126,7 @@ export class TransactionConfirmWorker
         await this.swapService.swapSolToToken(
           userRecord,
           session.tokenB.address,
-          lamportsToSol(otherHalfLamports.toString()).toString()
+          otherHalfLamports.toString()
         );
       if (!result.success) {
         throw new Error(
@@ -1925,6 +1925,7 @@ export class TransactionConfirmWorker
           positionContext.tokenB.decimals
         ).toString(),
         strategy: command.strategy,
+        rangeInterval: 5,
         // slippage: positionContext.slippage,
       };
 

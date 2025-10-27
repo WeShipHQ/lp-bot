@@ -176,9 +176,9 @@ export class CreatePositionUseCase {
       const adapter = this.dexRegistry.get(command.dex);
 
       // Handle SOL auto-convert: Execute swaps first
-      // if (command.depositMethod === "sol_auto_convert" && command.solAmount) {
-      //   return await this.handleSolAutoConvert(command);
-      // }
+      if (command.depositMethod === "sol_auto_convert" && command.solAmount) {
+        return await this.handleSolAutoConvert(command);
+      }
 
       const adapterParams: CreatePositionParams = {
         poolAddress: command.poolAddress,
@@ -504,6 +504,10 @@ export class CreatePositionUseCase {
         positionAddress: undefined, // Will be set after swaps complete
       };
     } catch (error) {
+      console.error("[CreatePosition] SOL auto-convert failed", {
+        error,
+        command,
+      });
       logger.error("[CreatePosition] SOL auto-convert failed", {
         error,
         command,

@@ -277,7 +277,7 @@ export async function createSmartTransaction(
     } else {
       priorityFeeResponse = await getPriorityFeeEstimate(connection, {
         transaction: serializedTransaction,
-        options: { priorityLevel: PriorityLevel.MEDIUM },
+        options: { priorityLevel: PriorityLevel.HIGH },
       });
     }
 
@@ -755,7 +755,7 @@ export async function createTransactionSender(
 
   // Set compute unit limit with minimum 1000 CUs and 10% margin (Helius best practice)
   const units = simulation.value.unitsConsumed;
-  const computeUnits = units < 1000 ? 1000 : Math.ceil(units * 1.1);
+  const computeUnits = units < 1000 ? 1000 : Math.ceil(units * 1.2);
 
   // Get dynamic priority fee from Helius Priority Fee API
   const priorityFee = await getPriorityFee(
@@ -764,6 +764,8 @@ export async function createTransactionSender(
     payer,
     blockhash
   );
+
+  console.log("xxxx priorityFee", priorityFee);
 
   // Add compute budget instructions at the BEGINNING (must be first)
   allInstructions.unshift(
@@ -919,7 +921,10 @@ async function getPriorityFee(
         params: [
           {
             transaction: bs58.encode(tempTx.serialize()),
-            options: { recommended: true },
+            options: {
+              //  recommended: true
+              priorityLevel: PriorityLevel.HIGH,
+            },
           },
         ],
       }),

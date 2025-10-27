@@ -179,7 +179,7 @@ export class MeteoraDlmmService {
     const maxBinId = activeBin.binId + rangeInterval;
 
     console.log(
-      `[DLMM] Active bin - ID: ${activeBin.binId}, Price: ${activeBin.price.toString()}`,
+      `[DLMM] Active bin - ID: ${activeBin.binId}, rangeInterval: ${rangeInterval}, Price: ${activeBin.price.toString()}`,
       `totalXAmount: ${totalXAmount.toString()}, totalYAmount: ${totalYAmount.toString()} , strategy: ${strategy}`
     );
 
