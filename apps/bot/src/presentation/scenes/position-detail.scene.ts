@@ -111,7 +111,6 @@ async function loadPositionDetail(
   if (!result.success || !result.position) {
     throw new Error(result.error ?? "Position not found");
   }
-  console.log("result", result);
 
   const view = PositionDetailFormatter.format({
     position: result.position,
@@ -299,11 +298,10 @@ positionDetailScene.action(
     try {
       const uc = container.get(ClosePositionUseCase);
       const res = await uc.execute({
-        user: ctx.user,
         userId: ctx.user.id,
         positionId: state.positionId,
         userAddress: ctx.user.walletAddress,
-        walletId: ctx.user.walletId ?? undefined,
+        walletId: ctx.user.walletId,
         closureReason: "user_close",
       });
 
@@ -425,8 +423,10 @@ positionDetailScene.action(
     try {
       const uc = container.get(ClaimFeesUseCase);
       const res = await uc.execute({
-        user: ctx.user,
+        userId: ctx.user.id,
         positionId,
+        walletAddress: ctx.user.walletAddress,
+        walletId: ctx.user.walletId,
       });
 
       if (!res.success) {
@@ -556,10 +556,10 @@ positionDetailScene.action(
         userId: ctx.user.id,
         positionId,
         userAddress: ctx.user.walletAddress,
-        walletId: ctx.user.walletId ?? undefined,
+        walletId: ctx.user.walletId,
         metadata: {
           trigger: "manual",
-          rangeInterval: ctx.user.balancedPositionBinRange,
+          rangeInterval: ctx.user.getPreferences().balancedPositionBinRange,
         },
       });
 

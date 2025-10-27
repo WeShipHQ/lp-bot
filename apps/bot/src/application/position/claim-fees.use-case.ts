@@ -6,7 +6,7 @@ import {
 } from "@/types/core.types";
 import { IDexAdapter } from "@/types/dex-adapter.interface";
 import { logger } from "@/utils/logger";
-import { db, pendingTransactions, User } from "@/db";
+import { db, pendingTransactions } from "@/db";
 import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 import { JOB_TX_CONFIRM } from "@/infrastructure/jobs/job-definitions";
 import { DexRegistryLike } from "./create-position.use-case";
@@ -14,8 +14,10 @@ import { WalletService } from "@/services/wallet.service";
 import { Token } from "@/types/token.types";
 
 export interface ClaimFeesCommand {
-  user: User;
   positionId: string;
+  userId: string;
+  walletAddress: string;
+  walletId: string;
 }
 
 export interface ClaimFeesResult {
@@ -46,19 +48,18 @@ export class ClaimFeesUseCase {
 
   async execute(command: ClaimFeesCommand): Promise<ClaimFeesResult> {
     try {
-      if (!command?.user) {
+      if (!command?.userId) {
         return { success: false, error: "User information is required" };
       }
       if (!command?.positionId) {
         return { success: false, error: "Position ID is required" };
       }
 
-      const user = command.user;
-      if (!user?.walletAddress) {
+      if (!command.walletAddress) {
         return { success: false, error: "Connected wallet is required" };
       }
 
-      validateWalletAddress(user.walletAddress);
+      validateWalletAddress(command.walletAddress);
 
       const position = await this.positionRepository.findById(
         command.positionId
@@ -66,7 +67,7 @@ export class ClaimFeesUseCase {
       if (!position) {
         return { success: false, error: "Position not found" };
       }
-      if (position.userId !== user.id) {
+      if (position.userId !== command.userId) {
         return {
           success: false,
           error: "Unauthorized: position does not belong to user",
@@ -79,7 +80,7 @@ export class ClaimFeesUseCase {
       let estimatedUnclaimedFeesUsd = 0;
       try {
         const onchain = await adapter.getPosition(position.positionAddress, {
-          userAddress: user.walletAddress,
+          userAddress: command.walletAddress,
           poolAddress: position.poolAddress,
         });
         estimatedUnclaimedFeesUsd = Number(onchain.unclaimedFeesUsd || 0);
@@ -94,7 +95,7 @@ export class ClaimFeesUseCase {
       try {
         txResult = await adapter.claimFeesIx({
           poolAddress: position.poolAddress,
-          userAddress: user.walletAddress,
+          userAddress: command.walletAddress,
           positionAddress: position.positionAddress,
         });
       } catch (error) {
@@ -131,11 +132,18 @@ export class ClaimFeesUseCase {
         };
       }
 
+      if (!command.walletId) {
+        return {
+          success: false,
+          error: "Wallet ID is required to claim fees",
+        };
+      }
+
       let signature = "" as string | undefined;
       try {
         signature = await WalletService.signAndSendViaGateway(
-          command.user.walletId,
-          command.user.walletAddress,
+          command.walletId,
+          command.walletAddress,
           txResult.instructions,
           []
         );
@@ -155,11 +163,11 @@ export class ClaimFeesUseCase {
       // const tokenYData = position.tokenY;
 
       const context: ClaimFeesContext = {
-        userId: user.id,
+        userId: command.userId,
         positionId: position.id,
         positionAddress: position.positionAddress,
         poolAddress: position.poolAddress,
-        userAddress: user.walletAddress,
+        userAddress: command.walletAddress,
         dex: dexType,
         tokenA: {
           address: position.tokenX.address,
@@ -180,7 +188,7 @@ export class ClaimFeesUseCase {
       const metadata = {
         command: {
           positionId: position.id,
-          userId: user.id,
+          userId: command.userId,
           dex: dexType,
           poolAddress: position.poolAddress,
         },
@@ -192,7 +200,7 @@ export class ClaimFeesUseCase {
         await db.insert(pendingTransactions).values({
           signature,
           operationType: "CLAIM_FEES",
-          userId: user.id,
+          userId: command.userId,
           status: "PENDING",
           metadata,
           retryCount: 0,
@@ -216,7 +224,7 @@ export class ClaimFeesUseCase {
           {
             signature,
             operationType: "CLAIM_FEES",
-            userId: user.id,
+            userId: command.userId,
             positionId: position.id,
             positionAddress: position.positionAddress,
             submittedAt: Date.now(),

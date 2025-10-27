@@ -173,7 +173,6 @@ function registerBase() {
         new ClosePositionUseCase(
           c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
           c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
-          c.container.get(DI_TOKENS.TransactionService) as any,
           c.container.get<ICacheService>(DI_TOKENS.Cache)
         )
     );

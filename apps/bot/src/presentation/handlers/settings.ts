@@ -25,9 +25,9 @@ import { UserPreferences, IUserRepository } from "@/domain";
 // Helper function to refresh user data from database
 async function refreshUserData(ctx: BotContext): Promise<void> {
   const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
-  const refreshedUser = await userRepository.findById(ctx.eUser.id);
+  const refreshedUser = await userRepository.findById(ctx.user.id);
   if (refreshedUser) {
-    ctx.eUser = refreshedUser;
+    ctx.user = refreshedUser;
   }
 }
 
@@ -35,7 +35,7 @@ export async function settingsHandler(
   ctx: BotContext,
   _server: FastifyInstance
 ) {
-  const user = ctx.eUser;
+  const user = ctx.user;
 
   const message = SettingsFormatter.formatOverview(user.getPreferences());
 
@@ -48,7 +48,7 @@ export async function handleSettingsCallback(
   ctx: BotContext,
   _server: FastifyInstance
 ) {
-  const user = ctx.eUser;
+  const user = ctx.user;
   const data =
     ctx.callbackQuery && "data" in ctx.callbackQuery
       ? String(ctx.callbackQuery.data ?? "")
@@ -165,7 +165,7 @@ export async function handleSettingsCallback(
     // Handle refresh
     if (ST_PATTERNS.refresh.test(data)) {
       await refreshUserData(ctx);
-      const refreshedSettings = ctx.eUser.getPreferences();
+      const refreshedSettings = ctx.user.getPreferences();
 
       const text = SettingsFormatter.formatOverview(refreshedSettings);
       const keyboard = getSettingsKeyboard(refreshedSettings);
@@ -195,10 +195,10 @@ export async function handleSettingsCallback(
 
     if (ST_PATTERNS.toggleRebalance.test(data)) {
       const updater = container.get(UpdateUserSettingUseCase);
-      const newState = await updater.toggleAutoRebalance(ctx.eUser.id);
+      const newState = await updater.toggleAutoRebalance(ctx.user.id);
 
       await refreshUserData(ctx);
-      const updatedSettings = ctx.eUser.getPreferences();
+      const updatedSettings = ctx.user.getPreferences();
       const text = SettingsFormatter.formatOverview(updatedSettings);
 
       await ctx.answerCbQuery(
@@ -211,11 +211,11 @@ export async function handleSettingsCallback(
     // Handle toggle auto convert
     if (ST_PATTERNS.toggleAutoConvert.test(data)) {
       const updater = container.get(UpdateUserSettingUseCase);
-      const newState = await updater.toggleAutoConvertToSol(ctx.eUser.id);
+      const newState = await updater.toggleAutoConvertToSol(ctx.user.id);
 
       // Refresh user data to get updated settings
       await refreshUserData(ctx);
-      const updatedSettings = ctx.eUser.getPreferences();
+      const updatedSettings = ctx.user.getPreferences();
       const text = SettingsFormatter.formatOverview(updatedSettings);
 
       await ctx.answerCbQuery(
@@ -243,11 +243,11 @@ export async function handleSettingsCallback(
       }
 
       const updater = container.get(UpdateUserSettingUseCase);
-      await updater.setRebalancingSchedule(ctx.eUser.id, value);
+      await updater.setRebalancingSchedule(ctx.user.id, value);
 
       // Refresh user data to get updated settings
       await refreshUserData(ctx);
-      const updatedSettings = ctx.eUser.getPreferences();
+      const updatedSettings = ctx.user.getPreferences();
       const text = SettingsFormatter.formatOverview(updatedSettings);
 
       await ctx.answerCbQuery("⏰ Schedule updated");
@@ -273,11 +273,11 @@ export async function handleSettingsCallback(
       }
 
       const updater = container.get(UpdateUserSettingUseCase);
-      await updater.setRebalanceThreshold(ctx.eUser.id, value);
+      await updater.setRebalanceThreshold(ctx.user.id, value);
 
       // Refresh user data to get updated settings
       await refreshUserData(ctx);
-      const updatedSettings = ctx.eUser.getPreferences();
+      const updatedSettings = ctx.user.getPreferences();
       const text = SettingsFormatter.formatOverview(updatedSettings);
 
       await ctx.answerCbQuery("🔄 Threshold updated");
@@ -303,11 +303,11 @@ export async function handleSettingsCallback(
       }
 
       const updater = container.get(UpdateUserSettingUseCase);
-      await updater.setDefaultBinRange(ctx.eUser.id, parseInt(value));
+      await updater.setDefaultBinRange(ctx.user.id, parseInt(value));
 
       // Refresh user data to get updated settings
       await refreshUserData(ctx);
-      const updatedSettings = ctx.eUser.getPreferences();
+      const updatedSettings = ctx.user.getPreferences();
       const text = SettingsFormatter.formatOverview(updatedSettings);
 
       await ctx.answerCbQuery("📊 Bin range updated");
@@ -334,13 +334,13 @@ export async function handleSettingsCallback(
 
       const updater = container.get(UpdateUserSettingUseCase);
       await updater.setStopLossPercentage(
-        ctx.eUser.id,
+        ctx.user.id,
         value === "disabled" ? "disabled" : value
       );
 
       // Refresh user data to get updated settings
       await refreshUserData(ctx);
-      const updatedSettings = ctx.eUser.getPreferences();
+      const updatedSettings = ctx.user.getPreferences();
       const text = SettingsFormatter.formatOverview(updatedSettings);
 
       await ctx.answerCbQuery("⚠️ Stop loss updated");
@@ -367,13 +367,13 @@ export async function handleSettingsCallback(
 
       const updater = container.get(UpdateUserSettingUseCase);
       await updater.setTakeProfitPercentage(
-        ctx.eUser.id,
+        ctx.user.id,
         value === "disabled" ? "disabled" : value
       );
 
       // Refresh user data to get updated settings
       await refreshUserData(ctx);
-      const updatedSettings = ctx.eUser.getPreferences();
+      const updatedSettings = ctx.user.getPreferences();
       const text = SettingsFormatter.formatOverview(updatedSettings);
 
       await ctx.answerCbQuery("🎯 Take profit updated");
@@ -399,11 +399,11 @@ export async function handleSettingsCallback(
       }
 
       const updater = container.get(UpdateUserSettingUseCase);
-      await updater.setSlippagePercentage(ctx.eUser.id, parseInt(value));
+      await updater.setSlippagePercentage(ctx.user.id, parseInt(value));
 
       // Refresh user data to get updated settings
       await refreshUserData(ctx);
-      const updatedSettings = ctx.eUser.getPreferences();
+      const updatedSettings = ctx.user.getPreferences();
       const text = SettingsFormatter.formatOverview(updatedSettings);
 
       await ctx.answerCbQuery("💰 Slippage updated");
@@ -424,7 +424,7 @@ export async function handleSettingsInput(
   ctx: BotContext,
   _server: FastifyInstance
 ) {
-  const settings = ctx.eUser.getPreferences();
+  const settings = ctx.user.getPreferences();
   const messageText =
     ctx.message && "text" in ctx.message ? ctx.message.text : undefined;
   const state = ctx.session?.settingsState;
@@ -444,11 +444,11 @@ export async function handleSettingsInput(
 
       const value = `${m[1]}${m[2].toLowerCase()}`;
       const updater = container.get(UpdateUserSettingUseCase);
-      await updater.setRebalancingSchedule(ctx.eUser.id, value);
+      await updater.setRebalancingSchedule(ctx.user.id, value);
 
       // Refresh user data to get updated settings
       await refreshUserData(ctx);
-      const updatedSettings = ctx.eUser.getPreferences();
+      const updatedSettings = ctx.user.getPreferences();
 
       delete ctx.session?.settingsState;
       await ctx.reply(
@@ -465,11 +465,11 @@ export async function handleSettingsInput(
     if (state.step === "threshold_input") {
       const raw = messageText.trim();
       const updater = container.get(UpdateUserSettingUseCase);
-      await updater.setCustomRebalanceThreshold(ctx.eUser.id, raw);
+      await updater.setCustomRebalanceThreshold(ctx.user.id, raw);
 
       // Refresh user data to get updated settings
       await refreshUserData(ctx);
-      const updatedSettings = ctx.eUser.getPreferences();
+      const updatedSettings = ctx.user.getPreferences();
 
       delete ctx.session?.settingsState;
       await ctx.reply(
@@ -486,11 +486,11 @@ export async function handleSettingsInput(
     if (state.step === "bin_range_input") {
       const raw = messageText.trim();
       const updater = container.get(UpdateUserSettingUseCase);
-      await updater.setCustomBinRange(ctx.eUser.id, raw);
+      await updater.setCustomBinRange(ctx.user.id, raw);
 
       // Refresh user data to get updated settings
       await refreshUserData(ctx);
-      const updatedSettings = ctx.eUser.getPreferences();
+      const updatedSettings = ctx.user.getPreferences();
 
       delete ctx.session?.settingsState;
       await ctx.reply(SettingsFormatter.updated("Default bin range updated."));
@@ -505,11 +505,11 @@ export async function handleSettingsInput(
     if (state.step === "stop_loss_input") {
       const raw = messageText.trim();
       const updater = container.get(UpdateUserSettingUseCase);
-      await updater.setCustomStopLoss(ctx.eUser.id, raw);
+      await updater.setCustomStopLoss(ctx.user.id, raw);
 
       // Refresh user data to get updated settings
       await refreshUserData(ctx);
-      const updatedSettings = ctx.eUser.getPreferences();
+      const updatedSettings = ctx.user.getPreferences();
 
       delete ctx.session?.settingsState;
       await ctx.reply(SettingsFormatter.updated("Stop loss updated."));
@@ -524,11 +524,11 @@ export async function handleSettingsInput(
     if (state.step === "take_profit_input") {
       const raw = messageText.trim();
       const updater = container.get(UpdateUserSettingUseCase);
-      await updater.setCustomTakeProfit(ctx.eUser.id, raw);
+      await updater.setCustomTakeProfit(ctx.user.id, raw);
 
       // Refresh user data to get updated settings
       await refreshUserData(ctx);
-      const updatedSettings = ctx.eUser.getPreferences();
+      const updatedSettings = ctx.user.getPreferences();
 
       delete ctx.session?.settingsState;
       await ctx.reply(SettingsFormatter.updated("Take profit updated."));
@@ -543,11 +543,11 @@ export async function handleSettingsInput(
     if (state.step === "slippage_input") {
       const raw = messageText.trim();
       const updater = container.get(UpdateUserSettingUseCase);
-      await updater.setCustomSlippage(ctx.eUser.id, raw);
+      await updater.setCustomSlippage(ctx.user.id, raw);
 
       // Refresh user data to get updated settings
       await refreshUserData(ctx);
-      const updatedSettings = ctx.eUser.getPreferences();
+      const updatedSettings = ctx.user.getPreferences();
 
       delete ctx.session?.settingsState;
       await ctx.reply(SettingsFormatter.updated("Slippage updated."));
