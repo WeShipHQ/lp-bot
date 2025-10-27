@@ -6,10 +6,15 @@ export const CacheKeys = {
   tokenPriceKey: (address: string) => `price:${address}`,
   walletBalanceKey: (address: string) => `wallet:${address}:balance`,
   tokenBalanceKey: (wallet: string, mint: string) => `wallet:${wallet}:token:${mint}:balance`,
+  userById: (userId: string) => `user:${userId}`,
+  userByTelegramId: (telegramId: string) => `user:telegram:${telegramId}`,
+  userByWalletAddress: (address: string) => `user:wallet:${address}`,
+  userByWalletId: (walletId: string) => `user:wallet-id:${walletId}`,
 };
 
 export const CachePatterns = {
   portfolioPattern: (userId: string) => `portfolio:${userId}*`,
   positionPattern: (positionId: string) => `position:${positionId}*`,
   trendingPattern: (dex: string) => `trending:${dex}:*`,
+  userPattern: () => "user:*",
 };

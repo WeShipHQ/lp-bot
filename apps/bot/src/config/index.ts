@@ -2,6 +2,8 @@ import { config } from "dotenv";
 
 config();
 
+const userCacheTtl = Number.parseInt(process.env.USER_CACHE_TTL ?? "", 10);
+
 export const CONFIG = {
   PORT: parseInt(process.env.PORT || "3000", 10),
   NODE_ENV: process.env.NODE_ENV || "development",
@@ -35,6 +37,11 @@ export const CONFIG = {
     URL: process.env.REDIS_URL || "redis://localhost:6379",
   },
 
+  CACHE: {
+    USER_CACHE_ENABLED: process.env.USER_CACHE_ENABLED !== "false",
+    USER_CACHE_TTL: Number.isFinite(userCacheTtl) ? userCacheTtl : 300,
+  },
+
   LOG_LEVEL: process.env.LOG_LEVEL || "debug",
 };
 
@@ -46,5 +53,6 @@ export const {
   SOLANA,
   SANCTUM,
   REDIS,
+  CACHE,
   LOG_LEVEL,
 } = CONFIG;
