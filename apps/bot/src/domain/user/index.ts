@@ -1,6 +1,9 @@
 // Entity export
 export { User } from "./user.entity";
 
+// Validator export
+export { UserValidator } from "./user.validator.class";
+
 // Types export
 export type {
   UserPreferences,
