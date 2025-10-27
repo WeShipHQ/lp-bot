@@ -93,6 +93,11 @@ export class UserRepository implements IUserRepository {
         // Trading settings
         autoConvertToSol: persistenceData.autoConvertToSol,
         slippagePercentage: persistenceData.slippagePercentage,
+
+        // Notification settings
+        notificationsEnabled: persistenceData.notificationsEnabled,
+        priceAlertsEnabled: persistenceData.priceAlertsEnabled,
+        rebalanceAlertsEnabled: persistenceData.rebalanceAlertsEnabled,
       })
       .where(eq(schema.users.id, user.id));
   }
@@ -137,10 +142,10 @@ export class UserRepository implements IUserRepository {
       autoConvertToSol: row.autoConvertToSol ?? true,
       slippagePercentage: row.slippagePercentage?.toString() || "3.00",
 
-      // Notification settings (defaults for backwards compatibility)
-      notificationsEnabled: true,
-      priceAlertsEnabled: true,
-      rebalanceAlertsEnabled: true,
+      // Notification settings
+      notificationsEnabled: row.notificationsEnabled ?? true,
+      priceAlertsEnabled: row.priceAlertsEnabled ?? true,
+      rebalanceAlertsEnabled: row.rebalanceAlertsEnabled ?? true,
     };
 
     return User.reconstitute({
@@ -187,6 +192,11 @@ export class UserRepository implements IUserRepository {
       // Trading settings
       autoConvertToSol: preferences.autoConvertToSol,
       slippagePercentage: preferences.slippagePercentage,
+
+      // Notification settings
+      notificationsEnabled: preferences.notificationsEnabled,
+      priceAlertsEnabled: preferences.priceAlertsEnabled,
+      rebalanceAlertsEnabled: preferences.rebalanceAlertsEnabled,
 
       createdAt: user.createdAt.toISOString(),
       updatedAt: user.getUpdatedAt().toISOString(),
