@@ -75,6 +75,8 @@ export class UserRepository implements IUserRepository {
         username: persistenceData.username,
         walletId: persistenceData.walletId,
         walletAddress: persistenceData.walletAddress,
+        referralCode: persistenceData.referralCode,
+        referredBy: persistenceData.referredBy,
 
         // Rebalancing settings
         autoRebalanceEnabled: persistenceData.autoRebalanceEnabled,
@@ -155,6 +157,8 @@ export class UserRepository implements IUserRepository {
       walletId: row.walletId,
       walletAddress: row.walletAddress,
       username: row.username ?? undefined,
+      referralCode: row.referralCode ?? undefined,
+      referredBy: row.referredBy ?? undefined,
       preferences,
       createdAt: new Date(row.createdAt),
       updatedAt: new Date(row.updatedAt),
@@ -174,6 +178,8 @@ export class UserRepository implements IUserRepository {
       walletId: user.walletId,
       walletAddress: user.walletAddress,
       username: user.getUsername() ?? undefined,
+      referralCode: user.getReferralCode() ?? undefined,
+      referredBy: user.getReferredBy() ?? undefined,
 
       // Rebalancing settings
       autoRebalanceEnabled: preferences.autoRebalanceEnabled,
