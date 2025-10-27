@@ -1,0 +1,108 @@
+[1mdiff --git a/apps/bot/src/application/wallet/connect-wallet.use-case.ts b/apps/bot/src/application/wallet/connect-wallet.use-case.ts[m
+[1mindex ffc677a..50ece06 100644[m
+[1m--- a/apps/bot/src/application/wallet/connect-wallet.use-case.ts[m
+[1m+++ b/apps/bot/src/application/wallet/connect-wallet.use-case.ts[m
+[36m@@ -1,5 +1,6 @@[m
+ import { IUserRepository } from "@/domain/user/user.repository";[m
+ import { User } from "@/domain/user/user.entity";[m
+[32m+[m[32mimport { UserDomainService } from "@/domain/user/user.service";[m
+ import { privy } from "@/services/privy.service";[m
+ import { CONFIG } from "@/config";[m
+ [m
+[36m@@ -11,12 +12,16 @@[m [mexport interface ConnectWalletResult {[m
+ }[m
+ [m
+ export class ConnectWalletUseCase {[m
+[31m-  constructor(private readonly userRepository: IUserRepository) {}[m
+[32m+[m[32m  constructor([m
+[32m+[m[32m    private readonly userRepository: IUserRepository,[m
+[32m+[m[32m    private readonly userDomainService: UserDomainService[m
+[32m+[m[32m  ) {}[m
+ [m
+   async execute([m
+     telegramId: string,[m
+     _privyToken?: string,[m
+[31m-    username?: string[m
+[32m+[m[32m    username?: string,[m
+[32m+[m[32m    referralCode?: string[m
+   ): Promise<ConnectWalletResult> {[m
+     let privyUser = await privy.getUserByTelegramUserId(telegramId);[m
+ [m
+[36m@@ -85,14 +90,16 @@[m [mexport class ConnectWalletUseCase {[m
+     const existing = await this.userRepository.findByTelegramId(telegramId);[m
+ [m
+     if (!existing) {[m
+[31m-      const user = User.create({[m
+[31m-        telegramId,[m
+[31m-        privyUserId: privyUser.id,[m
+[31m-        username: trimmedUsername,[m
+[31m-        walletAddress,[m
+[31m-        walletId,[m
+[31m-      });[m
+[31m-      await this.userRepository.save(user);[m
+[32m+[m[32m      const user = await this.userDomainService.createUserWithReferral([m
+[32m+[m[32m        {[m
+[32m+[m[32m          telegramId,[m
+[32m+[m[32m          privyUserId: privyUser.id,[m
+[32m+[m[32m          username: trimmedUsername,[m
+[32m+[m[32m          walletAddress,[m
+[32m+[m[32m          walletId,[m
+[32m+[m[32m        },[m
+[32m+[m[32m        referralCode[m
+[32m+[m[32m      );[m
+ [m
+       return {[m
+         walletId,[m
+[1mdiff --git a/apps/bot/src/domain/user/index.ts b/apps/bot/src/domain/user/index.ts[m
+[1mindex 2fd21eb..ff3c9e6 100644[m
+[1m--- a/apps/bot/src/domain/user/index.ts[m
+[1m+++ b/apps/bot/src/domain/user/index.ts[m
+[36m@@ -19,6 +19,9 @@[m [mexport type {[m
+ // Repository interface export[m
+ export type { IUserRepository } from "./user.repository";[m
+ [m
+[32m+[m[32m// Domain services export[m
+[32m+[m[32mexport { UserDomainService } from "./user.service";[m
+[32m+[m
+ // Validators export[m
+ export * from "./user.validators";[m
+ [m
+[1mdiff --git a/apps/bot/src/infrastructure/di/container.ts b/apps/bot/src/infrastructure/di/container.ts[m
+[1mindex 25ba335..650ca15 100644[m
+[1m--- a/apps/bot/src/infrastructure/di/container.ts[m
+[1m+++ b/apps/bot/src/infrastructure/di/container.ts[m
+[36m@@ -4,6 +4,7 @@[m [mimport { Container } from "inversify";[m
+ // Domain repositories[m
+ import { IPositionRepository } from "@/domain/position/position.repository";[m
+ import { IUserRepository } from "@/domain/user/user.repository";[m
+[32m+[m[32mimport { UserDomainService } from "@/domain/user/user.service";[m
+ [m
+ // Infrastructure implementations[m
+ import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";[m
+[36m@@ -118,6 +119,16 @@[m [mfunction registerBase() {[m
+     .toDynamicValue(() => new UserRepository(db))[m
+     .inSingletonScope();[m
+ [m
+[32m+[m[32m  container[m
+[32m+[m[32m    .bind(UserDomainService)[m
+[32m+[m[32m    .toDynamicValue([m
+[32m+[m[32m      (c) =>[m
+[32m+[m[32m        new UserDomainService([m
+[32m+[m[32m          c.container.get<IUserRepository>(DI_TOKENS.UserRepo)[m
+[32m+[m[32m        )[m
+[32m+[m[32m    )[m
+[32m+[m[32m    .inSingletonScope();[m
+[32m+[m
+   // Cache service (singleton)[m
+   container[m
+     .bind<ICacheService>(DI_TOKENS.Cache)[m
+[36m@@ -269,7 +280,8 @@[m [mfunction registerBase() {[m
+     .toDynamicValue([m
+       (c) =>[m
+         new ConnectWalletUseCase([m
+[31m-          c.container.get<IUserRepository>(DI_TOKENS.UserRepo)[m
+[32m+[m[32m          c.container.get<IUserRepository>(DI_TOKENS.UserRepo),[m
+[32m+[m[32m          c.container.get(UserDomainService)[m
+         )[m
+     );[m
+ [m

@@ -1,5 +1,6 @@
 import { IUserRepository } from "@/domain/user/user.repository";
 import { User } from "@/domain/user/user.entity";
+import { UserDomainService } from "@/domain/user/user.service";
 import { privy } from "@/services/privy.service";
 import { CONFIG } from "@/config";
 
@@ -11,12 +12,16 @@ export interface ConnectWalletResult {
 }
 
 export class ConnectWalletUseCase {
-  constructor(private readonly userRepository: IUserRepository) {}
+  constructor(
+    private readonly userRepository: IUserRepository,
+    private readonly userDomainService: UserDomainService
+  ) {}
 
   async execute(
     telegramId: string,
     _privyToken?: string,
-    username?: string
+    username?: string,
+    referralCode?: string
   ): Promise<ConnectWalletResult> {
     let privyUser = await privy.getUserByTelegramUserId(telegramId);
 
@@ -85,14 +90,16 @@ export class ConnectWalletUseCase {
     const existing = await this.userRepository.findByTelegramId(telegramId);
 
     if (!existing) {
-      const user = User.create({
-        telegramId,
-        privyUserId: privyUser.id,
-        username: trimmedUsername,
-        walletAddress,
-        walletId,
-      });
-      await this.userRepository.save(user);
+      const user = await this.userDomainService.createUserWithReferral(
+        {
+          telegramId,
+          privyUserId: privyUser.id,
+          username: trimmedUsername,
+          walletAddress,
+          walletId,
+        },
+        referralCode
+      );
 
       return {
         walletId,
