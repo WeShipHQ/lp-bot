@@ -13,13 +13,12 @@ import {
 import { container, DI_TOKENS } from "@/infrastructure/di/container";
 import { UpdateUserSettingUseCase } from "@/application/settings/update-user-setting.use-case";
 import {
-  ST_CALLBACKS,
   ST_PATTERNS,
-  RebalanceSchedule,
   BinRange,
   RiskPercentage,
   SlippageBps,
 } from "../constants/settings.constants";
+import { RebalanceSchedule } from "@/domain/user/types";
 import { UserPreferences, IUserRepository } from "@/domain";
 
 // Helper function to refresh user data from database
@@ -202,7 +201,7 @@ export async function handleSettingsCallback(
       const text = SettingsFormatter.formatOverview(updatedSettings);
 
       await ctx.answerCbQuery(
-        `🔄 Auto rebalance ${newState ? "enabled" : "disabled"}`
+        `🔄 Auto rebalance ${updatedSettings.autoRebalanceEnabled ? "enabled" : "disabled"}`
       );
       await updateSettingsMessage(ctx, text, updatedSettings);
       return;
@@ -213,7 +212,6 @@ export async function handleSettingsCallback(
       const updater = container.get(UpdateUserSettingUseCase);
       const newState = await updater.toggleAutoConvertToSol(ctx.user.id);
 
-      // Refresh user data to get updated settings
       await refreshUserData(ctx);
       const updatedSettings = ctx.user.getPreferences();
       const text = SettingsFormatter.formatOverview(updatedSettings);
@@ -242,8 +240,9 @@ export async function handleSettingsCallback(
         return;
       }
 
+      // const value = `${m[1]}${m[2].toLowerCase()}`;
       const updater = container.get(UpdateUserSettingUseCase);
-      await updater.setRebalancingSchedule(ctx.user.id, value);
+      await updater.setRebalanceSchedule(ctx.user.id, value);
 
       // Refresh user data to get updated settings
       await refreshUserData(ctx);
@@ -444,7 +443,7 @@ export async function handleSettingsInput(
 
       const value = `${m[1]}${m[2].toLowerCase()}`;
       const updater = container.get(UpdateUserSettingUseCase);
-      await updater.setRebalancingSchedule(ctx.user.id, value);
+      await updater.setRebalanceSchedule(ctx.user.id, value);
 
       // Refresh user data to get updated settings
       await refreshUserData(ctx);

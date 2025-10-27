@@ -1,11 +1,11 @@
 import { InlineKeyboardMarkup } from "@telegraf/types";
 import {
-  RebalanceSchedule,
   BinRange,
   RiskPercentage,
   SlippageBps,
   ST_CALLBACKS,
 } from "../constants/settings.constants";
+import { RebalanceSchedule } from "@/domain/user/types";
 import { UserPreferences } from "@/domain";
 
 export function getSettingsKeyboard(

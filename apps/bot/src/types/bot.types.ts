@@ -27,8 +27,15 @@ interface TwoFactorVerificationState {
   maxAttempts?: number;
 }
 
-interface SettingsState {
-  step: "vault_input" | "schedule_input";
+export interface SettingsState {
+  step: 
+    | "vault_input" 
+    | "schedule_input"
+    | "threshold_input"
+    | "bin_input"
+    | "stop_loss_input"
+    | "take_profit_input"
+    | "slippage_input";
 }
 
 export interface BotContext extends Context {

@@ -1,22 +1,15 @@
+import { RebalanceSchedule } from "@/domain/user/types";
+
 export const ST_PREFIX = "st" as const;
 
-// export type GasPriority = "low" | "medium" | "high";
-export type RebalanceSchedule =
-  | "5m"
-  | "15m"
-  | "1h"
-  | "3h"
-  | "disabled"
-  | "custom";
+// Presentation layer specific types for UI options
 export type BinRange = 5 | 10 | 20 | "custom";
 export type RiskPercentage = 10 | 25 | 50 | "custom" | "disabled";
 export type SlippageBps = 50 | 100 | 300 | 500 | "custom"; // 0.5%, 1%, 3%, 5%
 
 export const ST_CALLBACKS = {
   refresh: `${ST_PREFIX}:refresh`,
-  // vaultSet: `${ST_PREFIX}:vault:set`,
-  // gasSet: (level: GasPriority) => `${ST_PREFIX}:gas:set:${level}`,
-  scheduleSet: (value: RebalanceSchedule) =>
+  scheduleSet: (value: RebalanceSchedule | "custom") =>
     `${ST_PREFIX}:schedule:set:${value}`,
 
   // Rebalancing settings
@@ -37,8 +30,6 @@ export const ST_CALLBACKS = {
 
 export const ST_PATTERNS = {
   refresh: new RegExp(`^${ST_PREFIX}:refresh$`),
-  // vaultSet: new RegExp(`^${ST_PREFIX}:vault:set$`),
-  // gasSet: new RegExp(`^${ST_PREFIX}:gas:set:(low|medium|high)$`),
   scheduleSet: new RegExp(
     `^${ST_PREFIX}:schedule:set:(5m|15m|1h|3h|disabled|custom)$`
   ),

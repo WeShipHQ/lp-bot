@@ -1,10 +1,10 @@
 // import { UserSettings } from "@/application/settings/get-user-settings.use-case";
 import {
-  RebalanceSchedule,
   BinRange,
   RiskPercentage,
   SlippageBps,
 } from "../constants/settings.constants";
+import { RebalanceSchedule } from "@/domain/user/types";
 import { divider } from "@/utils/misc";
 import { UserPreferences } from "@/domain";
 

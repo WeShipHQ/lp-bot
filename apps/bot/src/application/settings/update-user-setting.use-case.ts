@@ -1,42 +1,51 @@
 import {
-  RebalanceSchedule,
   BinRange,
   RiskPercentage,
   SlippageBps,
 } from "@/presentation/constants/settings.constants";
+import { RebalanceSchedule } from "@/domain/user/types";
 import { container, DI_TOKENS } from "@/infrastructure/di/container";
-// import { GetUserByTelegramIdUseCase } from "../user/get-user-by-telegram-id.use-case";
-import { UpdateUserUseCase } from "../user/update-user.use-case";
 import { IUserRepository } from "@/domain";
 
 export class UpdateUserSettingUseCase {
-  private async getUser(userId: string) {
-    const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
-    const user = await userRepository.findById(userId);
-    if (!user) throw new Error("User not found");
-    return user;
-  }
-
-  async setRebalancingSchedule(
+  async setRebalanceSchedule(
     userId: string,
     schedule: RebalanceSchedule | string
   ): Promise<void> {
-    const updater = container.get(UpdateUserUseCase);
-    await updater.execute(userId, { rebalanceSchedule: schedule });
+    if (schedule === "custom") {
+      // Handle custom input in the handler
+      return;
+    }
+
+    const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    user.setRebalanceSchedule(schedule as RebalanceSchedule);
+    await userRepository.update(user);
   }
 
-  async toggleAutoRebalance(userId: string): Promise<boolean> {
-    const user = await this.getUser(userId);
-    const newState = !user.getPreferences().autoRebalanceEnabled;
+  async toggleAutoRebalance(userId: string): Promise<void> {
+    const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
 
-    const updater = container.get(UpdateUserUseCase);
-    await updater.execute(userId, { autoRebalanceEnabled: newState });
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
 
-    return newState;
+    if (user.isAutoRebalanceEnabled()) {
+      user.disableAutoRebalance();
+    } else {
+      user.enableAutoRebalance();
+    }
+
+    await userRepository.update(user);
   }
 
   async setRebalanceThreshold(
-    telegramId: string,
+    userId: string,
     threshold: string
   ): Promise<void> {
     const value = parseFloat(threshold);
@@ -44,12 +53,18 @@ export class UpdateUserSettingUseCase {
       throw new Error("Rebalance threshold must be between 10% and 30%");
     }
 
-    const updater = container.get(UpdateUserUseCase);
-    await updater.execute(telegramId, { rebalanceThreshold: value.toString() });
+    const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    user.setRebalanceThreshold(value);
+    await userRepository.update(user);
   }
 
   async setDefaultBinRange(
-    telegramId: string,
+    userId: string,
     binRange: BinRange | number
   ): Promise<void> {
     let value: number;
@@ -67,12 +82,18 @@ export class UpdateUserSettingUseCase {
       throw new Error("Bin range must be between 5 and 100");
     }
 
-    const updater = container.get(UpdateUserUseCase);
-    await updater.execute(telegramId, { defaultBinRange: value });
+    const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    user.setDefaultBinRange(value);
+    await userRepository.update(user);
   }
 
   async setStopLossPercentage(
-    telegramId: string,
+    userId: string,
     percentage: RiskPercentage | number | string
   ): Promise<void> {
     let value: number | null;
@@ -95,12 +116,18 @@ export class UpdateUserSettingUseCase {
       throw new Error("Stop loss percentage must be between 1% and 100%");
     }
 
-    const updater = container.get(UpdateUserUseCase);
-    await updater.execute(telegramId, { stopLossPercentage: value });
+    const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    user.setStopLossPercentage(value);
+    await userRepository.update(user);
   }
 
   async setTakeProfitPercentage(
-    telegramId: string,
+    userId: string,
     percentage: RiskPercentage | number | string
   ): Promise<void> {
     let value: number | null;
@@ -123,22 +150,31 @@ export class UpdateUserSettingUseCase {
       throw new Error("Take profit percentage must be between 1% and 100%");
     }
 
-    const updater = container.get(UpdateUserUseCase);
-    await updater.execute(telegramId, { takeProfitPercentage: value });
+    const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    user.setTakeProfitPercentage(value);
+    await userRepository.update(user);
   }
 
-  async toggleAutoConvertToSol(telegramId: string): Promise<boolean> {
-    const user = await this.getUser(telegramId);
-    const newState = !user.getPreferences().autoConvertToSol;
+  async toggleAutoConvertToSol(userId: string): Promise<void> {
+    const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
 
-    const updater = container.get(UpdateUserUseCase);
-    await updater.execute(telegramId, { autoConvertToSol: newState });
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
 
-    return newState;
+    const currentValue = user.getAutoConvertToSol();
+    user.setAutoConvertToSol(!currentValue);
+    await userRepository.update(user);
   }
 
   async setSlippagePercentage(
-    telegramId: string,
+    userId: string,
     slippage: SlippageBps | number
   ): Promise<void> {
     let value: number;
@@ -159,48 +195,64 @@ export class UpdateUserSettingUseCase {
       throw new Error("Slippage must be between 0.1% and 10%");
     }
 
-    const updater = container.get(UpdateUserUseCase);
-    await updater.execute(telegramId, {
-      slippagePercentage: percentage.toString(),
-    });
+    const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    user.setSlippagePercentage(percentage);
+    await userRepository.update(user);
   }
 
   // Custom input handlers
-  async setCustomBinRange(
-    telegramId: string,
-    customValue: string
-  ): Promise<void> {
+  async setCustomBinRange(userId: string, customValue: string): Promise<void> {
     const value = parseInt(customValue);
     if (isNaN(value) || value < 5 || value > 100) {
       throw new Error("Custom bin range must be between 5 and 100");
     }
 
-    const updater = container.get(UpdateUserUseCase);
-    await updater.execute(telegramId, { defaultBinRange: value });
+    const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    user.setDefaultBinRange(value);
+    await userRepository.update(user);
   }
 
   async setCustomRebalanceThreshold(
-    telegramId: string,
+    userId: string,
     customValue: string
   ): Promise<void> {
     const value = parseFloat(customValue);
-    if (isNaN(value) || value < 10 || value > 30) {
-      throw new Error("Custom rebalance threshold must be between 10% and 30%");
+    if (isNaN(value) || value < 1 || value > 100) {
+      throw new Error("Custom rebalance threshold must be between 1% and 100%");
     }
 
-    const updater = container.get(UpdateUserUseCase);
-    await updater.execute(telegramId, { rebalanceThreshold: value.toString() });
+    const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    user.setRebalanceThreshold(value);
+    await userRepository.update(user);
   }
 
-  async setCustomStopLoss(
-    telegramId: string,
-    customValue: string
-  ): Promise<void> {
+  async setCustomStopLoss(userId: string, customValue: string): Promise<void> {
     const value = parseFloat(customValue);
     if (customValue === "0" || isNaN(value)) {
       // Disable stop loss
-      const updater = container.get(UpdateUserUseCase);
-      await updater.execute(telegramId, { stopLossPercentage: null });
+      const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
+      const user = await userRepository.findById(userId);
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      user.setStopLossPercentage(null);
+      await userRepository.update(user);
       return;
     }
 
@@ -208,19 +260,31 @@ export class UpdateUserSettingUseCase {
       throw new Error("Custom stop loss must be between 1% and 100%");
     }
 
-    const updater = container.get(UpdateUserUseCase);
-    await updater.execute(telegramId, { stopLossPercentage: value });
+    const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    user.setStopLossPercentage(value);
+    await userRepository.update(user);
   }
 
   async setCustomTakeProfit(
-    telegramId: string,
+    userId: string,
     customValue: string
   ): Promise<void> {
     const value = parseFloat(customValue);
     if (customValue === "0" || isNaN(value)) {
       // Disable take profit
-      const updater = container.get(UpdateUserUseCase);
-      await updater.execute(telegramId, { takeProfitPercentage: null });
+      const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
+      const user = await userRepository.findById(userId);
+      if (!user) {
+        throw new Error("User not found");
+      }
+
+      user.setTakeProfitPercentage(null);
+      await userRepository.update(user);
       return;
     }
 
@@ -228,20 +292,48 @@ export class UpdateUserSettingUseCase {
       throw new Error("Custom take profit must be between 1% and 100%");
     }
 
-    const updater = container.get(UpdateUserUseCase);
-    await updater.execute(telegramId, { takeProfitPercentage: value });
+    const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    user.setTakeProfitPercentage(value);
+    await userRepository.update(user);
   }
 
-  async setCustomSlippage(
-    telegramId: string,
-    customValue: string
-  ): Promise<void> {
+  async setCustomSlippage(userId: string, customValue: string): Promise<void> {
     const value = parseFloat(customValue);
     if (isNaN(value) || value < 0.1 || value > 10) {
       throw new Error("Custom slippage must be between 0.1% and 10%");
     }
 
-    const updater = container.get(UpdateUserUseCase);
-    await updater.execute(telegramId, { slippagePercentage: value.toString() });
+    const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    user.setSlippagePercentage(value);
+    await userRepository.update(user);
+  }
+
+  async setCustomSchedule(userId: string, customValue: string): Promise<void> {
+    // Validate custom schedule format (e.g., "30m", "2h", "1d")
+    const scheduleRegex = /^(\d+)(m|h|d)$/;
+    if (!scheduleRegex.test(customValue)) {
+      throw new Error(
+        "Invalid schedule format. Use format like '30m', '2h', or '1d'"
+      );
+    }
+
+    const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
+    const user = await userRepository.findById(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    user.setRebalanceSchedule(customValue as RebalanceSchedule);
+    await userRepository.update(user);
   }
 }
