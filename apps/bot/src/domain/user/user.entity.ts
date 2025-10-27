@@ -1,49 +1,54 @@
+import { randomUUID } from "node:crypto";
 import { ValidationError } from "../shared/errors";
-
-export type RebalanceStrategy = "STANDARD" | "DIP_PROTECTION";
-
-export interface UserPreferences {
-  // Rebalancing settings
-  autoRebalanceEnabled: boolean;
-  rebalanceThreshold: number;
-  rebalanceStrategy: RebalanceStrategy;
-  rebalanceSchedule: string;
-
-  // Position configuration
-  defaultBinRange: number;
-  balancedPositionBinRange: number;
-
-  // Risk management
-  stopLossPercentage: number | null;
-  takeProfitPercentage: number | null;
-
-  // Trading settings
-  autoConvertToSol: boolean;
-  slippagePercentage: number;
-
-  // Notification settings
-  notificationsEnabled: boolean;
-  priceAlertsEnabled: boolean;
-  rebalanceAlertsEnabled: boolean;
-}
-
-export interface CreateUserData {
-  telegramId: string;
-  privyUserId: string;
-  walletId: string;
-  walletAddress: string;
-  username?: string;
-  preferences?: Partial<UserPreferences>;
-}
+import type {
+  RebalanceStrategy,
+  UserPreferences,
+  CreateUserData,
+  NotificationType,
+  UserId,
+  TelegramId,
+  PrivyUserId,
+  WalletId,
+  WalletAddress,
+  RebalanceSchedule,
+} from "./types";
+import {
+  DEFAULT_AUTO_REBALANCE_ENABLED,
+  DEFAULT_REBALANCE_THRESHOLD,
+  DEFAULT_REBALANCE_STRATEGY,
+  DEFAULT_REBALANCE_SCHEDULE,
+  DEFAULT_BIN_RANGE,
+  DEFAULT_BALANCED_POSITION_BIN_RANGE,
+  DEFAULT_STOP_LOSS_PERCENTAGE,
+  DEFAULT_TAKE_PROFIT_PERCENTAGE,
+  DEFAULT_AUTO_CONVERT_TO_SOL,
+  DEFAULT_SLIPPAGE_PERCENTAGE,
+  DEFAULT_NOTIFICATIONS_ENABLED,
+  DEFAULT_PRICE_ALERTS_ENABLED,
+  DEFAULT_REBALANCE_ALERTS_ENABLED,
+  MIN_REBALANCE_THRESHOLD,
+  MAX_REBALANCE_THRESHOLD,
+  MIN_BIN_RANGE,
+  MAX_BIN_RANGE,
+  MIN_STOP_LOSS_PERCENTAGE,
+  MAX_STOP_LOSS_PERCENTAGE,
+  MIN_TAKE_PROFIT_PERCENTAGE,
+  MAX_TAKE_PROFIT_PERCENTAGE,
+  MIN_SLIPPAGE_PERCENTAGE,
+  MAX_SLIPPAGE_PERCENTAGE,
+  MAX_USERNAME_LENGTH,
+} from "./constants";
 
 export class User {
   private constructor(
-    public readonly id: string,
-    public readonly telegramId: string,
-    public readonly privyUserId: string,
-    public readonly walletId: string,
-    public readonly walletAddress: string,
+    public readonly id: UserId,
+    public readonly telegramId: TelegramId,
+    public readonly privyUserId: PrivyUserId,
+    public readonly walletId: WalletId,
+    public readonly walletAddress: WalletAddress,
     private username: string | null,
+    private referralCode: string | null,
+    private referredBy: string | null,
     private preferences: UserPreferences,
     public readonly createdAt: Date,
     private updatedAt: Date
@@ -52,30 +57,30 @@ export class User {
   static create(data: CreateUserData): User {
     const defaultPreferences: UserPreferences = {
       // Rebalancing settings
-      autoRebalanceEnabled: true,
-      rebalanceThreshold: 20,
-      rebalanceStrategy: "STANDARD",
-      rebalanceSchedule: "15m",
+      autoRebalanceEnabled: DEFAULT_AUTO_REBALANCE_ENABLED,
+      rebalanceThreshold: DEFAULT_REBALANCE_THRESHOLD,
+      rebalanceStrategy: DEFAULT_REBALANCE_STRATEGY,
+      rebalanceSchedule: DEFAULT_REBALANCE_SCHEDULE,
 
       // Position configuration
-      defaultBinRange: 10,
-      balancedPositionBinRange: 10,
+      defaultBinRange: DEFAULT_BIN_RANGE,
+      balancedPositionBinRange: DEFAULT_BALANCED_POSITION_BIN_RANGE,
 
       // Risk management
-      stopLossPercentage: 25,
-      takeProfitPercentage: 25,
+      stopLossPercentage: DEFAULT_STOP_LOSS_PERCENTAGE,
+      takeProfitPercentage: DEFAULT_TAKE_PROFIT_PERCENTAGE,
 
       // Trading settings
-      autoConvertToSol: true,
-      slippagePercentage: 3.0,
+      autoConvertToSol: DEFAULT_AUTO_CONVERT_TO_SOL,
+      slippagePercentage: DEFAULT_SLIPPAGE_PERCENTAGE,
 
       // Notification settings
-      notificationsEnabled: true,
-      priceAlertsEnabled: true,
-      rebalanceAlertsEnabled: true,
+      notificationsEnabled: DEFAULT_NOTIFICATIONS_ENABLED,
+      priceAlertsEnabled: DEFAULT_PRICE_ALERTS_ENABLED,
+      rebalanceAlertsEnabled: DEFAULT_REBALANCE_ALERTS_ENABLED,
     };
 
-    const preferences = {
+    const preferences: UserPreferences = {
       ...defaultPreferences,
       ...data.preferences,
     };
@@ -83,12 +88,14 @@ export class User {
     const now = new Date();
 
     return new User(
-      crypto.randomUUID(),
+      randomUUID() as UserId,
       data.telegramId,
       data.privyUserId,
       data.walletId,
       data.walletAddress,
       data.username ?? null,
+      data.referralCode ?? null,
+      data.referredBy ?? null,
       preferences,
       now,
       now
@@ -96,12 +103,14 @@ export class User {
   }
 
   static reconstitute(data: {
-    id: string;
-    telegramId: string;
-    privyUserId: string;
-    walletId: string;
-    walletAddress: string;
+    id: UserId;
+    telegramId: TelegramId;
+    privyUserId: PrivyUserId;
+    walletId: WalletId;
+    walletAddress: WalletAddress;
     username?: string | null;
+    referralCode?: string | null;
+    referredBy?: string | null;
     preferences: UserPreferences;
     createdAt: Date;
     updatedAt: Date;
@@ -113,15 +122,15 @@ export class User {
       data.walletId,
       data.walletAddress,
       data.username ?? null,
+      data.referralCode ?? null,
+      data.referredBy ?? null,
       data.preferences,
       data.createdAt,
       data.updatedAt
     );
   }
 
-  hasNotificationEnabled(
-    type: "price" | "rebalance" | "general" | "position"
-  ): boolean {
+  hasNotificationEnabled(type: NotificationType): boolean {
     if (!this.preferences.notificationsEnabled) {
       return false;
     }
@@ -148,8 +157,14 @@ export class User {
   }
 
   updateUsername(username: string): void {
-    if (username && username.trim().length === 0) {
+    if (!username || username.trim().length === 0) {
       throw new ValidationError("Username cannot be empty");
+    }
+
+    if (username.length > MAX_USERNAME_LENGTH) {
+      throw new ValidationError(
+        `Username cannot exceed ${MAX_USERNAME_LENGTH} characters`
+      );
     }
 
     this.username = username;
@@ -167,9 +182,9 @@ export class User {
   }
 
   setRebalanceThreshold(threshold: number): void {
-    if (threshold < 0 || threshold > 100) {
+    if (threshold < MIN_REBALANCE_THRESHOLD || threshold > MAX_REBALANCE_THRESHOLD) {
       throw new ValidationError(
-        "Rebalance threshold must be between 0 and 100"
+        `Rebalance threshold must be between ${MIN_REBALANCE_THRESHOLD} and ${MAX_REBALANCE_THRESHOLD}`
       );
     }
 
@@ -213,18 +228,24 @@ export class User {
   }
 
   // New settings methods
-  setRebalanceSchedule(schedule: string): void {
+  setRebalanceSchedule(schedule: RebalanceSchedule): void {
+    if (!schedule || String(schedule).trim().length === 0) {
+      throw new ValidationError("Rebalance schedule cannot be empty");
+    }
+
     this.preferences.rebalanceSchedule = schedule;
     this.updatedAt = new Date();
   }
 
-  getRebalanceSchedule(): string {
+  getRebalanceSchedule(): RebalanceSchedule {
     return this.preferences.rebalanceSchedule;
   }
 
   setDefaultBinRange(binRange: number): void {
-    if (binRange < 5 || binRange > 100) {
-      throw new ValidationError("Bin range must be between 5 and 100");
+    if (binRange < MIN_BIN_RANGE || binRange > MAX_BIN_RANGE) {
+      throw new ValidationError(
+        `Bin range must be between ${MIN_BIN_RANGE} and ${MAX_BIN_RANGE}`
+      );
     }
     this.preferences.defaultBinRange = binRange;
     this.updatedAt = new Date();
@@ -235,9 +256,9 @@ export class User {
   }
 
   setStopLossPercentage(percentage: number | null): void {
-    if (percentage !== null && (percentage < 1 || percentage > 100)) {
+    if (percentage !== null && (percentage < MIN_STOP_LOSS_PERCENTAGE || percentage > MAX_STOP_LOSS_PERCENTAGE)) {
       throw new ValidationError(
-        "Stop loss percentage must be between 1 and 100"
+        `Stop loss percentage must be between ${MIN_STOP_LOSS_PERCENTAGE} and ${MAX_STOP_LOSS_PERCENTAGE}`
       );
     }
     this.preferences.stopLossPercentage = percentage;
@@ -249,9 +270,9 @@ export class User {
   }
 
   setTakeProfitPercentage(percentage: number | null): void {
-    if (percentage !== null && (percentage < 1 || percentage > 100)) {
+    if (percentage !== null && (percentage < MIN_TAKE_PROFIT_PERCENTAGE || percentage > MAX_TAKE_PROFIT_PERCENTAGE)) {
       throw new ValidationError(
-        "Take profit percentage must be between 1 and 100"
+        `Take profit percentage must be between ${MIN_TAKE_PROFIT_PERCENTAGE} and ${MAX_TAKE_PROFIT_PERCENTAGE}`
       );
     }
     this.preferences.takeProfitPercentage = percentage;
@@ -274,9 +295,9 @@ export class User {
   setSlippagePercentage(percentage: string | number): void {
     const value =
       typeof percentage === "number" ? percentage : parseFloat(percentage);
-    if (isNaN(value) || value < 0.1 || value > 10) {
+    if (isNaN(value) || value < MIN_SLIPPAGE_PERCENTAGE || value > MAX_SLIPPAGE_PERCENTAGE) {
       throw new ValidationError(
-        "Slippage percentage must be between 0.1 and 10"
+        `Slippage percentage must be between ${MIN_SLIPPAGE_PERCENTAGE} and ${MAX_SLIPPAGE_PERCENTAGE}`
       );
     }
     this.preferences.slippagePercentage = value;
@@ -285,5 +306,23 @@ export class User {
 
   getSlippagePercentage(): number {
     return this.preferences.slippagePercentage;
+  }
+
+  // Referral-related methods
+  getReferralCode(): string | null {
+    return this.referralCode;
+  }
+
+  setReferralCode(code: string): void {
+    this.referralCode = code;
+    this.updatedAt = new Date();
+  }
+
+  getReferredBy(): string | null {
+    return this.referredBy;
+  }
+
+  hasBeenReferred(): boolean {
+    return this.referredBy !== null;
   }
 }
