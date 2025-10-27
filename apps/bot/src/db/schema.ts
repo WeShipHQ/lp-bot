@@ -93,6 +93,8 @@ export const users = pgTable("users", {
   privyUserId: text("privy_user_id").notNull().unique(),
   username: text("username"),
   walletAddress: text("wallet_address").notNull().unique(),
+  referralCode: text("referral_code"),
+  referredBy: text("referred_by"),
 
   // Rebalancing settings
   autoRebalanceEnabled: boolean("auto_rebalance_enabled")
