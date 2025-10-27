@@ -6,16 +6,12 @@ import {
 } from "@/types/core.types";
 import { IDexAdapter } from "@/types/dex-adapter.interface";
 import { logger } from "@/utils/logger";
-import { db, pendingTransactions, User } from "@/db";
+import { db, pendingTransactions } from "@/db";
 import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 import { JOB_TX_CONFIRM } from "@/infrastructure/jobs/job-definitions";
-import {
-  DexRegistryLike,
-  ITransactionService,
-} from "./create-position.use-case";
+import { DexRegistryLike } from "./create-position.use-case";
 
 export interface ClosePositionCommand {
-  user: User;
   // Required to identify ownership and for pending tx record
   userId: string;
 
@@ -24,7 +20,7 @@ export interface ClosePositionCommand {
 
   // Execution context for submission (if adapter does not submit)
   userAddress: string; // wallet public key (base58)
-  walletId?: string; // optional Privy wallet id if needed by transaction service
+  walletId: string; // Privy wallet id for signing transactions
 
   // Closure reason
   closureReason?: "user_close" | "stop_loss" | "take_profit";
@@ -59,7 +55,6 @@ export class ClosePositionUseCase {
   constructor(
     private readonly positionRepository: IPositionRepository,
     private readonly dexRegistry: DexRegistryLike,
-    private readonly transactionService: ITransactionService,
     cacheService?: ICacheService
   ) {
     this.cache = cacheService ?? getCacheService();
@@ -120,11 +115,18 @@ export class ClosePositionUseCase {
         };
       }
 
+      if (!command.walletId) {
+        return {
+          success: false,
+          error: "Wallet ID is required to close position",
+        };
+      }
+
       let signature = "" as string | undefined;
       try {
         signature = await WalletService.signAndSendViaGateway(
-          command.user.walletId,
-          command.user.walletAddress,
+          command.walletId,
+          command.userAddress,
           txResult.instructions
         );
       } catch (err) {

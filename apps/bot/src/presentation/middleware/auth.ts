@@ -3,7 +3,6 @@ import { FastifyInstance } from "fastify";
 import { BotContext } from "@/types/bot.types";
 import { container, DI_TOKENS } from "@/infrastructure/di/container";
 import { ConnectWalletUseCase } from "@/application/wallet/connect-wallet.use-case";
-import { findUserById } from "@/db/queries";
 import { IUserRepository } from "@/domain";
 
 export function authMiddleware(
@@ -26,16 +25,14 @@ export function authMiddleware(
       );
 
       const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
-      const dbUser = await findUserById(userId);
       const user = await userRepository.findById(userId);
-      if (!user || !dbUser) {
+      if (!user) {
         throw new Error(
           `User record not found after wallet sync for telegramId=${telegramUserId}`
         );
       }
 
-      ctx.user = dbUser;
-      ctx.eUser = user;
+      ctx.user = user;
       ctx.privyUserId = privyUserId;
 
       server.log.debug(
