@@ -24,3 +24,6 @@ export * from "./user.validators";
 
 // Constants export
 export * from "./constants";
+
+// Events export
+export * from "./events";

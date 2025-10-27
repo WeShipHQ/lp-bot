@@ -38,8 +38,17 @@ import {
   MAX_SLIPPAGE_PERCENTAGE,
   MAX_USERNAME_LENGTH,
 } from "./constants";
+import {
+  DomainEvent,
+  NotificationSettings,
+  UserCreatedEvent,
+  UserNotificationSettingsChangedEvent,
+  UserPreferencesUpdatedEvent,
+} from "./events";
 
 export class User {
+  private events: DomainEvent[] = [];
+
   private constructor(
     public readonly id: UserId,
     public readonly telegramId: TelegramId,
@@ -87,7 +96,7 @@ export class User {
 
     const now = new Date();
 
-    return new User(
+    const user = new User(
       randomUUID() as UserId,
       data.telegramId,
       data.privyUserId,
@@ -100,6 +109,22 @@ export class User {
       now,
       now
     );
+
+    user.addEvent(
+      new UserCreatedEvent(
+        user.id,
+        user.telegramId,
+        user.privyUserId,
+        user.walletId,
+        user.walletAddress,
+        user.getPreferences(),
+        user.getUsername(),
+        user.getReferralCode(),
+        user.getReferredBy()
+      )
+    );
+
+    return user;
   }
 
   static reconstitute(data: {
@@ -149,11 +174,89 @@ export class User {
   }
 
   updatePreferences(updates: Partial<UserPreferences>): void {
+    if (!updates || Object.keys(updates).length === 0) {
+      return;
+    }
+
+    const previousPreferences = this.getPreferences();
+
+    const entries = Object.entries(updates).filter(
+      ([, value]) => value !== undefined
+    ) as [
+      keyof UserPreferences,
+      UserPreferences[keyof UserPreferences]
+    ][];
+
+    if (entries.length === 0) {
+      return;
+    }
+
+    const changes: Partial<UserPreferences> = {};
+
+    for (const [key, value] of entries) {
+      if (previousPreferences[key] !== value) {
+        changes[key] = value;
+      }
+    }
+
+    if (Object.keys(changes).length === 0) {
+      return;
+    }
+
     this.preferences = {
       ...this.preferences,
-      ...updates,
+      ...changes,
     };
     this.updatedAt = new Date();
+
+    const currentPreferences = this.getPreferences();
+
+    this.addEvent(
+      new UserPreferencesUpdatedEvent(
+        this.id,
+        changes,
+        previousPreferences,
+        currentPreferences
+      )
+    );
+
+    const notificationKeys: (keyof NotificationSettings)[] = [
+      "notificationsEnabled",
+      "priceAlertsEnabled",
+      "rebalanceAlertsEnabled",
+    ];
+
+    const notificationRelatedChanged = notificationKeys.some((key) =>
+      Object.prototype.hasOwnProperty.call(changes, key)
+    );
+
+    if (notificationRelatedChanged) {
+      const previousSettings: NotificationSettings = {
+        notificationsEnabled: previousPreferences.notificationsEnabled,
+        priceAlertsEnabled: previousPreferences.priceAlertsEnabled,
+        rebalanceAlertsEnabled: previousPreferences.rebalanceAlertsEnabled,
+      };
+
+      const currentSettings: NotificationSettings = {
+        notificationsEnabled: this.preferences.notificationsEnabled,
+        priceAlertsEnabled: this.preferences.priceAlertsEnabled,
+        rebalanceAlertsEnabled: this.preferences.rebalanceAlertsEnabled,
+      };
+
+      const settingsDiffer = notificationKeys.some(
+        (key) => previousSettings[key] !== currentSettings[key]
+      );
+
+      if (settingsDiffer) {
+        this.addEvent(
+          new UserNotificationSettingsChangedEvent(
+            this.id,
+            previousSettings,
+            currentSettings
+          )
+        );
+      }
+    }
   }
 
   updateUsername(username: string): void {
@@ -172,13 +275,11 @@ export class User {
   }
 
   enableAutoRebalance(): void {
-    this.preferences.autoRebalanceEnabled = true;
-    this.updatedAt = new Date();
+    this.updatePreferences({ autoRebalanceEnabled: true });
   }
 
   disableAutoRebalance(): void {
-    this.preferences.autoRebalanceEnabled = false;
-    this.updatedAt = new Date();
+    this.updatePreferences({ autoRebalanceEnabled: false });
   }
 
   setRebalanceThreshold(threshold: number): void {
@@ -188,23 +289,19 @@ export class User {
       );
     }
 
-    this.preferences.rebalanceThreshold = threshold;
-    this.updatedAt = new Date();
+    this.updatePreferences({ rebalanceThreshold: threshold });
   }
 
   setRebalanceStrategy(strategy: RebalanceStrategy): void {
-    this.preferences.rebalanceStrategy = strategy;
-    this.updatedAt = new Date();
+    this.updatePreferences({ rebalanceStrategy: strategy });
   }
 
   enableNotifications(): void {
-    this.preferences.notificationsEnabled = true;
-    this.updatedAt = new Date();
+    this.updatePreferences({ notificationsEnabled: true });
   }
 
   disableNotifications(): void {
-    this.preferences.notificationsEnabled = false;
-    this.updatedAt = new Date();
+    this.updatePreferences({ notificationsEnabled: false });
   }
 
   getPreferences(): UserPreferences {
@@ -233,8 +330,7 @@ export class User {
       throw new ValidationError("Rebalance schedule cannot be empty");
     }
 
-    this.preferences.rebalanceSchedule = schedule;
-    this.updatedAt = new Date();
+    this.updatePreferences({ rebalanceSchedule: schedule });
   }
 
   getRebalanceSchedule(): RebalanceSchedule {
@@ -247,8 +343,7 @@ export class User {
         `Bin range must be between ${MIN_BIN_RANGE} and ${MAX_BIN_RANGE}`
       );
     }
-    this.preferences.defaultBinRange = binRange;
-    this.updatedAt = new Date();
+    this.updatePreferences({ defaultBinRange: binRange });
   }
 
   getDefaultBinRange(): number {
@@ -261,8 +356,7 @@ export class User {
         `Stop loss percentage must be between ${MIN_STOP_LOSS_PERCENTAGE} and ${MAX_STOP_LOSS_PERCENTAGE}`
       );
     }
-    this.preferences.stopLossPercentage = percentage;
-    this.updatedAt = new Date();
+    this.updatePreferences({ stopLossPercentage: percentage });
   }
 
   getStopLossPercentage(): number | null {
@@ -275,8 +369,7 @@ export class User {
         `Take profit percentage must be between ${MIN_TAKE_PROFIT_PERCENTAGE} and ${MAX_TAKE_PROFIT_PERCENTAGE}`
       );
     }
-    this.preferences.takeProfitPercentage = percentage;
-    this.updatedAt = new Date();
+    this.updatePreferences({ takeProfitPercentage: percentage });
   }
 
   getTakeProfitPercentage(): number | null {
@@ -284,8 +377,7 @@ export class User {
   }
 
   setAutoConvertToSol(enabled: boolean): void {
-    this.preferences.autoConvertToSol = enabled;
-    this.updatedAt = new Date();
+    this.updatePreferences({ autoConvertToSol: enabled });
   }
 
   getAutoConvertToSol(): boolean {
@@ -300,12 +392,23 @@ export class User {
         `Slippage percentage must be between ${MIN_SLIPPAGE_PERCENTAGE} and ${MAX_SLIPPAGE_PERCENTAGE}`
       );
     }
-    this.preferences.slippagePercentage = value;
-    this.updatedAt = new Date();
+    this.updatePreferences({ slippagePercentage: value });
   }
 
   getSlippagePercentage(): number {
     return this.preferences.slippagePercentage;
+  }
+
+  getEvents(): DomainEvent[] {
+    return [...this.events];
+  }
+
+  clearEvents(): void {
+    this.events = [];
+  }
+
+  private addEvent(event: DomainEvent): void {
+    this.events.push(event);
   }
 
   // Referral-related methods
