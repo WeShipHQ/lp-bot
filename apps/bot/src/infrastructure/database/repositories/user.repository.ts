@@ -6,6 +6,7 @@ import {
   UserPreferences,
   RebalanceStrategy,
 } from "../../../domain/user/user.entity";
+import { UserDomainEvents } from "../../../domain/user/events";
 import { IUserRepository } from "../../../domain/user/user.repository";
 import { DEFAULT_BIN_RANGE } from "@/config/constants";
 
@@ -64,6 +65,8 @@ export class UserRepository implements IUserRepository {
     const persistenceData = this.toPersistence(user);
 
     await this.db.insert(schema.users).values(persistenceData);
+
+    await this.publishEvents(user);
   }
 
   async update(user: User): Promise<void> {
@@ -95,6 +98,8 @@ export class UserRepository implements IUserRepository {
         slippagePercentage: persistenceData.slippagePercentage,
       })
       .where(eq(schema.users.id, user.id));
+
+    await this.publishEvents(user);
   }
 
   async delete(id: string): Promise<void> {
@@ -108,6 +113,17 @@ export class UserRepository implements IUserRepository {
       .where(eq(schema.users.telegramId, telegramId));
 
     return Number(result[0]?.count ?? 0) > 0;
+  }
+
+  private async publishEvents(user: User): Promise<void> {
+    const events = user.getEvents();
+
+    if (events.length === 0) {
+      return;
+    }
+
+    await UserDomainEvents.publishAll(events);
+    user.clearEvents();
   }
 
   /**
