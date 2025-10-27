@@ -50,10 +50,9 @@ import {
   getCacheService,
   ICacheService,
 } from "@/infrastructure/cache/cache.service";
-import { CachePatterns, CacheKeys } from "@/infrastructure/cache/cache-keys";
+import { CachePatterns } from "@/infrastructure/cache/cache-keys";
 import { WalletService } from "@/services/wallet.service";
 import { Token } from "@/types/token.types";
-import { SanctumGatewayOptions } from "@/services/sanctum-gateway.service";
 
 export class ClosePositionUseCase {
   private readonly cache: ICacheService;
@@ -123,38 +122,11 @@ export class ClosePositionUseCase {
 
       let signature = "" as string | undefined;
       try {
-        if (await WalletService.isGatewayAvailable()) {
-          console.log("[CreatePosition] Using Sanctum Gateway for transaction");
-
-          signature = await WalletService.signAndSendTransactionWithGateway(
-            command.user.walletId,
-            command.user.walletAddress,
-            txResult.instructions,
-            [],
-            [],
-            {},
-            {
-              cuPriceRange: "high",
-              jitoTipRange: "medium",
-              expireInSlots: 150,
-              deliveryMethodType: undefined,
-              skipSimulation: false,
-              skipPriorityFee: false,
-            } as SanctumGatewayOptions
-          );
-        } else {
-          console.log(
-            "[CreatePosition] Gateway not available, using standard Jito method"
-          );
-
-          // Fallback to existing method
-          signature = await WalletService.signAndSendTransactionWithJito(
-            command.user,
-            txResult.instructions,
-            [],
-            []
-          );
-        }
+        signature = await WalletService.signAndSendViaGateway(
+          command.user.walletId,
+          command.user.walletAddress,
+          txResult.instructions
+        );
       } catch (err) {
         console.log("Transaction submission failed", { err, command });
         logger.error("Transaction submission failed", { err, command });

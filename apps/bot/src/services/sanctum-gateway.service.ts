@@ -5,10 +5,11 @@ import {
   TransactionInstruction,
   Transaction,
   VersionedTransaction,
+  TransactionMessage,
 } from "@solana/web3.js";
 import { CONFIG } from "@/config";
-import { CreateSmartTransactionOptions } from "@/types/transaction.types";
-import { createSmartTransaction } from "@/utils/build-tx";
+// import { CreateSmartTransactionOptions } from "@/types/transaction.types";
+import { createTransactionSender } from "@/utils/build-tx";
 
 export interface SanctumGatewayOptions {
   /** Override project-level CU price range */
@@ -45,21 +46,12 @@ export interface SanctumSendResponse {
 
 export class SanctumGatewayService {
   private static readonly GATEWAY_BASE_URL = "https://tpg.sanctum.so";
-  private static readonly TIP_ACCOUNTS = [
-    "9fBpwxcudpLyJskhiiKmU8wPszeUuCB8sSjhPi44QuFb",
-    "E8iYKQbhTywHbncCagNBbZ58JY6cX1SiYk5ZDPJeWFFq",
-    "AJxEGdtoHrgVUPyMsdyMLiEevwa6gk3de1QDPGwVh2hw",
-    "FzESY59j4xCef1EjqoprVBDXEFTWcrx8hGq6AYYvGH1v",
-    "77N86XfcBSAvcGNPYMAVjjyf2feUJwmUoiJ96HzPtySd",
-  ];
 
   static async buildGatewayTransaction(
     connection: Connection,
     instructions: TransactionInstruction[],
     payer: PublicKey,
     signers: Signer[] = [],
-    lookupTables: any[] = [],
-    options: CreateSmartTransactionOptions = {},
     gatewayOptions: SanctumGatewayOptions = {}
   ): Promise<{
     transaction: VersionedTransaction;
@@ -67,28 +59,45 @@ export class SanctumGatewayService {
   }> {
     console.log(`[SanctumGateway] Building optimized transaction`);
 
-    const { transaction: baseTransaction } = await createSmartTransaction(
-      connection,
-      instructions.filter(
-        (ix) =>
-          !ix.programId
-            .toString()
-            .startsWith("ComputeBudget11111111111111111111111111111")
-      ),
-      payer,
-      signers,
-      lookupTables,
-      {
-        ...options,
-      }
+    const filteredIxs = instructions.filter(
+      (ix) =>
+        !ix.programId
+          .toString()
+          .startsWith("ComputeBudget11111111111111111111111111111")
     );
 
-    const base64Tx = Buffer.from(
-      baseTransaction.serialize({
-        verifySignatures: false,
-        requireAllSignatures: false,
-      })
-    ).toString("base64");
+    if (filteredIxs.length === 0) {
+      throw new Error(
+        "Do not include compute budget instructions - they are added automatically"
+      );
+    }
+
+    const allInstructions = [...filteredIxs];
+
+    const { value: blockhashInfo } =
+      await connection.getLatestBlockhashAndContext("confirmed");
+    const { blockhash } = blockhashInfo;
+
+    const baseTransaction = new VersionedTransaction(
+      new TransactionMessage({
+        instructions: allInstructions,
+        payerKey: payer,
+        recentBlockhash: blockhash,
+      }).compileToV0Message()
+    );
+
+    baseTransaction.sign(signers);
+
+    // const { transaction: baseTransaction } = await createTransactionSender(
+    //   connection,
+    //   instructions,
+    //   payer,
+    //   signers
+    // );
+
+    const base64Tx = Buffer.from(baseTransaction.serialize()).toString(
+      "base64"
+    );
 
     const response = await fetch(
       `${this.GATEWAY_BASE_URL}/v1/${CONFIG.SOLANA.NETWORK}?apiKey=${CONFIG.SANCTUM.API_KEY}`,
@@ -103,23 +112,23 @@ export class SanctumGatewayService {
           method: "buildGatewayTransaction",
           params: [
             base64Tx,
-            // {
-            //   encoding: "base64",
-            //   skipSimulation: gatewayOptions.skipSimulation || false,
-            //   skipPriorityFee: gatewayOptions.skipPriorityFee || false,
-            //   ...(gatewayOptions.cuPriceRange
-            //     ? { cuPriceRange: gatewayOptions.cuPriceRange }
-            //     : {}),
-            //   ...(gatewayOptions.jitoTipRange
-            //     ? { jitoTipRange: gatewayOptions.jitoTipRange }
-            //     : {}),
-            //   ...(gatewayOptions.expireInSlots
-            //     ? { expireInSlots: gatewayOptions.expireInSlots }
-            //     : {}),
-            //   ...(gatewayOptions.deliveryMethodType
-            //     ? { deliveryMethodType: gatewayOptions.deliveryMethodType }
-            //     : {}),
-            // },
+            {
+              encoding: "base64",
+              skipSimulation: gatewayOptions.skipSimulation || false,
+              skipPriorityFee: gatewayOptions.skipPriorityFee || false,
+              ...(gatewayOptions.cuPriceRange
+                ? { cuPriceRange: gatewayOptions.cuPriceRange }
+                : {}),
+              ...(gatewayOptions.jitoTipRange
+                ? { jitoTipRange: gatewayOptions.jitoTipRange }
+                : {}),
+              ...(gatewayOptions.expireInSlots
+                ? { expireInSlots: gatewayOptions.expireInSlots }
+                : {}),
+              ...(gatewayOptions.deliveryMethodType
+                ? { deliveryMethodType: gatewayOptions.deliveryMethodType }
+                : {}),
+            },
           ],
         }),
       }
@@ -211,28 +220,6 @@ export class SanctumGatewayService {
 
     console.log(`[SanctumGateway] Transaction sent: ${data.result}`);
     return data.result;
-  }
-
-  static async buildAndSendTransaction(
-    connection: Connection,
-    instructions: TransactionInstruction[],
-    payer: PublicKey,
-    signers: Signer[] = [],
-    lookupTables: any[] = [],
-    options: CreateSmartTransactionOptions = {},
-    gatewayOptions: SanctumGatewayOptions = {}
-  ): Promise<string> {
-    const { transaction, latestBlockhash } = await this.buildGatewayTransaction(
-      connection,
-      instructions,
-      payer,
-      signers,
-      lookupTables,
-      options,
-      gatewayOptions
-    );
-
-    return this.sendTransaction(transaction);
   }
 
   static async getTipInstructions(

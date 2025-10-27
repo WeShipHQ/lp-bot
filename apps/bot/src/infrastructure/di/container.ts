@@ -57,7 +57,6 @@ import { UpdateUserSettingUseCase } from "@/application/settings/update-user-set
 // Adapters
 import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
 import { JupiterAdapter } from "@/adapters/external-api/jupiter.adapter";
-import { PrivyAdapter } from "@/adapters/external-api/privy.adapter";
 import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
 import { SarosAdapter } from "@/services/saros/saros.adapter";
 
@@ -135,10 +134,6 @@ function registerBase() {
   container
     .bind(JupiterAdapter)
     .toDynamicValue(() => new JupiterAdapter())
-    .inSingletonScope();
-  container
-    .bind(PrivyAdapter)
-    .toDynamicValue(() => new PrivyAdapter())
     .inSingletonScope();
   container
     .bind(MeteoraAdapter)

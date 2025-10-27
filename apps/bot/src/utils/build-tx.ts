@@ -49,6 +49,14 @@ export const JITO_TIP_ACCOUNTS: string[] = [
   "4TQLFNWK8AovT1gFvda5jfw2oJeRMKEmw7aH6MGBJ3or",
 ];
 
+export const GATEWAY_TIP_ACCOUNTS = [
+  "9fBpwxcudpLyJskhiiKmU8wPszeUuCB8sSjhPi44QuFb",
+  "E8iYKQbhTywHbncCagNBbZ58JY6cX1SiYk5ZDPJeWFFq",
+  "AJxEGdtoHrgVUPyMsdyMLiEevwa6gk3de1QDPGwVh2hw",
+  "FzESY59j4xCef1EjqoprVBDXEFTWcrx8hGq6AYYvGH1v",
+  "77N86XfcBSAvcGNPYMAVjjyf2feUJwmUoiJ96HzPtySd",
+];
+
 export type JitoRegion = "Default" | "NY" | "Amsterdam" | "Frankfurt" | "Tokyo";
 // https://jito-labs.gitbook.io/mev/searcher-resources/json-rpc-api-reference/url
 export const JITO_API_URLS: Record<JitoRegion, string> = {
@@ -646,20 +654,7 @@ export async function createSmartTransactionWithTip(
   );
 }
 
-// v222222
-
-const TIP_ACCOUNTS = [
-  "4ACfpUFoaSD9bfPdeu6DBt89gB6ENTeHBXCAi87NhDEE",
-  "D2L6yPZ2FmmmTKPgzaMKdhu6EWZcTpLy1Vhx8uvZe7NZ",
-  "9bnz4RShgq1hAnLnZbP8kbgBg1kEmcJBYQq3gQbmnSta",
-  "5VY91ws6B2hMmBFRsXkoAAdsPHBJwRfBht4DXox3xkwn",
-  "2nyhqdwKcJZR2vcqCyrYsaPVdAnFoJjiksCXJ7hfEYgD",
-  "2q5pghRs6arqVjRvT5gfgWfWcHWmw1ZuCzphgd5KfWGJ",
-  "wyvPkWjVZz1M8fHQnMMCDTQDbkManefNNhweYk5WkcF",
-  "3KCKozbAaF75qEU33jtzozcJ29yJuaLJTy2jFdzUY8bT",
-  "4vieeGHPYPG2MmyPRcYjdiDmmhN3ww7hsFNap8pVN3Ey",
-  "4TQLFNWK8AovT1gFvda5jfw2oJeRMKEmw7aH6MGBJ3or",
-];
+// HELIUS SENDER
 
 async function getDynamicTipAmount(): Promise<number> {
   try {
@@ -692,24 +687,29 @@ export async function createTransactionSender(
   payer: PublicKey,
   signers: Signer[]
 ): Promise<SmartTransactionContext> {
-  // Validate user hasn't included compute budget instructions
-  const hasComputeBudget = instructions.some((ix) =>
-    ix.programId.equals(ComputeBudgetProgram.programId)
+  // Validate instructions hasn't included compute budget instructions
+  const filteredIxs = instructions.filter(
+    (ix) =>
+      !ix.programId
+        .toString()
+        .startsWith("ComputeBudget11111111111111111111111111111")
   );
 
-  if (hasComputeBudget) {
+  if (filteredIxs.length === 0) {
     throw new Error(
       "Do not include compute budget instructions - they are added automatically"
     );
   }
 
   // Create copy of instructions to avoid modifying the original array
-  const allInstructions = [...instructions];
+  const allInstructions = [...filteredIxs];
 
   // Get dynamic tip amount from Jito API (75th percentile, minimum 0.001 SOL)
   const tipAmountSOL = await getDynamicTipAmount();
   const tipAccount = new PublicKey(
-    TIP_ACCOUNTS[Math.floor(Math.random() * TIP_ACCOUNTS.length)]
+    GATEWAY_TIP_ACCOUNTS[
+      Math.floor(Math.random() * GATEWAY_TIP_ACCOUNTS.length)
+    ]
   );
 
   console.log(`Using dynamic tip amount: ${tipAmountSOL} SOL`);
@@ -765,8 +765,6 @@ export async function createTransactionSender(
     blockhash
   );
 
-  console.log("xxxx priorityFee", priorityFee);
-
   // Add compute budget instructions at the BEGINNING (must be first)
   allInstructions.unshift(
     ComputeBudgetProgram.setComputeUnitPrice({ microLamports: priorityFee })
@@ -820,7 +818,9 @@ export async function sendWithSender(
   // Get dynamic tip amount from Jito API (75th percentile, minimum 0.001 SOL)
   const tipAmountSOL = await getDynamicTipAmount();
   const tipAccount = new PublicKey(
-    TIP_ACCOUNTS[Math.floor(Math.random() * TIP_ACCOUNTS.length)]
+    GATEWAY_TIP_ACCOUNTS[
+      Math.floor(Math.random() * GATEWAY_TIP_ACCOUNTS.length)
+    ]
   );
 
   console.log(`Using dynamic tip amount: ${tipAmountSOL} SOL`);

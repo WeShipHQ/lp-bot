@@ -49,7 +49,6 @@ import {
 import { dexRegistry } from "@/services/dex-registry.service";
 import { CreatePositionParams } from "@/types/core.types";
 import { WalletService } from "@/services/wallet.service";
-import { SanctumGatewayOptions } from "@/services/sanctum-gateway.service";
 
 type ExtractedClosePositionIxsData = {
   positionAddress?: string;
@@ -1939,35 +1938,14 @@ export class TransactionConfirmWorker
         );
       }
 
-      // Submit position creation transaction
       let signature = "";
       try {
-        if (await WalletService.isGatewayAvailable()) {
-          signature = await WalletService.signAndSendTransactionWithGateway(
-            positionContext.walletId,
-            positionContext.walletAddress,
-            txResult.instructions,
-            [txResult.positionKp],
-            [],
-            {},
-            {
-              cuPriceRange: "high",
-              jitoTipRange: "medium",
-              expireInSlots: 150,
-              deliveryMethodType: undefined,
-              skipSimulation: false,
-              skipPriorityFee: false,
-            } as SanctumGatewayOptions
-          );
-        } else {
-          signature = await WalletService.signAndSendTransactionWithJitoV2(
-            positionContext.walletId,
-            positionContext.walletAddress,
-            txResult.instructions,
-            [txResult.positionKp],
-            []
-          );
-        }
+        signature = await WalletService.signAndSendViaGateway(
+          positionContext.walletId,
+          positionContext.walletAddress,
+          txResult.instructions,
+          [txResult.positionKp]
+        );
       } catch (err) {
         logger.error("Position creation transaction submission failed", {
           err,

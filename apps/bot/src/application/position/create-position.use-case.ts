@@ -26,8 +26,6 @@ import { CachePatterns } from "@/infrastructure/cache/cache-keys";
 import { WalletService } from "@/services/wallet.service";
 import { Token } from "@/types/token.types";
 import { uiToRawAmount } from "@/utils/number-utils";
-import { container } from "@/infrastructure/di/container";
-import { SanctumGatewayOptions } from "@/services/sanctum-gateway.service";
 import { SOL_MINT, OPEN_POSITION_FEE } from "@/config/constants";
 
 export interface DexRegistryLike {
@@ -142,14 +140,12 @@ export interface ITransactionService {
 
 export class CreatePositionUseCase {
   private readonly cache: ICacheService;
-  // private readonly settingsIntegration: SettingsIntegrationService;
 
   constructor(
     private readonly dexRegistry: DexRegistryLike,
     cacheService?: ICacheService
   ) {
     this.cache = cacheService ?? getCacheService();
-    // this.settingsIntegration = container.get(SettingsIntegrationService);
   }
 
   async execute(
@@ -221,39 +217,12 @@ export class CreatePositionUseCase {
 
       let signature = "" as string | undefined;
       try {
-        if (await WalletService.isGatewayAvailable()) {
-          console.log("[CreatePosition] Using Sanctum Gateway for transaction");
-
-          signature = await WalletService.signAndSendTransactionWithGateway(
-            command.walletId,
-            command.walletAddress,
-            txResult.instructions,
-            [txResult.positionKp],
-            [],
-            {},
-            {
-              cuPriceRange: "high",
-              jitoTipRange: "medium",
-              expireInSlots: 150,
-              deliveryMethodType: undefined,
-              skipSimulation: false,
-              skipPriorityFee: false,
-            } as SanctumGatewayOptions
-          );
-        } else {
-          console.log(
-            "[CreatePosition] Gateway not available, using standard Jito method"
-          );
-
-          // Fallback to existing method
-          signature = await WalletService.signAndSendTransactionWithJitoV2(
-            command.walletId,
-            command.walletAddress,
-            txResult.instructions,
-            [txResult.positionKp],
-            []
-          );
-        }
+        signature = await WalletService.signAndSendViaGateway(
+          command.walletId,
+          command.walletAddress,
+          txResult.instructions,
+          [txResult.positionKp]
+        );
       } catch (err) {
         console.log("Transaction submission failed", { err, command });
         logger.error("Transaction submission failed", { err, command });

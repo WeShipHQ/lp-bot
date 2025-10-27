@@ -4,7 +4,6 @@ import { WalletService } from "./wallet.service";
 import Decimal from "decimal.js";
 import { logger } from "@/utils/logger";
 import { SOL_MINT } from "@/config/constants";
-import { solToLamports } from "@/utils/number-utils";
 
 export interface SwapResult {
   success: boolean;

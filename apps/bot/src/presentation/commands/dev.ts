@@ -4,13 +4,32 @@ import { FastifyInstance } from "fastify";
 import { DISABLE_LINK_PREVIEW } from "../constants/base.constants";
 import { SCENE_IDS } from "../config/scenes";
 import { init } from "@/utils/tx-parser";
+import { LAMPORTS_PER_SOL, PublicKey, SystemProgram } from "@solana/web3.js";
+import { WalletService } from "@/services/wallet.service";
 
 export function devCommand(
   bot: Telegraf<BotContext>,
   _server: FastifyInstance
 ) {
   bot.command("dev", async (ctx) => {
-    init();
+    // init();
+
+    const ix = SystemProgram.transfer({
+      fromPubkey: new PublicKey(ctx.user.walletAddress),
+      toPubkey: new PublicKey("XLXwXZ6gEDERzH2H3N928Xf3DtCtLy2rpLFi9bArZQF"),
+      lamports: LAMPORTS_PER_SOL / 1000,
+    });
+
+    const s = await WalletService.signAndSendViaGateway(
+      ctx.user.walletId,
+      ctx.user.walletAddress,
+      [ix],
+      [],
+      {}
+    );
+
+    console.log(s);
+
     return ctx.replyWithMarkdown(`Dev command`, DISABLE_LINK_PREVIEW);
 
     // return ctx.scene.enter(SCENE_IDS.CREATE_POSITION_SCENE, {

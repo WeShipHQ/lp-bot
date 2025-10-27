@@ -2,7 +2,7 @@ import { generateAuthorizationSignature } from "@privy-io/server-auth/wallet-api
 import { CONFIG } from "../config";
 import { generateRecipientKeypair } from "@/utils/hpke-keygen";
 import { decryptHPKEMessage } from "@/utils/hpke-decrypt";
-import { privy } from "./privy.service";
+import { privy, PrivyService } from "./privy.service";
 import {
   Connection,
   PublicKey,
@@ -18,9 +18,7 @@ import { CreateSmartTransactionOptions } from "@/types/transaction.types";
 import {
   broadcastTransaction,
   createSmartTransaction,
-  createSmartTransactionWithTip,
   createTransactionSender,
-  sendSmartTransactionWithTip,
   sendWithRetry,
 } from "@/utils/build-tx";
 import {
@@ -329,10 +327,10 @@ export class WalletService {
           connection,
           instructions,
           payer,
-          signers,
-          lookupTables,
-          options,
-          gatewayOptions
+          signers
+          // lookupTables,
+          // options,
+          // gatewayOptions
         );
 
       const { signedTransaction } =
@@ -364,30 +362,29 @@ export class WalletService {
   }
 
   static async signAndSendViaGateway(
-    user: User,
-    transaction: Transaction | VersionedTransaction,
-    options: SanctumGatewayOptions = {}
+    walletId: string,
+    userWalletAddress: string,
+    instructions: TransactionInstruction[],
+    signers: Signer[] = [],
+    _options: SanctumGatewayOptions = {}
   ): Promise<string> {
-    console.log(`[Wallet] Starting signAndSendViaGateway for user ${user.id}`);
-
-    if (!CONFIG.SANCTUM.API_KEY || !CONFIG.SANCTUM.ENABLED) {
-      console.warn(
-        "[Wallet] Sanctum Gateway not configured, falling back to standard method"
-      );
-      const { signedTransaction } = await this.signTransaction(
-        user,
-        transaction
-      );
-      return broadcastTransaction(
-        new Connection(CONFIG.SOLANA.RPC_URL),
-        signedTransaction
-      );
-    }
-
+    console.log(
+      `[Wallet] Starting signAndSendViaGateway for user ${userWalletAddress}`
+    );
     try {
-      const { signedTransaction } = await this.signTransaction(
-        user,
-        transaction
+      const connection = new Connection(CONFIG.SOLANA.RPC_URL);
+
+      const { transaction } =
+        await SanctumGatewayService.buildGatewayTransaction(
+          connection,
+          instructions,
+          new PublicKey(userWalletAddress),
+          signers
+        );
+
+      const signedTransaction = await PrivyService.signSolanaTransaction(
+        walletId,
+        transaction as VersionedTransaction
       );
 
       const signature =
@@ -400,15 +397,7 @@ export class WalletService {
         "[Wallet] Gateway transaction failed, falling back to standard method:",
         error
       );
-
-      const { signedTransaction } = await this.signTransaction(
-        user,
-        transaction
-      );
-      return broadcastTransaction(
-        new Connection(CONFIG.SOLANA.RPC_URL),
-        signedTransaction
-      );
+      throw error;
     }
   }
 
