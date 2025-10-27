@@ -95,8 +95,6 @@ export const users = pgTable("users", {
   referralCode: text("referral_code").unique(),
   referredBy: text("referred_by"),
   walletAddress: text("wallet_address").notNull().unique(),
-  referralCode: text("referral_code"),
-  referredBy: text("referred_by"),
 
   // Rebalancing settings
   autoRebalanceEnabled: boolean("auto_rebalance_enabled")
@@ -133,7 +131,9 @@ export const users = pgTable("users", {
     .default("3.00"), // proper values for slippage
 
   // Notification settings
-  notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
+  notificationsEnabled: boolean("notifications_enabled")
+    .notNull()
+    .default(true),
   priceAlertsEnabled: boolean("price_alerts_enabled").notNull().default(true),
   rebalanceAlertsEnabled: boolean("rebalance_alerts_enabled")
     .notNull()
