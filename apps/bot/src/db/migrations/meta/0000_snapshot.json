@@ -1273,6 +1273,18 @@
           "primaryKey": false,
           "notNull": false
         },
+        "referral_code": {
+          "name": "referral_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "referred_by": {
+          "name": "referred_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "wallet_address": {
           "name": "wallet_address",
           "type": "text",
@@ -1388,6 +1400,13 @@
           "nullsNotDistinct": false,
           "columns": [
             "privy_user_id"
+          ]
+        },
+        "users_referral_code_unique": {
+          "name": "users_referral_code_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "referral_code"
           ]
         },
         "users_wallet_address_unique": {

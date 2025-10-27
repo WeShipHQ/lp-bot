@@ -318,6 +318,19 @@ export class User {
     this.updatedAt = new Date();
   }
 
+  setReferredBy(code: string): void {
+    if (!code || code.trim().length === 0) {
+      throw new ValidationError("Referral code cannot be empty");
+    }
+
+    if (this.referredBy) {
+      return;
+    }
+
+    this.referredBy = code;
+    this.updatedAt = new Date();
+  }
+
   getReferredBy(): string | null {
     return this.referredBy;
   }

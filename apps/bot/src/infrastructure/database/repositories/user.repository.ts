@@ -36,6 +36,18 @@ export class UserRepository implements IUserRepository {
     return this.toDomain(user);
   }
 
+  async findByReferralCode(referralCode: string): Promise<User | null> {
+    const user = await this.db.query.users.findFirst({
+      where: eq(schema.users.referralCode, referralCode),
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    return this.toDomain(user);
+  }
+
   async findByWalletAddress(address: string): Promise<User | null> {
     const user = await this.db.query.users.findFirst({
       where: eq(schema.users.walletAddress, address),
@@ -73,6 +85,8 @@ export class UserRepository implements IUserRepository {
       .update(schema.users)
       .set({
         username: persistenceData.username,
+        referralCode: persistenceData.referralCode,
+        referredBy: persistenceData.referredBy,
         walletId: persistenceData.walletId,
         walletAddress: persistenceData.walletAddress,
         referralCode: persistenceData.referralCode,
