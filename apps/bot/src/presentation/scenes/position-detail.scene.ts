@@ -111,7 +111,6 @@ async function loadPositionDetail(
   if (!result.success || !result.position) {
     throw new Error(result.error ?? "Position not found");
   }
-  console.log("result", result);
 
   const view = PositionDetailFormatter.format({
     position: result.position,
