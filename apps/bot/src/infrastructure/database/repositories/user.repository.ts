@@ -7,13 +7,14 @@ import {
   UserNotFoundException,
   UserPersistenceError,
 } from "@/domain/shared/errors";
+import { IUserRepository } from "@/domain/user/user.repository";
+import { createChildLogger } from "@/utils/logger";
 import {
   User,
   UserPreferences,
   RebalanceStrategy,
-} from "@/domain/user/user.entity";
-import { IUserRepository } from "@/domain/user/user.repository";
-import { createChildLogger } from "@/utils/logger";
+  DEFAULT_SLIPPAGE_PERCENTAGE,
+} from "@/domain";
 
 export class UserRepository implements IUserRepository {
   private readonly logger = createChildLogger({ context: "UserRepository" });
@@ -270,7 +271,9 @@ export class UserRepository implements IUserRepository {
 
       // Trading settings
       autoConvertToSol: row.autoConvertToSol ?? true,
-      slippagePercentage: row.slippagePercentage?.toString() || "3.00",
+      slippagePercentage: Number(
+        row.slippagePercentage?.toString() || DEFAULT_SLIPPAGE_PERCENTAGE
+      ),
 
       // Notification settings
       notificationsEnabled: row.notificationsEnabled ?? true,
