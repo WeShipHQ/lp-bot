@@ -520,13 +520,13 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     }
 
     try {
-      logger.info("Creating position with context", {
+      logger.info({
         userId: ctx.user.id,
         poolAddress: poolData.address,
         strategy,
         tokenAAmount: state.tokenAAmountCalculated,
         tokenBAmount: state.tokenBAmountCalculated,
-      });
+      }, "Creating position with context");
 
       const createUC = container.get(CreatePositionUseCase);
       const result = await createUC.execute({
@@ -558,10 +558,10 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       });
 
       if (!result.success || !result.signature) {
-        logger.error("Position creation failed", {
+        logger.error({
           error: result.error,
           userId: ctx.user.id,
-        });
+        }, "Position creation failed");
 
         await ctx.editMessageText(
           `❌ *Failed to create position*\n\n${result.error || "Unknown error"}\n\nPlease try again.`,
@@ -570,11 +570,11 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         return ctx.scene.leave();
       }
 
-      logger.info("Position transaction submitted", {
+      logger.info({
         signature: result.signature,
         positionAddress: result.positionAddress,
         userId: ctx.user.id,
-      });
+      }, "Position transaction submitted");
 
       const solScanLink = link(
         "View Transaction",
@@ -589,11 +589,11 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         { parse_mode: "Markdown", ...DISABLE_LINK_PREVIEW }
       );
     } catch (error) {
-      logger.error("Error creating position via use case", {
+      logger.error({
         error,
         userId: ctx.user.id,
         poolAddress: poolData?.address,
-      });
+      }, "Error creating position via use case");
 
       console.error("Error creating position via use case", {
         error,

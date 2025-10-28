@@ -197,7 +197,7 @@ export class CreatePositionUseCase {
       try {
         txResult = await adapter.createPositionIxs(adapterParams);
       } catch (error) {
-        logger.error("Adapter.createPositionIx failed", { error, command });
+        logger.error({ error, command }, "Adapter.createPositionIx failed");
         console.log("Adapter.createPositionIx failed", { error, command });
         return {
           success: false,
@@ -225,7 +225,7 @@ export class CreatePositionUseCase {
         );
       } catch (err) {
         console.log("Transaction submission failed", { err, command });
-        logger.error("Transaction submission failed", { err, command });
+        logger.error({ err, command }, "Transaction submission failed");
       }
 
       if (!signature) {
@@ -289,11 +289,11 @@ export class CreatePositionUseCase {
           maxRetries: 3,
         });
       } catch (err) {
-        logger.error("Failed to insert pending transaction", {
+        logger.error({
           err,
           signature,
           pendingMetadata,
-        });
+        }, "Failed to insert pending transaction");
         return {
           success: false,
           error: "Failed to persist pending transaction for processing",
@@ -315,10 +315,10 @@ export class CreatePositionUseCase {
           { delay: 500 }
         );
       } catch (err) {
-        logger.error("Failed to enqueue transaction confirmation job", {
+        logger.error({
           err,
           signature,
-        });
+        }, "Failed to enqueue transaction confirmation job");
       }
 
       try {
@@ -326,10 +326,10 @@ export class CreatePositionUseCase {
           CachePatterns.portfolioPattern(command.userId)
         );
       } catch (cacheError) {
-        logger.debug("Failed to invalidate portfolio cache", {
+        logger.debug({
           userId: command.userId,
           cacheError,
-        });
+        }, "Failed to invalidate portfolio cache");
       }
 
       return {
@@ -339,10 +339,10 @@ export class CreatePositionUseCase {
           positionContext?.positionAddress ?? adapterPositionAddress,
       };
     } catch (error) {
-      logger.error("CreatePositionUseCase.execute unexpected error", {
+      logger.error({
         error,
         command,
-      });
+      }, "CreatePositionUseCase.execute unexpected error");
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
@@ -363,13 +363,13 @@ export class CreatePositionUseCase {
     try {
       const positionCreationId = uuidv4();
 
-      logger.info("[CreatePosition] Starting SOL auto-convert flow", {
+      logger.info({
         userId: command.userId,
         positionCreationId,
         solAmount: command.solAmount,
         tokenA: command.tokenA.address,
         tokenB: command.tokenB.address,
-      });
+      }, "[CreatePosition] Starting SOL auto-convert flow");
 
       // Calculate SOL amounts for each swap (50/50 split after fees)
       const solAmount = command.solAmount || 0;
@@ -454,11 +454,11 @@ export class CreatePositionUseCase {
         poolAddress: command.poolAddress,
       } as SwapExecutionJobData);
 
-      logger.info("[CreatePosition] Swap jobs enqueued", {
+      logger.info({
         positionCreationId,
         firstSwap: `${halfAmount} SOL → ${command.tokenA.address}`,
         secondSwap: `${halfAmount} SOL → ${command.tokenB.address}`,
-      });
+      }, "[CreatePosition] Swap jobs enqueued");
 
       return {
         success: true,
@@ -470,10 +470,10 @@ export class CreatePositionUseCase {
         error,
         command,
       });
-      logger.error("[CreatePosition] SOL auto-convert failed", {
+      logger.error({
         error,
         command,
-      });
+      }, "[CreatePosition] SOL auto-convert failed");
       return {
         success: false,
         error:

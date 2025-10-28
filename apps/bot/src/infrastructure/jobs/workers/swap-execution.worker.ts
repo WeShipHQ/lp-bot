@@ -28,14 +28,14 @@ export class SwapExecutionWorker implements IWorker<SwapExecutionJobData> {
       poolAddress,
     } = job.data;
 
-    logger.info("[SwapExecutionWorker] Processing swap execution", {
+    logger.info({
       userId,
       positionCreationId,
       swapIndex,
       inputMint,
       outputMint,
       inputAmount,
-    });
+    }, "[SwapExecutionWorker] Processing swap execution");
 
     console.log("[SwapExecutionWorker] Processing swap execution", {
       userId,
@@ -116,14 +116,14 @@ export class SwapExecutionWorker implements IWorker<SwapExecutionJobData> {
         throw new Error(`Swap failed: ${swapResult.result.error}`);
       }
 
-      logger.info("[SwapExecutionWorker] Swap executed successfully", {
+      logger.info({
         userId,
         positionCreationId,
         swapIndex,
         signature: swapResult.result.signature,
         inputAmount,
         outputAmount: swapResult.result.outputAmount,
-      });
+      }, "[SwapExecutionWorker] Swap executed successfully");
 
       console.log("[SwapExecutionWorker] Swap executed successfully", {
         userId,
@@ -182,12 +182,12 @@ export class SwapExecutionWorker implements IWorker<SwapExecutionJobData> {
         inputAmount: swapResult.result.inputAmount,
       };
     } catch (error) {
-      logger.error("[SwapExecutionWorker] Swap execution failed", {
+      logger.error({
         error,
         userId,
         positionCreationId,
         swapIndex,
-      });
+      }, "[SwapExecutionWorker] Swap execution failed");
 
       // Check if user has sufficient balance
       if (error instanceof Error && error.message.includes("Insufficient")) {

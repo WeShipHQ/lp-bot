@@ -85,10 +85,7 @@ export class ClaimFeesUseCase {
         });
         estimatedUnclaimedFeesUsd = Number(onchain.unclaimedFeesUsd || 0);
       } catch (error) {
-        logger.warn("Failed to fetch on-chain position prior to claim", {
-          error,
-          positionId: position.id,
-        });
+        logger.warn({ error, positionId: position.id }, "Failed to fetch on-chain position prior to claim");
       }
 
       let txResult: ClaimFeesResultType;
@@ -99,10 +96,10 @@ export class ClaimFeesUseCase {
           positionAddress: position.positionAddress,
         });
       } catch (error) {
-        logger.error("adapter.claimFees failed", {
+        logger.error({
           error,
           positionAddress: position.positionAddress,
-        });
+        }, "adapter.claimFees failed");
         return {
           success: false,
           error:
@@ -123,9 +120,9 @@ export class ClaimFeesUseCase {
         !Array.isArray(txResult.instructions) ||
         txResult.instructions.length === 0
       ) {
-        logger.error("No instructions returned from adapter.claimFees", {
+        logger.error({
           positionAddress: position.positionAddress,
-        });
+        }, "No instructions returned from adapter.claimFees");
         return {
           success: false,
           error: "No claim instructions returned by DEX adapter",
@@ -149,7 +146,7 @@ export class ClaimFeesUseCase {
         );
       } catch (err) {
         console.log("Transaction submission failed", { err, command });
-        logger.error("Transaction submission failed", { err, command });
+        logger.error({ err, command }, "Transaction submission failed");
       }
 
       if (!signature) {
@@ -207,10 +204,10 @@ export class ClaimFeesUseCase {
           maxRetries: 3,
         });
       } catch (error) {
-        logger.error("Failed to insert pending transaction (claim fees)", {
+        logger.error({
           error,
           signature,
-        });
+        }, "Failed to insert pending transaction (claim fees)");
         return {
           success: false,
           error: "Failed to persist pending transaction for processing",
@@ -232,10 +229,10 @@ export class ClaimFeesUseCase {
           { delay: 500 }
         );
       } catch (error) {
-        logger.error("Failed to enqueue transaction confirmation job (claim)", {
+        logger.error({
           error,
           signature,
-        });
+        }, "Failed to enqueue transaction confirmation job (claim)");
       }
 
       return {
@@ -244,7 +241,7 @@ export class ClaimFeesUseCase {
         claimedFeesUsd: estimatedUnclaimedFeesUsd,
       };
     } catch (error) {
-      logger.error("ClaimFeesUseCase.execute unexpected error", { error });
+      logger.error({ error }, "ClaimFeesUseCase.execute unexpected error");
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",

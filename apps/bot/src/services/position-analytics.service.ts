@@ -127,7 +127,7 @@ export class PositionAnalyticsService {
         lastAnalyzedAt: new Date()
       };
     } catch (error) {
-      logger.error(`Failed to calculate position health for ${positionId}:`, error);
+      logger.error({ error, positionId }, "Failed to calculate position health");
       throw error;
     }
   }
@@ -176,7 +176,7 @@ export class PositionAnalyticsService {
         profitFactor: volatilityMetrics.profitFactor
       };
     } catch (error) {
-      logger.error(`Failed to calculate position performance for ${positionId}:`, error);
+      logger.error({ error, positionId }, "Failed to calculate position performance");
       throw error;
     }
   }
@@ -247,7 +247,7 @@ export class PositionAnalyticsService {
         riskDistribution
       };
     } catch (error) {
-      logger.error(`Failed to generate portfolio analytics for user ${userId}:`, error);
+      logger.error({ error, userId }, "Failed to generate portfolio analytics");
       throw error;
     }
   }
@@ -286,7 +286,7 @@ export class PositionAnalyticsService {
         nextRebalanceRecommendation: nextRecommendation
       };
     } catch (error) {
-      logger.error(`Failed to analyze rebalance history for ${positionId}:`, error);
+      logger.error({ error, positionId }, "Failed to analyze rebalance history");
       throw error;
     }
   }
@@ -321,7 +321,7 @@ export class PositionAnalyticsService {
         recommendations
       };
     } catch (error) {
-      logger.error('Failed to get positions needing attention:', error);
+      logger.error({ error, userId }, "Failed to get positions needing attention");
       throw error;
     }
   }

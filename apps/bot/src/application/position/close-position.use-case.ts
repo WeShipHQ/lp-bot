@@ -98,7 +98,7 @@ export class ClosePositionUseCase {
           positionAddress,
         });
       } catch (error) {
-        logger.error("Adapter.closePosition failed", { error });
+        logger.error({ error }, "Adapter.closePosition failed");
         return {
           success: false,
           error:
@@ -131,7 +131,7 @@ export class ClosePositionUseCase {
         );
       } catch (err) {
         console.log("Transaction submission failed", { err, command });
-        logger.error("Transaction submission failed", { err, command });
+        logger.error({ err, command }, "Transaction submission failed");
       }
 
       if (!signature) {
@@ -174,7 +174,7 @@ export class ClosePositionUseCase {
           maxRetries: 3,
         });
       } catch (err) {
-        logger.error("Failed to insert pending transaction (close)", { err });
+        logger.error({ err }, "Failed to insert pending transaction (close)");
         return {
           success: false,
           error: "Failed to persist pending transaction for processing",
@@ -187,7 +187,7 @@ export class ClosePositionUseCase {
         // Note: we are not able to set closure signature via domain mapping yet
         await this.positionRepository.update(position);
       } catch (err) {
-        logger.error("Failed to update position status to CLOSED", { err });
+        logger.error({ err }, "Failed to update position status to CLOSED");
         // Do not fail the overall flow; background processor may reconcile later
       }
 
@@ -206,9 +206,7 @@ export class ClosePositionUseCase {
           { delay: 500 }
         );
       } catch (err) {
-        logger.error("Failed to enqueue transaction confirmation job (close)", {
-          err,
-        });
+        logger.error({ err }, "Failed to enqueue transaction confirmation job (close)");
       }
 
       try {
@@ -223,7 +221,7 @@ export class ClosePositionUseCase {
 
       return { success: true, signature };
     } catch (error) {
-      logger.error("ClosePositionUseCase.execute unexpected error", { error });
+      logger.error({ error }, "ClosePositionUseCase.execute unexpected error");
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
