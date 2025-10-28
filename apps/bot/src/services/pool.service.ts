@@ -1,5 +1,4 @@
 import type { MeteoraPoolData, MeteoraPoolType } from "@/types/meteora.types";
-import { meteoraPoolService } from "./meteora/pool.service";
 import { TokenAdapter } from "@/adapters/token.adapter";
 import { Pool, PoolDex } from "@/types/pool.types";
 import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
@@ -135,9 +134,17 @@ export class PoolService {
 
   async getPool(poolAddress: string, poolType: MeteoraPoolType) {
     try {
-      const pool = await meteoraPoolService.getPoolInfo(poolAddress, poolType);
-
-      return pool;
+      // Route to the appropriate API method based on pool type
+      switch (poolType) {
+        case "dlmm":
+          return await this.meteoraApiClient.getPool(poolAddress);
+        case "damm_v1":
+          return await this.meteoraApiClient.getDammV1Pool(poolAddress);
+        case "damm_v2":
+          return await this.meteoraApiClient.getDammV2Pool(poolAddress);
+        default:
+          throw new Error(`Unknown pool type: ${poolType}`);
+      }
     } catch (error) {
       console.error(
         `[Meteora] Error fetching pool ${poolAddress} with type ${poolType}:`,

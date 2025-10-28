@@ -1,7 +1,6 @@
 // import { eq } from 'drizzle-orm';
 // import { db } from '../db';
 // import { positions, users } from '../db/schema';
-// import { meteoraPoolService } from './meteora/pool.service';
 // import { rebalanceService } from './rebalance.service';
 // import { CONFIG } from '../config';
 
@@ -401,7 +400,7 @@
 //     while (retries < this.maxRetries) {
 //       try {
 //         // Try to get pool info from Meteora
-//         const poolData: any = await meteoraPoolService.getPoolInfo(poolAddress, 'dlmm');
+//         const poolData: any = await meteoraApiClient.getPool(poolAddress);
 
 //         if (poolData) {
 //           return {
