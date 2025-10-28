@@ -12,12 +12,80 @@ This document provides a comprehensive audit of the legacy Meteora service files
 
 ### Key Findings
 
-1. **pool.service.ts (369 LOC):** Active legacy service with 9 exported methods and 3 mapper functions used across 3 consumer files
-2. **position.service.ts (29 LOC):** Entirely commented out, exports nothing, confirmed dead code ready for deletion
-3. **Primary Consumer:** `PoolService` (services/pool.service.ts) is the main consumer of MeteoraPoolService
-4. **Secondary Consumer:** `PortfolioService` (services/portfolio.service.ts) uses position-related API methods
-5. **Tertiary Consumer:** Commented-out `TrendingService` references `getAllDlmmPools` (dead code)
-6. **Migration Status:** All methods are DEX-specific and should migrate to `MeteoraAdapter` or `MeteoraApiClient`
+1. **pool.service.ts (369 LOC):** Active legacy service with 9 exported methods and 3 mapper functions used across 3 consumer files, but now fully overlapped by `MeteoraApiClient` + adapter capabilities.
+2. **position.service.ts (29 LOC):** Entirely commented out, exports nothing, confirmed dead code ready for deletion.
+3. **Adapter Coverage:** `apps/bot/src/adapters/dex/meteora/meteora-api.client.ts` already exposes DLMM + DAMM v1/v2 APIs and position endpoints, so the legacy services are redundant once consumers migrate.
+4. **Primary Consumer:** `PoolService` (services/pool.service.ts) is the main consumer of `MeteoraPoolService`; once migrated it can rely directly on `MeteoraAdapter`/client.
+5. **Secondary Consumer:** `PortfolioService` (services/portfolio.service.ts) uses position-related API methods that already exist in `MeteoraApiClient`.
+6. **Naming & Type Debt:** `MeteoraPoolService` methods need clearer verbs (`getDlmmPool` instead of `getDlmmPoolInfo`) and `types/meteora.types.ts` contains legacy or conflicting definitions that should be consolidated.
+7. **Migration Status:** All methods are DEX-specific and should migrate to the adapter layer (`MeteoraAdapter` and `MeteoraApiClient`), after which the legacy service files can be removed instead of moved.
+
+---
+
+## 0. Migration Decision: Remove vs. Move
+
+### 0.1 Current State Assessment
+
+**New Adapter Layer:** `apps/bot/src/adapters/dex/meteora/meteora-api.client.ts` (595 LOC)
+- ✅ Already implements all pool fetching (DLMM, DAMM v1, DAMM v2)
+- ✅ Already implements all position APIs (claim fees, rewards, deposits, withdrawals)
+- ✅ Includes circuit breaker, caching, retry logic, structured logging
+- ✅ Follows adapter pattern with proper error handling
+- ✅ Fully typed with `MeteoraApiError` domain errors
+
+**Legacy Services:**
+- `services/meteora/pool.service.ts` (369 LOC) - API wrappers + mappers
+- `services/meteora/position.service.ts` (29 LOC) - Dead code (commented out)
+
+### 0.2 Recommendation: **DELETE, Don't Move**
+
+**Rationale:**
+
+1. **Complete Functional Overlap:**
+   - Every method in `MeteoraPoolService` is already implemented (often better) in `MeteoraApiClient`
+   - Pool fetching: `getPool()`, `getDammV1Pool()`, `getDammV2Pool()`, `getTrendingPools()`, `getAllPools()` ✅
+   - Position APIs: `getPositionClaimFees()`, `getPositionClaimRewards()`, `getPositionDeposits()`, `getPositionWithdraws()` ✅
+   - No unique business logic exists in the legacy services
+
+2. **Architectural Concerns:**
+   - Moving legacy services to `adapters/dex/meteora/` would pollute the adapter namespace with duplicate code
+   - The adapter layer should only contain the new, properly designed implementations
+   - Legacy mappers (`mapDlmmToMeteoraPoolData`, etc.) need to be replaced with `UnifiedPool` transformations, not moved
+
+3. **Technical Debt:**
+   - Legacy services use hardcoded API URLs (not config-driven)
+   - Inconsistent naming: `getDlmmPoolInfo` vs. `getDlmmPool` vs. `getPool`
+   - Return legacy `MeteoraPoolData` type instead of `UnifiedPool`
+   - No circuit breaker, limited error handling, console logging instead of structured logs
+
+**Migration Strategy:**
+
+| Legacy Service | Action | Replacement |
+|----------------|--------|-------------|
+| `services/meteora/position.service.ts` | **DELETE immediately** | N/A (dead code) |
+| `services/meteora/pool.service.ts` | **DELETE after consumer migration** | `MeteoraApiClient` + `MeteoraAdapter` |
+| Mapper functions (`mapDlmmToMeteoraPoolData`, etc.) | **Replace with UnifiedPool mappers** | New mappers in `MeteoraAdapter` |
+| `MeteoraPoolData` type | **Deprecate and remove** | `UnifiedPool` from core types |
+
+### 0.3 Migration Path
+
+```
+Phase 1: Update Consumers (No File Movement)
+├── PortfolioService → Use MeteoraApiClient for position APIs
+└── PoolService → Use MeteoraAdapter for pool fetching
+
+Phase 2: Add UnifiedPool Mappers to MeteoraAdapter
+├── mapDlmmToUnifiedPool(dlmmPool) → UnifiedPool
+├── mapDammV1ToUnifiedPool(dammV1Pool) → UnifiedPool
+└── mapDammV2ToUnifiedPool(dammV2Pool) → UnifiedPool
+
+Phase 3: Delete Legacy Files
+├── Delete services/meteora/position.service.ts
+├── Delete services/meteora/pool.service.ts
+└── Mark MeteoraPoolData type as deprecated (remove after full migration)
+```
+
+**Key Insight:** The new adapter already provides everything we need. Moving the legacy services would be a step backward architecturally.
 
 ---
 
@@ -521,6 +589,16 @@ import { meteoraPoolService } from "./meteora/pool.service";
 // No active import
 ```
 
+### 1.6 Naming & Type Debt Callouts
+
+| Area | Problem | Recommendation |
+|------|---------|----------------|
+| Method names | `getDlmmPoolInfo`, `getDammV1PoolInfo`, `getDammV2PoolInfo` use inconsistent suffixes and vague nouns | Rename to `getDlmmPool`, `getDammV1Pool`, `getDammV2Pool` (or drop entirely once adapter handles everything). Maintain verb + noun pattern across adapters/services. |
+| Mapper exports | `mapDlmmToMeteoraPoolData` etc. return legacy `MeteoraPoolData` type | Replace with `mapDlmmToUnifiedPool`, etc., returning `UnifiedPool` from core types. Keep mappers private inside `MeteoraAdapter`. |
+| Singleton export | `meteoraPoolService` exported as singleton from service file | Remove after migration. Until then, rename to `MeteoraLegacyPoolService` to make legacy status explicit. |
+| Types file | `types/meteora.types.ts` mixes SDK-only types, legacy DTOs, and unified pool DTOs | Split into `meteora-sdk.types.ts` (pure SDK) and move shared types to `pool.types.ts`. Deprecate `MeteoraPoolData` and adopt `UnifiedPool`. |
+| Position DTOs | `MeteoraDlmmPosition` defined but unused outside legacy service | Remove after confirming no runtime dependency; use adapter outputs instead. |
+
 ---
 
 ## 2. File: services/meteora/position.service.ts
@@ -575,16 +653,206 @@ import { meteoraPoolService } from "./meteora/pool.service";
 
 ---
 
-## 3. Categorization Matrix
+## 3. Type System Audit: types/meteora.types.ts
+
+### 3.1 Type File Metadata
+
+| Property | Value |
+|----------|-------|
+| **Path** | `apps/bot/src/types/meteora.types.ts` |
+| **Lines of Code** | 258 |
+| **Status** | ⚠️ Mixed (SDK types + legacy DTOs + unused types) |
+| **Exports** | 17 types/interfaces |
+| **Imports** | 2 external (`@meteora-ag/dlmm`, `@solana/web3.js`) |
+
+### 3.2 Type Inventory & Classification
+
+| # | Type/Interface | Purpose | Status | Action |
+|---|----------------|---------|--------|--------|
+| 1 | `MeteoraStrategyTypeKey` | Type alias for SDK `StrategyType` keys | ✅ Active (SDK wrapper) | **Keep** - Used in position creation |
+| 2 | `MeteoraPoolType` | Union: `"damm_v1" \| "damm_v2" \| "dlmm"` | ✅ Active | **Keep** - Core pool type discriminator |
+| 3 | `MeteoraCreatePositionStrategy` | Union: `"spot" \| "curve" \| "bid-ask"` | ✅ Active | **Keep** - User-facing strategy names |
+| 4 | `CreateMeteoraPositionParams` | Extends SDK `TInitializePositionAndAddLiquidityParamsByStrategy` | ✅ Active | **Keep** - Position creation API |
+| 5 | `CloseMeteoraPositionParams` | SDK position close params | ✅ Active | **Keep** - Position closing API |
+| 6 | `MeteoraDlmmPool` | Detailed DLMM pool response (36 fields) | ✅ Active | **Keep** - API response type |
+| 7 | `MeteoraDlmmPoolResponse` | Alias of `MeteoraDlmmPool` | ⚠️ Duplicate | **Merge** - Remove alias, use `MeteoraDlmmPool` directly |
+| 8 | `MeteoraDammV1PoolResponse` | DAMM v1 pool response (29 fields) | ✅ Active | **Keep** - API response type |
+| 9 | `MeteoraDammV2PoolResponse` | DAMM v2 pool response (wrapper with `data` field) | ✅ Active | **Keep** - API response type |
+| 10 | `MeteoraPoolData` | **Legacy unified pool format** (36 fields) | ⚠️ Legacy | **Deprecate** - Replace with `UnifiedPool` from core types |
+| 11 | `MeteoraDlmmPosition` | DLMM position with fees/rewards (10 fields) | ❌ Unused | **Remove** - Not referenced anywhere |
+| 12 | `MeteoraDlmmPoolsPaginationResponse` | Paginated pools with total count | ✅ Active | **Keep** - API pagination type |
+| 13 | `DlmmPoolsPaginationParams` | Query params for pagination (17 fields) | ✅ Active | **Keep** - API query type |
+
+### 3.3 Type Conflicts & Issues
+
+**Issue 1: Duplicate Type Alias**
+```typescript
+export interface MeteoraDlmmPool { /* 36 fields */ }
+export interface MeteoraDlmmPoolResponse extends MeteoraDlmmPool {}
+```
+**Problem:** `MeteoraDlmmPoolResponse` adds no new fields; it's just an alias.  
+**Recommendation:** Remove `MeteoraDlmmPoolResponse` and use `MeteoraDlmmPool` everywhere.
+
+**Issue 2: Legacy Unified Type**
+```typescript
+export interface MeteoraPoolData {
+  pool_address: string;
+  pool_name: string;
+  // ... 36 fields total
+}
+```
+**Problem:** This pre-dates the adapter pattern and is Meteora-specific, but tries to unify DLMM/DAMM types. Now that we have `UnifiedPool` from core types (cross-DEX compatible), this is redundant.  
+**Usage:**
+- Legacy mapper functions (`mapDlmmToMeteoraPoolData`, etc.) return this type
+- `PoolService.getPool()` returns this type
+- Should be replaced by `UnifiedPool` which is DEX-agnostic
+
+**Recommendation:** 
+1. Mark `@deprecated` with migration deadline
+2. Update mappers to return `UnifiedPool` instead
+3. Update consumers to expect `UnifiedPool`
+4. Remove type definition after full migration
+
+**Issue 3: Unused Position Type**
+```typescript
+export interface MeteoraDlmmPosition {
+  address: string;
+  pair_address: string;
+  owner: string;
+  total_fee_x_claimed: number;
+  // ...
+}
+```
+**Grep Results:** Only used in commented-out `position.service.ts`  
+**Recommendation:** Delete immediately (dead code).
+
+**Issue 4: Mixed Concerns**
+The file mixes:
+- SDK type wrappers (`MeteoraStrategyTypeKey`, `CreateMeteoraPositionParams`)
+- API response types (`MeteoraDlmmPool`, `MeteoraDammV1PoolResponse`)
+- Legacy unified types (`MeteoraPoolData`)
+- Position types (`MeteoraDlmmPosition`)
+
+**Recommendation:** Split into:
+```
+types/
+├── meteora/
+│   ├── meteora-sdk.types.ts       # SDK wrappers only
+│   ├── meteora-api.types.ts       # API response types (pool, position)
+│   └── meteora-params.types.ts    # Query/mutation params
+└── pool.types.ts                  # UnifiedPool (cross-DEX)
+```
+
+### 3.4 Type Migration Plan
+
+**Phase 1: Deprecate Legacy Types**
+```typescript
+// types/meteora.types.ts
+
+/**
+ * @deprecated Use UnifiedPool from types/pool.types.ts instead.
+ * This legacy type will be removed in v2.0.
+ */
+export interface MeteoraPoolData { /* ... */ }
+
+/**
+ * @deprecated This type is unused and will be removed.
+ */
+export interface MeteoraDlmmPosition { /* ... */ }
+
+// Remove duplicate alias
+// export interface MeteoraDlmmPoolResponse extends MeteoraDlmmPool {}
+```
+
+**Phase 2: Add UnifiedPool Mappers**
+```typescript
+// adapters/dex/meteora.adapter.ts
+
+private mapDlmmToUnifiedPool(dlmm: MeteoraDlmmPool): UnifiedPool {
+  return {
+    id: dlmm.address,
+    address: dlmm.address,
+    name: dlmm.name,
+    dex: 'meteora',
+    type: 'DLMM',
+    tokenA: {
+      address: dlmm.mint_x,
+      symbol: dlmm.name.split('-')[0],
+      decimals: 0, // Fetch from token registry
+    },
+    tokenB: {
+      address: dlmm.mint_y,
+      symbol: dlmm.name.split('-')[1],
+      decimals: 0,
+    },
+    currentPrice: dlmm.current_price,
+    liquidity: dlmm.liquidity,
+    tvl: String(dlmm.reserve_x_amount * dlmm.current_price + dlmm.reserve_y_amount),
+    apr: dlmm.apr,
+    apy: dlmm.apy,
+    volume24h: dlmm.trade_volume_24h,
+    fees24h: dlmm.fees_24h,
+    feeTvlRatio24h: dlmm.fee_tvl_ratio.hour_24,
+    isVerified: dlmm.is_verified,
+    metadata: {
+      binStep: dlmm.bin_step,
+      farmApr: dlmm.farm_apr,
+      launchpad: dlmm.launchpad,
+    },
+  };
+}
+```
+
+**Phase 3: Split Type File**
+```typescript
+// types/meteora/meteora-sdk.types.ts
+export type MeteoraStrategyTypeKey = keyof typeof StrategyType;
+export interface CreateMeteoraPositionParams
+  extends TInitializePositionAndAddLiquidityParamsByStrategy {}
+export interface CloseMeteoraPositionParams {
+  owner: PublicKey;
+  position: LbPosition;
+}
+
+// types/meteora/meteora-api.types.ts
+export interface MeteoraDlmmPool { /* ... */ }
+export interface MeteoraDammV1PoolResponse { /* ... */ }
+export interface MeteoraDammV2PoolResponse { /* ... */ }
+export interface MeteoraDlmmPoolsPaginationResponse { /* ... */ }
+
+// types/meteora/meteora-params.types.ts
+export interface DlmmPoolsPaginationParams { /* ... */ }
+
+// Delete types/meteora.types.ts after migration
+```
+
+### 3.5 Type Dependencies Audit
+
+**Active Dependencies:**
+| Type | Imported By (# files) | Critical? |
+|------|----------------------|-----------|
+| `MeteoraDlmmPool` / `MeteoraDlmmPoolResponse` | 5 files | ✅ Yes (API client, adapter, services) |
+| `MeteoraDammV1PoolResponse` | 3 files | ✅ Yes (API client, legacy service) |
+| `MeteoraDammV2PoolResponse` | 3 files | ✅ Yes (API client, legacy service) |
+| `MeteoraPoolData` | 4 files | ⚠️ Legacy (replace with UnifiedPool) |
+| `MeteoraPoolType` | 6 files | ✅ Yes (pool routing) |
+| `DlmmPoolsPaginationParams` | 3 files | ✅ Yes (API client, trending) |
+| `MeteoraDlmmPosition` | 1 file | ❌ No (only in commented code) |
+
+**Recommendation:** Keep all active types, remove unused `MeteoraDlmmPosition`, deprecate `MeteoraPoolData`.
+
+---
+
+## 4. Categorization Matrix
 
 ### 3.1 Method Classification Table
 
 | # | Method | Classification | Current Consumers | Target Destination | Migration Readiness |
 |---|--------|---------------|-------------------|-------------------|---------------------|
 | 1 | `getDlmmPoolInfo()` | DEX-specific API | None (internal only) | `MeteoraApiClient.getPool()` | ✅ Ready (duplicate exists) |
-| 2 | `getDammV1PoolInfo()` | DEX-specific API | None (internal only) | `MeteoraApiClient.getDammV1Pool()` | ⚠️ Blocked (not in client) |
-| 3 | `getDammV2PoolInfo()` | DEX-specific API | None (internal only) | `MeteoraApiClient.getDammV2Pool()` | ⚠️ Blocked (not in client) |
-| 4 | `getPoolInfo()` | Business logic | `PoolService.getPool()` | `MeteoraAdapter.getPool()` | ⚠️ Partial (DLMM ready, DAMM blocked) |
+| 2 | `getDammV1PoolInfo()` | DEX-specific API | None (internal only) | `MeteoraApiClient.getDammV1Pool()` | ✅ Ready (duplicate exists) |
+| 3 | `getDammV2PoolInfo()` | DEX-specific API | None (internal only) | `MeteoraApiClient.getDammV2Pool()` | ✅ Ready (duplicate exists) |
+| 4 | `getPoolInfo()` | Business logic | `PoolService.getPool()` | `MeteoraAdapter.getPool()` | ⚠️ Partial (needs UnifiedPool mapper + DAMM wiring) |
 | 5 | `getPositionClaimFees()` | DEX-specific API | `PortfolioService` | `MeteoraApiClient` | ✅ Ready (exists in new client) |
 | 6 | `getPositionClaimRewards()` | DEX-specific API | `PortfolioService` | `MeteoraApiClient` | ✅ Ready (exists in new client) |
 | 7 | `getPositionDeposits()` | DEX-specific API | `PortfolioService` | `MeteoraApiClient` | ✅ Ready (exists in new client) |
@@ -603,14 +871,32 @@ import { meteoraPoolService } from "./meteora/pool.service";
 
 ## 4. Blocking Dependencies
 
-### 4.1 Missing Implementations in MeteoraApiClient
+### 4.1 ✅ No Blocking Dependencies - All Methods Implemented
 
-| Missing Method | Required For | Priority | Estimated Effort |
-|----------------|--------------|----------|------------------|
-| `getDammV1Pool(poolId: string)` | DAMM v1 support | P1 | 2-3 days |
-| `getDammV2Pool(poolId: string)` | DAMM v2 support | P1 | 2-3 days |
+**Status Update:** The new `MeteoraApiClient` (`apps/bot/src/adapters/dex/meteora/meteora-api.client.ts`) already implements ALL methods from the legacy service:
 
-**Note:** Position-related methods (`getPositionClaimFees`, etc.) already exist in the latest `MeteoraApiClient` per comparison document.
+| Legacy Method | New Implementation | Status |
+|---------------|-------------------|--------|
+| `getDlmmPoolInfo()` | `MeteoraApiClient.getPool()` | ✅ Implemented (line 336) |
+| `getDammV1PoolInfo()` | `MeteoraApiClient.getDammV1Pool()` | ✅ Implemented (line 416) |
+| `getDammV2PoolInfo()` | `MeteoraApiClient.getDammV2Pool()` | ✅ Implemented (line 447) |
+| `getAllDlmmPools()` | `MeteoraApiClient.getTrendingPools()` | ✅ Implemented (line 355) |
+| `getAllPools()` | `MeteoraApiClient.getAllPools()` | ✅ Implemented (line 395) |
+| `getPositionClaimFees()` | `MeteoraApiClient.getPositionClaimFees()` | ✅ Implemented (line 466) |
+| `getPositionClaimRewards()` | `MeteoraApiClient.getPositionClaimRewards()` | ✅ Implemented (line 494) |
+| `getPositionDeposits()` | `MeteoraApiClient.getPositionDeposits()` | ✅ Implemented (line 520) |
+| `getPositionWithdraws()` | `MeteoraApiClient.getPositionWithdraws()` | ✅ Implemented (line 546) |
+
+**Key Improvements in New Implementation:**
+- Circuit breaker pattern for resilience
+- Multi-tier caching (in-memory + Redis)
+- Structured logging with child loggers
+- Proper error handling with `MeteoraApiError`
+- Request timeout support
+- Configurable retry with exponential backoff
+- Graceful 404 handling for position APIs
+
+**Conclusion:** No missing methods. The migration is unblocked and can proceed immediately.
 
 ### 4.2 Type Dependencies
 
@@ -709,41 +995,7 @@ import { meteoraPoolService } from "./meteora/pool.service";
 
 ---
 
-#### Batch 3: Add DAMM Support to MeteoraApiClient (P1)
-
-**Target:** Methods 2-3 (DAMM v1/v2 pool fetchers)
-
-**Actions:**
-1. Add `getDammV1Pool()` to `MeteoraApiClient`:
-   ```typescript
-   async getDammV1Pool(poolId: string): Promise<MeteoraDammV1PoolResponse> {
-     const url = `${this.dammV1ApiUrl}/pools?address=${poolId}&unknown=true&pool_type=dynamic&is_monitoring=true`;
-     const data = await api.getWithRetry<MeteoraDammV1PoolResponse[]>(url, this.retries);
-     return data[0];
-   }
-   ```
-2. Add `getDammV2Pool()` to `MeteoraApiClient`:
-   ```typescript
-   async getDammV2Pool(poolId: string): Promise<MeteoraDammV2PoolResponse> {
-     const data = await api.getWithRetry<MeteoraDammV2PoolResponse>(
-       `${this.dammV2ApiUrl}/pools/${poolId}`,
-       this.retries
-     );
-     return data;
-   }
-   ```
-3. Add DAMM API URLs to `MeteoraApiClient` constructor (read from `getDexConfig()`)
-4. Add circuit breaker support (per Task 2.1 in meteora-api-comparison.md)
-5. Test DAMM pool fetching
-
-**Prerequisites:** None  
-**Estimated Effort:** 2-3 days (includes circuit breaker + caching)  
-**Risk:** Medium (new functionality, needs testing)  
-**Ticket Alignment:** Task 2.1 (Enhance MeteoraApiClient) per meteora-api-comparison.md
-
----
-
-#### Batch 4: Migrate Mappers to MeteoraAdapter (P1)
+#### Batch 3: Migrate Mappers to MeteoraAdapter (P1)
 
 **Target:** Mapper functions 1-3
 
@@ -758,8 +1010,7 @@ import { meteoraPoolService } from "./meteora/pool.service";
 2. Update mapper return types from `MeteoraPoolData` to `UnifiedPool`
 3. Remove exported mapper functions from `pool.service.ts`
 
-**Prerequisites:**
-- Batch 3 complete (DAMM support in client)
+**Prerequisites:** None (DAMM support already exists in `MeteoraApiClient`)
 
 **Estimated Effort:** 1-2 days  
 **Risk:** Low (pure refactor)  
@@ -767,7 +1018,7 @@ import { meteoraPoolService } from "./meteora/pool.service";
 
 ---
 
-#### Batch 5: Enhance MeteoraAdapter with DAMM Support (P1)
+#### Batch 4: Enhance MeteoraAdapter with DAMM Support (P1)
 
 **Target:** Method 4 (`getPoolInfo`) business logic
 
@@ -796,8 +1047,7 @@ import { meteoraPoolService } from "./meteora/pool.service";
 3. Update URL parsing in `MeteoraAdapter.parsePoolUrl()` to detect DAMM URLs
 
 **Prerequisites:**
-- Batch 3 complete (DAMM in client)
-- Batch 4 complete (mappers migrated)
+- Batch 3 complete (mappers migrated)
 
 **Estimated Effort:** 1-2 days  
 **Risk:** Low (extends existing pattern)  
@@ -805,7 +1055,7 @@ import { meteoraPoolService } from "./meteora/pool.service";
 
 ---
 
-#### Batch 6: Update PoolService Consumer (P2)
+#### Batch 5: Update PoolService Consumer (P2)
 
 **Target:** `PoolService.getPool()` method
 
@@ -840,7 +1090,7 @@ import { meteoraPoolService } from "./meteora/pool.service";
 3. Test all pool fetching flows
 
 **Prerequisites:**
-- Batch 5 complete (adapter enhanced)
+- Batch 4 complete (adapter enhanced)
 
 **Estimated Effort:** 1-2 hours  
 **Risk:** Low (simple delegation change)  
@@ -848,44 +1098,48 @@ import { meteoraPoolService } from "./meteora/pool.service";
 
 ---
 
-#### Batch 7: Delete MeteoraPoolService (P2)
+#### Batch 6: Delete MeteoraPoolService & Type Cleanup (P2)
 
 **Target:** `services/meteora/pool.service.ts`
 
 **Actions:**
 1. Verify no remaining imports of `meteoraPoolService` (grep)
 2. Verify no remaining imports of mapper functions (grep)
-3. Delete file
-4. Remove from documentation references
+3. Delete `services/meteora/pool.service.ts`
+4. Delete `services/meteora/position.service.ts`
+5. Remove legacy exports from `types/meteora.types.ts` (`MeteoraPoolData`, `MeteoraDlmmPosition`, alias types)
+6. Update documentation references (MIGRATION_AUDIT, system design)
 
 **Prerequisites:**
 - Batch 2 complete (PortfolioService migrated)
-- Batch 6 complete (PoolService migrated)
+- Batch 5 complete (PoolService migrated)
 - No other consumers found
 
-**Estimated Effort:** 1 hour  
+**Estimated Effort:** 1-2 hours  
 **Risk:** Low (if prerequisites met)  
-**Ticket Alignment:** Task 3.2 (Deprecate MeteoraPoolService) per MIGRATION_AUDIT.md
+**Ticket Alignment:** Task 3.2 (Deprecate MeteoraPoolService) + Type cleanup ticket
 
 ---
 
-### 5.3 Migration Timeline
+### 5.3 Migration Timeline (Updated with DAMM Pre-Existing)
 
 ```
 Week 1: Batch 1 (Dead Code) + Batch 2 (Position API)
         └── 1-2 days total
 
-Week 2: Batch 3 (DAMM Support in Client)
-        └── 2-3 days
+Week 2: Batch 3 (Mappers)
+        └── 1-2 days
 
-Week 3: Batch 4 (Mappers) + Batch 5 (Adapter DAMM)
-        └── 2-4 days total
+Week 3: Batch 4 (Adapter DAMM) + Batch 5 (PoolService Update)
+        └── 2-3 days total
 
-Week 4: Batch 6 (PoolService Update) + Batch 7 (Deletion)
+Week 4: Batch 6 (Deletion & Type Cleanup)
         └── 1 day total
 
-Total Estimated Time: 6-10 days (1.5-2 sprint weeks)
+Total Estimated Time: 5-8 days (1-2 sprint weeks)
 ```
+
+**Key Change:** Batch 3 (Add DAMM Support) removed since `MeteoraApiClient` already has full DAMM v1/v2 support. Migration timeline shortened by ~2-3 days.
 
 ---
 
@@ -1091,20 +1345,23 @@ Dead Consumers (commented out):
 
 ## 12. Conclusion
 
-This audit has comprehensively analyzed the legacy Meteora service files and provides a clear migration path forward. The key findings are:
+This updated audit has comprehensively analyzed the legacy Meteora service files and clarifies the migration strategy given the current state of `MeteoraApiClient`. The key findings are:
 
-1. **pool.service.ts** is actively used but can be cleanly migrated to the adapter layer in 7 batches
+1. **pool.service.ts** is actively used but can be **deleted** (not moved) after consumers migrate to adapter layer in 6 batches
 2. **position.service.ts** is entirely dead code and ready for immediate deletion
-3. Position API methods already exist in the new `MeteoraApiClient` (ready for migration)
-4. DAMM v1/v2 support needs to be added to `MeteoraApiClient` before full migration
-5. Mapper functions should become private methods in `MeteoraAdapter`
-6. Estimated total migration time: 6-10 days (1.5-2 weeks)
+3. **MeteoraApiClient already implements ALL methods** from legacy services, including full DAMM v1/v2 support
+4. Mapper functions should become private methods in `MeteoraAdapter` returning `UnifiedPool` instead of `MeteoraPoolData`
+5. `types/meteora.types.ts` contains legacy/conflicting types (`MeteoraPoolData`, `MeteoraDlmmPosition`) that should be deprecated and removed
+6. **Method naming improvements needed:** `getDlmmPoolInfo` → `getDlmmPool` for consistency across adapters
+7. Estimated total migration time: **5-8 days (1-2 weeks)** — shorter timeline due to pre-existing DAMM support
 
-The migration plan aligns with the existing task structure in MIGRATION_AUDIT.md and follows the adapter pattern established in the System Design Document.
+The migration plan aligns with the existing task structure in MIGRATION_AUDIT.md and follows the adapter pattern established in the System Design Document. The legacy services should be removed after consumer migration, not moved to the adapter directory.
 
 **Status:** ✅ Audit Complete - Ready for Migration Ticket Creation  
 **Next Steps:**
-1. Review and approve audit document
-2. Create GitHub issues for each batch (7 tickets)
+1. Review and approve updated audit document
+2. Create GitHub issues for each batch (6 tickets)
 3. Begin Batch 1 (Dead Code Removal) immediately
-4. Schedule Batches 2-7 across upcoming sprints
+4. Schedule Batches 2-6 across upcoming sprints
+5. Mark legacy types as `@deprecated` in `types/meteora.types.ts`
+6. Plan type file split into SDK, API, and params files (long-term cleanup)
