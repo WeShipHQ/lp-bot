@@ -16,7 +16,10 @@ import {
   ClaimFeesParams,
   ClaimFeesResult,
 } from "@/types/core.types";
-import { MeteoraApiClient, meteoraApiClient } from "./meteora-api.client";
+import {
+  MeteoraApiClient,
+  meteoraApiClient,
+} from "./meteora";
 import { Token } from "@/types/token.types";
 import {
   TokenPriceService,
