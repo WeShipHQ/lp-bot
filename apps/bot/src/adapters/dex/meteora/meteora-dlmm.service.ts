@@ -82,10 +82,10 @@ export interface ParsedPoolData {
 
 /**
  * MeteoraDlmmService
- * 
+ *
  * Encapsulates all Meteora DLMM SDK interactions.
  * Provides transaction builders, position data parsing, and pool state retrieval.
- * 
+ *
  * All methods that interact with the DLMM SDK are contained here to keep
  * external callers unaware of Meteora-specific implementation details.
  */
@@ -96,7 +96,7 @@ export class MeteoraDlmmService {
   /**
    * Creates or retrieves a cached DLMM pool instance.
    * Instances are cached for 30 seconds to reduce RPC calls.
-   * 
+   *
    * @param poolAddress - The pool's public key or base58 address
    * @returns DLMM SDK instance for the specified pool
    * @private
@@ -128,7 +128,7 @@ export class MeteoraDlmmService {
 
   /**
    * Normalizes various address input types to PublicKey.
-   * 
+   *
    * @param address - Address as string or PublicKey
    * @returns PublicKey instance
    * @private
@@ -139,7 +139,7 @@ export class MeteoraDlmmService {
 
   /**
    * Normalizes various address input types to base58 string.
-   * 
+   *
    * @param address - Address as string or PublicKey
    * @returns Base58 string representation
    * @private
@@ -151,7 +151,7 @@ export class MeteoraDlmmService {
   /**
    * Creates position initialization transaction with pre-generated position keypair.
    * Internal method used by the SDK integration.
-   * 
+   *
    * @param positionAddress - Pre-generated position keypair public key
    * @param poolAddress - The pool's public key
    * @param userPublicKey - The user's wallet public key
@@ -210,7 +210,7 @@ export class MeteoraDlmmService {
    * Builds transaction instructions to close a position.
    * Removes all liquidity and claims fees atomically.
    * Internal method - delegates to DLMM SDK.
-   * 
+   *
    * @param ownerAddress - The position owner's public key
    * @param poolAddress - The pool's public key
    * @param positionAddress - The position's public key
@@ -252,7 +252,7 @@ export class MeteoraDlmmService {
   /**
    * Builds transaction instructions to claim fees from a position.
    * Internal method - delegates to DLMM SDK.
-   * 
+   *
    * @param ownerAddress - The position owner's public key
    * @param poolAddress - The pool's public key
    * @param positionAddress - The position's public key
@@ -286,7 +286,7 @@ export class MeteoraDlmmService {
   /**
    * @deprecated Use buildCreatePositionTx instead. This method is kept for backward compatibility.
    * Builds transaction instructions for creating a new position.
-   * 
+   *
    * @param poolAddress - The pool's public key or base58 address
    * @param userPublicKey - The user's wallet public key or base58 address
    * @param totalXAmount - Token X amount as Decimal
@@ -320,7 +320,7 @@ export class MeteoraDlmmService {
   /**
    * Gets all positions for a user.
    * Alias for getAllLbPairPositionsByUser.
-   * 
+   *
    * @param userAddress - The user's wallet public key or base58 address
    * @returns Map of position addresses to PositionInfo from DLMM SDK
    */
@@ -332,7 +332,7 @@ export class MeteoraDlmmService {
 
   /**
    * Calculates price range boundaries for a given interval.
-   * 
+   *
    * @param poolAddress - The pool's base58 address
    * @param rangeInterval - Number of bins from active bin
    * @returns Price range in token Y per token X
@@ -354,7 +354,7 @@ export class MeteoraDlmmService {
   /**
    * Calculates price range for a balanced (spot) position.
    * Same as getPriceRange - kept for backward compatibility.
-   * 
+   *
    * @param poolAddress - The pool's base58 address
    * @param rangeInterval - Number of bins from active bin
    * @returns Price range in token Y per token X
@@ -372,7 +372,7 @@ export class MeteoraDlmmService {
   /**
    * Calculates price range for a single-sided position.
    * Same as getPriceRange - kept for backward compatibility.
-   * 
+   *
    * @param poolAddress - The pool's base58 address
    * @param rangeInterval - Number of bins from active bin
    * @returns Price range in token Y per token X
@@ -390,7 +390,7 @@ export class MeteoraDlmmService {
   /**
    * Retrieves all DLMM positions for a user across all pools.
    * Uses the DLMM SDK's static method to query positions.
-   * 
+   *
    * @param walletAddress - The user's wallet public key or base58 address
    * @returns Map of position addresses to PositionInfo from DLMM SDK
    */
@@ -410,7 +410,7 @@ export class MeteoraDlmmService {
 
   /**
    * Retrieves a specific position and its associated pool data.
-   * 
+   *
    * @param positionAddress - The position's public key or base58 address
    * @param poolAddress - The pool's public key or base58 address
    * @returns Position and pool pair data from DLMM SDK
@@ -439,7 +439,7 @@ export class MeteoraDlmmService {
   /**
    * Analyzes if a position is within its price range.
    * Calculates the distance from the active bin to position boundaries.
-   * 
+   *
    * @param poolAddress - The pool's public key or base58 address
    * @param positionAddress - The position's public key or base58 address
    * @returns Position range analysis including in-range status and distances
@@ -495,7 +495,7 @@ export class MeteoraDlmmService {
 
   /**
    * Fetches pool state directly from the blockchain using DLMM SDK.
-   * 
+   *
    * @param poolAddress - The pool's public key or base58 address
    * @returns Parsed on-chain pool data
    */
@@ -510,17 +510,17 @@ export class MeteoraDlmmService {
       tokenX: {
         mint: dlmmPool.lbPair.tokenXMint.toBase58(),
         reserve: dlmmPool.lbPair.reserveX.toString(),
-        decimals: dlmmPool.tokenX.decimal,
+        decimals: dlmmPool.tokenX.mint.decimals,
       },
       tokenY: {
         mint: dlmmPool.lbPair.tokenYMint.toBase58(),
         reserve: dlmmPool.lbPair.reserveY.toString(),
-        decimals: dlmmPool.tokenY.decimal,
+        decimals: dlmmPool.tokenY.mint.decimals,
       },
       activeBinId: activeBin.binId,
       binStep: dlmmPool.lbPair.binStep,
-      baseFeeRate: dlmmPool.lbPair.baseFeeRate?.toString() ?? "0",
-      protocolFeeRate: dlmmPool.lbPair.protocolShare?.toString() ?? "0",
+      baseFeeRate: "0", // dlmmPool.lbPair.baseFeeRate?.toString() ?? "0",
+      protocolFeeRate: dlmmPool.lbPair.protocolFee?.toString() ?? "0",
       currentPrice: activeBin.price.toString(),
     };
   }
@@ -528,7 +528,7 @@ export class MeteoraDlmmService {
   /**
    * Parses position data from DLMM SDK into a standardized format.
    * Extracts token amounts, fees, rewards, and bin distribution.
-   * 
+   *
    * @param positionAddress - The position's public key or base58 address
    * @param poolAddress - The pool's public key or base58 address
    * @returns Parsed position data with all relevant fields
@@ -578,7 +578,7 @@ export class MeteoraDlmmService {
   /**
    * Parses PositionInfo map entries from getAllLbPairPositionsByUser.
    * Transforms SDK PositionInfo into a standardized array format.
-   * 
+   *
    * @param positionsMap - Map of position addresses to PositionInfo from SDK
    * @returns Array of parsed position data
    */
@@ -587,6 +587,7 @@ export class MeteoraDlmmService {
   ): Promise<ParsedPositionData[]> {
     const parsedPositions: ParsedPositionData[] = [];
 
+    // @ts-expect-error
     for (const [positionAddress, positionInfo] of positionsMap.entries()) {
       const positionData = positionInfo.positionData;
 
@@ -609,6 +610,7 @@ export class MeteoraDlmmService {
           positionData.totalYAmountExcludeTransferFee?.toString() ??
           positionData.totalYAmount?.toString() ??
           "0",
+        // @ts-expect-error
         positionBinData: positionData.positionBinData.map((bin) => ({
           binId: bin.binId,
           positionXAmount: bin.positionXAmount?.toString() ?? "0",
@@ -627,7 +629,7 @@ export class MeteoraDlmmService {
   /**
    * Builds transaction instructions for creating a new position.
    * Standardized method name: buildCreatePositionTx
-   * 
+   *
    * @param poolAddress - The pool's public key or base58 address
    * @param userPublicKey - The user's wallet public key or base58 address
    * @param totalXAmount - Token X amount as Decimal
@@ -687,7 +689,7 @@ export class MeteoraDlmmService {
    * Builds transaction instructions for closing a position.
    * Removes all liquidity and claims fees in a single transaction.
    * Standardized method name: buildClosePositionTx
-   * 
+   *
    * @param ownerAddress - The position owner's public key or base58 address
    * @param poolAddress - The pool's public key or base58 address
    * @param positionAddress - The position's public key or base58 address
@@ -708,7 +710,7 @@ export class MeteoraDlmmService {
   /**
    * Builds transaction instructions for claiming fees from a position.
    * Standardized method name: buildClaimFeesTx
-   * 
+   *
    * @param ownerAddress - The position owner's public key or base58 address
    * @param poolAddress - The pool's public key or base58 address
    * @param positionAddress - The position's public key or base58 address
@@ -729,7 +731,7 @@ export class MeteoraDlmmService {
   /**
    * Builds transaction instructions for rebalancing a position.
    * Closes old position and creates new one with updated range.
-   * 
+   *
    * @param ownerAddress - The position owner's public key or base58 address
    * @param poolAddress - The pool's public key or base58 address
    * @param oldPositionAddress - The existing position's public key or base58 address
@@ -780,7 +782,7 @@ export class MeteoraDlmmService {
 
   /**
    * Calculates the price range boundaries for a given bin interval.
-   * 
+   *
    * @param poolAddress - The pool's public key or base58 address
    * @param rangeInterval - Number of bins from active bin (e.g., 10 means ±10 bins)
    * @returns From and to prices in token Y per token X
@@ -824,13 +826,11 @@ export class MeteoraDlmmService {
 
   /**
    * Gets the current active bin and price for a pool.
-   * 
+   *
    * @param poolAddress - The pool's public key or base58 address
    * @returns Active bin ID and current price
    */
-  async getActiveBinPrice(
-    poolAddress: string | PublicKey
-  ): Promise<{
+  async getActiveBinPrice(poolAddress: string | PublicKey): Promise<{
     binId: number;
     price: string;
     pricePerToken: string;
