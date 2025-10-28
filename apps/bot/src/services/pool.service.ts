@@ -2,17 +2,21 @@ import type { MeteoraPoolData, MeteoraPoolType } from "@/types/meteora.types";
 import { meteoraPoolService } from "./meteora/pool.service";
 import { TokenAdapter } from "@/adapters/token.adapter";
 import { Pool, PoolDex } from "@/types/pool.types";
-import { MeteoraApiService } from "./meteora/meteora-api.service";
 import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
+import { MeteoraApiClient, meteoraApiClient } from "@/adapters/dex/meteora";
 import { SarosPoolService } from "./saros/pool.service";
 import { SarosAdapter } from "./saros/saros.adapter";
 
 export class PoolService {
-  private meteoraApiService = new MeteoraApiService();
-  private sarosPoolService = new SarosPoolService();
-  private tokenAdapter = new TokenAdapter();
-  private meteoraAdapter = new MeteoraAdapter();
+  private readonly meteoraApiClient: MeteoraApiClient;
+  private readonly sarosPoolService = new SarosPoolService();
+  private readonly tokenAdapter = new TokenAdapter();
+  private readonly meteoraAdapter = new MeteoraAdapter();
   // private sarosAdapter = new SarosAdapter();
+
+  constructor(meteoraClient: MeteoraApiClient = meteoraApiClient) {
+    this.meteoraApiClient = meteoraClient;
+  }
 
   async findPoolsForToken(tokenAddress: string): Promise<MeteoraPoolData[]> {
     try {
@@ -152,7 +156,7 @@ export class PoolService {
     //   const dlmmPool = await this.sarosPoolService.getDlmmPool(poolAddress);
     //   return SarosAdapter.dlmmPoolDetailToPool(dlmmPool.data);
     // }
-    // const dlmmPool = await this.meteoraApiService.getDlmmPool(poolAddress);
+    // const dlmmPool = await this.meteoraApiClient.getPool(poolAddress);
     // return this.meteoraAdapter.transformDlmmPool(dlmmPool);
 
     throw new Error(`Unsupported DEX: ${dex}`);
