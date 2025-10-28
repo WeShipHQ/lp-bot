@@ -14,3 +14,9 @@ export {
   type MeteoraApiClientConfig,
   MeteoraApiError,
 } from "./meteora-api.client";
+
+export {
+  MeteoraDlmmService,
+  meteoraDlmmService,
+  type DepositAmountCalculation,
+} from "./meteora-dlmm.service";

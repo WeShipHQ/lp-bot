@@ -5,7 +5,7 @@
  * And access DEX/blockchain via adapters (e.g., MeteoraAdapter, SarosAdapter) resolved from the DI container.
  * This file remains for backward compatibility during migration and will be removed in a later phase.
  */
-import { meteoraDlmmService } from "./meteora/dlmm.service";
+import { meteoraDlmmService } from "@/adapters/dex/meteora";
 import { JupiterService, jupiterService } from "./jupiter.service";
 import BN from "bn.js";
 import { WalletService } from "./wallet.service";

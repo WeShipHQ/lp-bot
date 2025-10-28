@@ -28,7 +28,7 @@ import {
 import {
   meteoraDlmmService,
   MeteoraDlmmService,
-} from "@/services/meteora/dlmm.service";
+} from "@/adapters/dex/meteora";
 import { PublicKey } from "@solana/web3.js";
 import Decimal from "decimal.js";
 import { MeteoraDlmmPoolResponse } from "@/types/meteora.types";
