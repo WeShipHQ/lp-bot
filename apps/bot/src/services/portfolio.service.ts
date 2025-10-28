@@ -5,7 +5,7 @@
 import { PublicKey } from "@solana/web3.js";
 import { PositionInfo } from "@meteora-ag/dlmm";
 import { jupiterService } from "./jupiter.service";
-import { meteoraPoolService } from "./meteora/pool.service";
+import { MeteoraApiClient, meteoraApiClient } from "@/adapters/dex/meteora";
 import {
   DlmmClaimFee,
   DlmmClaimReward,
@@ -50,6 +50,8 @@ const sumDepositsWithdrawalsInUsd = (arr: DlmmDepositWithdraw[]) =>
     0
   );
 class PortfolioService {
+  private readonly meteoraApi: MeteoraApiClient = meteoraApiClient;
+
   // ----- Helpers -----------------------------------------------------------
   private toRawValue(value: unknown): string | number | bigint | undefined {
     if (value == null) return undefined;
@@ -178,7 +180,7 @@ class PortfolioService {
       const [xInfo, yInfo, poolInfo] = await Promise.all([
         jupiterService.getTokenInfo(xMint),
         jupiterService.getTokenInfo(yMint),
-        meteoraPoolService.getDlmmPoolInfo(poolAddress),
+        this.meteoraApi.getPool(poolAddress),
       ]);
 
       const xDecimals = Number(xInfo?.decimals ?? 0);
@@ -282,10 +284,10 @@ class PortfolioService {
         total_unclaimed_fees_usd + total_unclaimed_rewards_usd;
 
       const [claimedFees, deposits, withdraws, rewards] = await Promise.all([
-        meteoraPoolService.getPositionClaimFees(positionAddress),
-        meteoraPoolService.getPositionDeposits(positionAddress),
-        meteoraPoolService.getPositionWithdraws(positionAddress),
-        meteoraPoolService.getPositionClaimRewards(positionAddress),
+        this.meteoraApi.getPositionClaimFees(positionAddress),
+        this.meteoraApi.getPositionDeposits(positionAddress),
+        this.meteoraApi.getPositionWithdraws(positionAddress),
+        this.meteoraApi.getPositionClaimRewards(positionAddress),
       ]);
       const claimed_fees_usd_api = sumClaimFeesInUsd(claimedFees);
       const claimed_rewards_usd_api = sumRewardsInUsd(rewards);
@@ -413,12 +415,12 @@ class PortfolioService {
     const out: PortfolioPosition[] = [];
     const poolCache = new Map<
       string,
-      Awaited<ReturnType<typeof meteoraPoolService.getDlmmPoolInfo>>
+      Awaited<ReturnType<typeof this.meteoraApi.getPool>>
     >();
 
     const getPool = async (pool: string) => {
       if (!poolCache.has(pool))
-        poolCache.set(pool, await meteoraPoolService.getDlmmPoolInfo(pool));
+        poolCache.set(pool, await this.meteoraApi.getPool(pool));
       return poolCache.get(pool);
     };
 
@@ -529,10 +531,10 @@ class PortfolioService {
           total_unclaimed_fees_usd + total_unclaimed_rewards_usd;
 
         const [claimedFees, deposits, withdraws, rewards] = await Promise.all([
-          meteoraPoolService.getPositionClaimFees(positionAddress),
-          meteoraPoolService.getPositionDeposits(positionAddress),
-          meteoraPoolService.getPositionWithdraws(positionAddress),
-          meteoraPoolService.getPositionClaimRewards(positionAddress),
+          this.meteoraApi.getPositionClaimFees(positionAddress),
+          this.meteoraApi.getPositionDeposits(positionAddress),
+          this.meteoraApi.getPositionWithdraws(positionAddress),
+          this.meteoraApi.getPositionClaimRewards(positionAddress),
         ]);
 
         const claimed_usd_api =
