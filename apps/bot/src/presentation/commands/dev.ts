@@ -7,6 +7,7 @@ import { container } from "@/infrastructure/di/container";
 import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 import { JOB_NOTIFICATION } from "@/infrastructure/jobs/job-definitions";
 import { getPositionDeeplink, link } from "@/utils/misc";
+import { logger } from "@/utils/logger";
 // import { SCENE_IDS } from "../config/scenes";
 // import { init } from "@/utils/tx-parser";
 // import { LAMPORTS_PER_SOL, PublicKey, SystemProgram } from "@solana/web3.js";
@@ -19,38 +20,14 @@ export function devCommand(
   _server: FastifyInstance
 ) {
   bot.command("dev", async (ctx) => {
-    // const jobQueue = container.resolve(JobQueueService);
-    const jobQueue = new JobQueueService({ producerOnly: true });
-
-    //   ✅ Position Created Successfully!
-
-    // Transaction: [signature link]
-    // Position ID: [position-address]
-
-    // Your position is now active and earning fees!
-
-    const primaryMessage = [
-      "✅ Position Created Successfully!",
-      "",
-      `${link("View Position", getPositionDeeplink("panda", "meteora", "HNpsi26Am2ZsW94sfkAoM8onqkQsXkkCxYDsPLSUECJe"))} \t|\t ${link("View Transaction", "https://solscan.io/tx/5mXyWoii97YnPNxJ34dBA4hREBUCWTJxyMtdKzCAshTjPEaVp48wJof88hbyQKbUX7xPW1fPxZB8kGMFvLvzraHd")}`,
-      "",
-      "Your position is now active and earning fees!",
-    ].join("\n");
-
-    await jobQueue.enqueue(JOB_NOTIFICATION, {
-      userId: "a6ce61f1-da2c-4efa-a4d7-19dc3da2b1b3",
-      notification: {
-        type: "general",
-        title: "Position Created",
-        messages: [
-          {
-            text: primaryMessage,
-            parseMode: "Markdown",
-            disableLinkPreview: true,
-          },
-        ],
+    logger.info(
+      {
+        segmentId: "currentSegment.id",
+        segmentPnlUSD: "123",
+        segmentPnlPercentage: "234",
       },
-    });
+      "hello"
+    );
 
     return ctx.replyWithMarkdown(`Dev command`, DISABLE_LINK_PREVIEW);
 

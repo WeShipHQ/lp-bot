@@ -10,6 +10,7 @@ export const CONFIG = {
 
   TELEGRAM: {
     BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || "",
+    BOT_USERNAME: process.env.TELEGRAM_BOT_USERNAME || "",
     WEBHOOK_URL: process.env.TELEGRAM_WEBHOOK_URL || "",
   },
 
