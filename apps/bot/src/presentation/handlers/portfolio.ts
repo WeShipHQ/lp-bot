@@ -88,7 +88,6 @@ async function safeEditMessage(
   }
 }
 
-// Build the latest portfolio overview payload using use-cases and adapter data
 async function buildPortfolioOverviewPayload(
   context: BotContext,
   forceRefresh = false
@@ -103,9 +102,9 @@ async function buildPortfolioOverviewPayload(
   const feesByAddress: Record<string, number> = {};
   if (walletAddress) {
     try {
-      const registry = container.get<typeof import("@/services/dex-registry.service").dexRegistry>(
-        DI_TOKENS.DexRegistry
-      );
+      const registry = container.get<
+        typeof import("@/services/dex-registry.service").dexRegistry
+      >(DI_TOKENS.DexRegistry);
       const active = portfolio.getActivePositions();
       const dexes = Array.from(new Set(active.map((p) => p.dex)));
       for (const dex of dexes) {
@@ -132,7 +131,6 @@ async function buildPortfolioOverviewPayload(
 export function registerPortfolioCallbacks(bot: Telegraf<BotContext>) {
   const router = new Composer<BotContext>();
 
-  // Refresh portfolio (standardized callback)
   router.action(PF_PATTERNS.overview.refresh, async (ctx) => {
     try {
       const payload = await buildPortfolioOverviewPayload(ctx, true);

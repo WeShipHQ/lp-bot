@@ -1,26 +1,20 @@
-import { IPositionRepository } from '@/domain/position/position.repository';
-import { Position } from '@/domain/position/position.entity';
-import { Portfolio } from '@/domain/portfolio/portfolio.entity';
-import { DexType, UnifiedPosition } from '@/types/core.types';
-import { IDexAdapter } from '@/types/dex-adapter.interface';
-import { getCacheService, ICacheService } from '@/infrastructure/cache/cache.service';
-import { CacheKeys } from '@/infrastructure/cache/cache-keys';
-import { findUserById } from '@/db/queries';
-import { Money, TokenAmount } from '@/domain/shared/value-objects';
+import { IPositionRepository } from "@/domain/position/position.repository";
+import { Position } from "@/domain/position/position.entity";
+import { Portfolio } from "@/domain/portfolio/portfolio.entity";
+import { DexType, UnifiedPosition } from "@/types/core.types";
+import { IDexAdapter } from "@/types/dex-adapter.interface";
+import {
+  getCacheService,
+  ICacheService,
+} from "@/infrastructure/cache/cache.service";
+import { CacheKeys } from "@/infrastructure/cache/cache-keys";
+import { findUserById } from "@/db/queries";
+import { Money, TokenAmount } from "@/domain/shared/value-objects";
 
 export interface DexRegistryLike {
   get(dexType: DexType): IDexAdapter;
 }
 
-/**
- * Use case to assemble a user's Portfolio aggregate from DB and on-chain enrichment.
- * - Leverages cache to avoid repeated heavy operations
- * - Fetches positions by user, groups by DEX, and enriches via adapters
- *
- * Example:
- * const uc = container.resolve(GetPortfolioUseCase)
- * const portfolio = await uc.execute(userId)
- */
 export class GetPortfolioUseCase {
   private readonly cache: ICacheService;
 
@@ -55,12 +49,13 @@ export class GetPortfolioUseCase {
       }
     }
 
-    // Load current DB positions
     const dbPositions = await this.positionRepository.findByUser(userId);
 
-    // Fetch user address for on-chain enrichment
+
     const user = await findUserById(userId);
-    const userAddress = user?.walletAddress;
+    if(!user) throw new Error("User not found");
+
+    const userAddress = user.walletAddress;
 
     if (userAddress) {
       // Group positions by DEX for batch fetching
@@ -77,7 +72,8 @@ export class GetPortfolioUseCase {
           const t0 = Date.now();
           try {
             const adapter = this.dexRegistry.get(dex);
-            const unifiedPositions: UnifiedPosition[] = await adapter.getUserPositions(userAddress);
+            const unifiedPositions: UnifiedPosition[] =
+              await adapter.getUserPositions(userAddress);
 
             // Index by address for quick lookup
             const byAddress = new Map<string, UnifiedPosition>();
@@ -103,10 +99,19 @@ export class GetPortfolioUseCase {
             }
           } catch (e) {
             // Log and continue; portfolio can still be built with DB values
-            console.warn(`[GetPortfolioUseCase] Enrichment failed for ${dex}:`, e);
+            console.warn(
+              `[GetPortfolioUseCase] Enrichment failed for ${dex}:`,
+              e
+            );
           } finally {
             const duration = Date.now() - t0;
-            try { const { logger } = await import('@/utils/logger'); logger.debug({ dex, duration }, '[GetPortfolioUseCase] enrichment timing'); } catch {}
+            try {
+              const { logger } = await import("@/utils/logger");
+              logger.debug(
+                { dex, duration },
+                "[GetPortfolioUseCase] enrichment timing"
+              );
+            } catch {}
           }
         })
       );
@@ -133,20 +138,33 @@ export class GetPortfolioUseCase {
         currentTokenXAmount: p.getCurrentTokenXAmount().toUi().toString(),
         currentTokenYAmount: p.getCurrentTokenYAmount().toUi().toString(),
         claimedFeesUsd: p.getClaimedFees().toNumber(),
-        priceRange: p.getPriceRange() ? { min: (p.getPriceRange() as any)['min'], max: (p.getPriceRange() as any)['max'] } : null,
-        isRebalancingEnabled: (p as any)['isRebalancingEnabled'] ?? false,
-        rebalanceThreshold: (p as any)['rebalanceThreshold'] ?? 20,
+        priceRange: p.getPriceRange()
+          ? {
+              min: (p.getPriceRange() as any)["min"],
+              max: (p.getPriceRange() as any)["max"],
+            }
+          : null,
+        isRebalancingEnabled: (p as any)["isRebalancingEnabled"] ?? false,
+        rebalanceThreshold: (p as any)["rebalanceThreshold"] ?? 20,
         createdAt: p.createdAt,
         updatedAt: p.getUpdatedAt(),
         closedAt: p.getClosedAt(),
         transactionSignature: p.getTransactionSignature(),
       }));
-      await this.cache.set(cacheKey, { serialized: { positions: serialized } }, 300);
+      await this.cache.set(
+        cacheKey,
+        { serialized: { positions: serialized } },
+        300
+      );
     } catch (e) {
-      console.warn('[GetPortfolioUseCase] Cache set failed:', e);
+      console.warn("[GetPortfolioUseCase] Cache set failed:", e);
     }
 
-    try { const { logger } = await import('@/utils/logger'); const dur = Date.now() - tStart; logger.debug({ userId, dur }, '[GetPortfolioUseCase] total timing'); } catch {}
+    try {
+      const { logger } = await import("@/utils/logger");
+      const dur = Date.now() - tStart;
+      logger.debug({ userId, dur }, "[GetPortfolioUseCase] total timing");
+    } catch {}
     return portfolio;
   }
 }

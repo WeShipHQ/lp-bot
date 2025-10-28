@@ -1,3 +1,4 @@
+import Decimal from "decimal.js";
 import {
   DexType,
   UnifiedPool,
@@ -37,15 +38,27 @@ export interface IDexAdapter {
     positionAddress: string,
     context?: PositionContext
   ): Promise<UnifiedPosition>;
-  createPosition(params: CreatePositionParams): Promise<TransactionResult>;
-  createPositionIx(params: CreatePositionParams): Promise<CreatePositionResult>;
-  closePosition(positionAddress: string): Promise<TransactionResult>;
-  closePositionIx(params: ClosePositionParams): Promise<ClosePositionResult>;
-  claimFeesIx(params: ClaimFeesParams): Promise<ClaimFeesResult>;
-  rebalancePosition(
-    positionAddress: string,
-    params: RebalanceParams
-  ): Promise<TransactionResult>;
+  getUserPosition(
+    userAddress: string,
+    positionAddress: string
+  ): Promise<UnifiedPosition>;
+
+  createPositionIxs(
+    params: CreatePositionParams
+  ): Promise<CreatePositionResult>;
+  closePositionIxs(params: ClosePositionParams): Promise<ClosePositionResult>;
+  claimFeesIxs(params: ClaimFeesParams): Promise<ClaimFeesResult>;
+
+  getPriceRange(
+    poolAddress: string,
+    rangeInterval: number
+  ): Promise<{
+    fromPrice: Decimal;
+    toPrice: Decimal;
+    activeBinId: number;
+    fromBinId: number;
+    toBinId: number;
+  }>;
 
   // Portfolio operations
   getUserPortfolio(userAddress: string): Promise<UnifiedPortfolio>;

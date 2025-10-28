@@ -93,7 +93,7 @@ export class ClaimFeesUseCase {
 
       let txResult: ClaimFeesResultType;
       try {
-        txResult = await adapter.claimFeesIx({
+        txResult = await adapter.claimFeesIxs({
           poolAddress: position.poolAddress,
           userAddress: command.walletAddress,
           positionAddress: position.positionAddress,

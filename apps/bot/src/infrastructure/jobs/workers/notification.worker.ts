@@ -9,13 +9,15 @@ export class NotificationWorker implements IWorker<NotificationJobData> {
 
   async process(job: Job<NotificationJobData>) {
     const { userId, notification } = job.data;
-
     try {
       await this.notificationService.sendNotification(userId, notification);
       return { delivered: true };
     } catch (error) {
       // Handle rate limiting by retrying via BullMQ backoff
-      logger.warn({ error }, '[NotificationWorker] Send failed; will rely on backoff/retry');
+      logger.warn(
+        { error },
+        "[NotificationWorker] Send failed; will rely on backoff/retry"
+      );
       throw error;
     }
   }

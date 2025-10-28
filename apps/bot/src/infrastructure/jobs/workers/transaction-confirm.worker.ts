@@ -49,6 +49,8 @@ import {
 import { dexRegistry } from "@/services/dex-registry.service";
 import { CreatePositionParams } from "@/types/core.types";
 import { WalletService } from "@/services/wallet.service";
+import { getPositionDeeplink, link } from "@/utils/misc";
+import { getSolscanLink } from "@/utils/link";
 
 type ExtractedClosePositionIxsData = {
   positionAddress?: string;
@@ -411,12 +413,26 @@ export class TransactionConfirmWorker
         });
       }
 
+      const successMessage = [
+        "✅ Position Created Successfully!",
+        "",
+        `${link("View Position", getPositionDeeplink(process.env.BOT_NAME!, context.dex, effectivePositionAddress))} \t|\t ${link("View Transaction", getSolscanLink("tx", signature))}`,
+        "",
+        "Your position is now active and earning fees!",
+      ].join("\n");
+
       await jobQueue.enqueue(JOB_NOTIFICATION, {
         userId,
         notification: {
           type: "general",
           title: "Position Created",
-          message: `Your position has been successfully created! View it in your portfolio.`,
+          messages: [
+            {
+              text: successMessage,
+              parseMode: "Markdown",
+              disableLinkPreview: true,
+            },
+          ],
         },
       });
 
@@ -1930,7 +1946,7 @@ export class TransactionConfirmWorker
 
       console.log("adapterParams", adapterParams);
 
-      const txResult = await adapter.createPositionIx(adapterParams);
+      const txResult = await adapter.createPositionIxs(adapterParams);
 
       if (!txResult?.success) {
         throw new Error(

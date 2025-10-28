@@ -31,7 +31,7 @@ export class CalculateBalancedDistributionUseCase {
     input: CalculateBalancedDistributionInput
   ): Promise<CalculateBalancedDistributionResult> {
     const { pool, solAmount } = input;
-    
+
     const feeAmount = solAmount * (OPEN_POSITION_FEE / 100);
     const netAmount = solAmount - feeAmount;
     const halfAmount = netAmount / 2;

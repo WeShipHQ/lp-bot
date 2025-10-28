@@ -422,12 +422,27 @@ positionDetailScene.action(
 
     try {
       const uc = container.get(ClaimFeesUseCase);
-      const res = await uc.execute({
-        userId: ctx.user.id,
-        positionId,
-        walletAddress: ctx.user.walletAddress,
-        walletId: ctx.user.walletId,
-      });
+      // const res = await uc.execute({
+      //   userId: ctx.user.id,
+      //   positionId,
+      //   walletAddress: ctx.user.walletAddress,
+      //   walletId: ctx.user.walletId,
+      // });
+
+      const res = {
+        success: true,
+        signature:
+          "4JBYLcKF98y5WghpML8W5hJYKFipwXSLBuG7S3D2qsrHPAFJcB4SU6ebRCxtvkx5UwqBBTNCM7gxgc7ypWsJbuUw",
+        claimedFeesUsd: 1000,
+        error: "Some error occurred",
+      };
+
+      //       export interface ClaimFeesResult {
+      //   success: boolean;
+      //   signature?: string;
+      //   claimedFeesUsd?: number;
+      //   error?: string;
+      // }
 
       if (!res.success) {
         await ctx.telegram.editMessageText(

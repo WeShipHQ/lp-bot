@@ -88,7 +88,7 @@ export class RebalancePositionUseCase {
 
       let closeTx;
       try {
-        closeTx = await adapter.closePositionIx({
+        closeTx = await adapter.closePositionIxs({
           userAddress: command.userAddress,
           poolAddress: position.poolAddress,
           positionAddress: position.positionAddress,

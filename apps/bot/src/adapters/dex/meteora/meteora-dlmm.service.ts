@@ -3,17 +3,12 @@ import DLMM, {
   StrategyType,
   PositionInfo,
   LbPosition,
-  LbPair,
 } from "@meteora-ag/dlmm";
-import {
-  Connection,
-  PublicKey,
-  TransactionInstruction,
-  Keypair,
-} from "@solana/web3.js";
+import { Connection, PublicKey, TransactionInstruction } from "@solana/web3.js";
 import BN from "bn.js";
 import { CONFIG } from "@/config";
 import Decimal from "decimal.js";
+import { LbPair } from "@/types/meteora.types";
 
 /**
  * Calculation result for deposit amounts required for position creation
@@ -80,15 +75,6 @@ export interface ParsedPoolData {
   currentPrice: string;
 }
 
-/**
- * MeteoraDlmmService
- *
- * Encapsulates all Meteora DLMM SDK interactions.
- * Provides transaction builders, position data parsing, and pool state retrieval.
- *
- * All methods that interact with the DLMM SDK are contained here to keep
- * external callers unaware of Meteora-specific implementation details.
- */
 export class MeteoraDlmmService {
   private poolCache = new Map<string, { instance: DLMM; timestamp: number }>();
   private readonly CACHE_TTL = 30000; // 30 seconds
@@ -106,13 +92,11 @@ export class MeteoraDlmmService {
       typeof poolAddress === "string" ? poolAddress : poolAddress.toBase58();
     const now = Date.now();
 
-    // Check if we have a valid cached instance
     const cached = this.poolCache.get(poolKey);
     if (cached && now - cached.timestamp < this.CACHE_TTL) {
       return cached.instance;
     }
 
-    // Create new instance
     const connection = new Connection(CONFIG.SOLANA.RPC_URL, "confirmed");
     // @ts-ignore
     const instance = await DLMM.default.create(
@@ -120,32 +104,9 @@ export class MeteoraDlmmService {
       new PublicKey(poolAddress)
     );
 
-    // Cache the instance
     this.poolCache.set(poolKey, { instance, timestamp: now });
 
     return instance;
-  }
-
-  /**
-   * Normalizes various address input types to PublicKey.
-   *
-   * @param address - Address as string or PublicKey
-   * @returns PublicKey instance
-   * @private
-   */
-  private toPublicKey(address: string | PublicKey): PublicKey {
-    return typeof address === "string" ? new PublicKey(address) : address;
-  }
-
-  /**
-   * Normalizes various address input types to base58 string.
-   *
-   * @param address - Address as string or PublicKey
-   * @returns Base58 string representation
-   * @private
-   */
-  private toBase58(address: string | PublicKey): string {
-    return typeof address === "string" ? address : address.toBase58();
   }
 
   /**
@@ -162,7 +123,7 @@ export class MeteoraDlmmService {
    * @returns Transaction instructions (without position keypair)
    * @private
    */
-  async createPositionIx(
+  async buildCreatePositionIxs(
     positionAddress: PublicKey,
     poolAddress: PublicKey,
     userPublicKey: PublicKey,
@@ -217,7 +178,7 @@ export class MeteoraDlmmService {
    * @returns Transaction instructions for closing
    * @private
    */
-  async closePositionIx(
+  async buildClosePositionIxs(
     ownerAddress: PublicKey,
     poolAddress: PublicKey,
     positionAddress: PublicKey
@@ -259,7 +220,7 @@ export class MeteoraDlmmService {
    * @returns Transaction instructions for claiming fees
    * @private
    */
-  async claimFeesIx(
+  async buildClaimFeesIxs(
     ownerAddress: PublicKey,
     poolAddress: PublicKey,
     positionAddress: PublicKey
@@ -284,117 +245,13 @@ export class MeteoraDlmmService {
   }
 
   /**
-   * @deprecated Use buildCreatePositionTx instead. This method is kept for backward compatibility.
-   * Builds transaction instructions for creating a new position.
-   *
-   * @param poolAddress - The pool's public key or base58 address
-   * @param userPublicKey - The user's wallet public key or base58 address
-   * @param totalXAmount - Token X amount as Decimal
-   * @param totalYAmount - Token Y amount as Decimal
-   * @param strategy - Position strategy type
-   * @param rangeInterval - Price range interval in bins (note: internally uses fixed value of 5)
-   * @returns Transaction instructions and generated position keypair
-   */
-  async buildCreatePositionIxs(
-    poolAddress: string | PublicKey,
-    userPublicKey: string | PublicKey,
-    totalXAmount: Decimal,
-    totalYAmount: Decimal,
-    strategy: StrategyType,
-    rangeInterval: number
-  ): Promise<{
-    instructions: TransactionInstruction[];
-    positionKp: Keypair;
-  }> {
-    // Delegate to the new standardized method
-    return this.buildCreatePositionTx(
-      poolAddress,
-      userPublicKey,
-      totalXAmount,
-      totalYAmount,
-      strategy,
-      rangeInterval
-    );
-  }
-
-  /**
    * Gets all positions for a user.
    * Alias for getAllLbPairPositionsByUser.
    *
    * @param userAddress - The user's wallet public key or base58 address
    * @returns Map of position addresses to PositionInfo from DLMM SDK
    */
-  async getPositions(
-    userAddress: string | PublicKey
-  ): Promise<Map<string, PositionInfo>> {
-    return this.getAllLbPairPositionsByUser(userAddress);
-  }
-
-  /**
-   * Calculates price range boundaries for a given interval.
-   *
-   * @param poolAddress - The pool's base58 address
-   * @param rangeInterval - Number of bins from active bin
-   * @returns Price range in token Y per token X
-   */
-  async getPriceRange(
-    poolAddress: string,
-    rangeInterval: number
-  ): Promise<{
-    fromPrice: string;
-    toPrice: string;
-  }> {
-    const range = await this.calculatePriceRange(poolAddress, rangeInterval);
-    return {
-      fromPrice: range.fromPrice,
-      toPrice: range.toPrice,
-    };
-  }
-
-  /**
-   * Calculates price range for a balanced (spot) position.
-   * Same as getPriceRange - kept for backward compatibility.
-   *
-   * @param poolAddress - The pool's base58 address
-   * @param rangeInterval - Number of bins from active bin
-   * @returns Price range in token Y per token X
-   */
-  async getPriceRangeForBalancedPosition(
-    poolAddress: string,
-    rangeInterval: number
-  ): Promise<{
-    fromPrice: string;
-    toPrice: string;
-  }> {
-    return this.getPriceRange(poolAddress, rangeInterval);
-  }
-
-  /**
-   * Calculates price range for a single-sided position.
-   * Same as getPriceRange - kept for backward compatibility.
-   *
-   * @param poolAddress - The pool's base58 address
-   * @param rangeInterval - Number of bins from active bin
-   * @returns Price range in token Y per token X
-   */
-  async getPriceRangeForSingleSidedPosition(
-    poolAddress: string,
-    rangeInterval: number
-  ): Promise<{
-    fromPrice: string;
-    toPrice: string;
-  }> {
-    return this.getPriceRange(poolAddress, rangeInterval);
-  }
-
-  /**
-   * Retrieves all DLMM positions for a user across all pools.
-   * Uses the DLMM SDK's static method to query positions.
-   *
-   * @param walletAddress - The user's wallet public key or base58 address
-   * @returns Map of position addresses to PositionInfo from DLMM SDK
-   */
-  async getAllLbPairPositionsByUser(
+  async getUserPositions(
     walletAddress: string | PublicKey
   ): Promise<Map<string, PositionInfo>> {
     const connection = new Connection(CONFIG.SOLANA.RPC_URL, "confirmed");
@@ -415,7 +272,7 @@ export class MeteoraDlmmService {
    * @param poolAddress - The pool's public key or base58 address
    * @returns Position and pool pair data from DLMM SDK
    */
-  async getPosition(
+  async getPositionOnChain(
     positionAddress: string | PublicKey,
     poolAddress: string | PublicKey
   ): Promise<{
@@ -506,7 +363,8 @@ export class MeteoraDlmmService {
     const activeBin = await dlmmPool.getActiveBin();
 
     return {
-      poolAddress: this.toBase58(poolAddress),
+      poolAddress:
+        typeof poolAddress === "string" ? poolAddress : poolAddress.toBase58(),
       tokenX: {
         mint: dlmmPool.lbPair.tokenXMint.toBase58(),
         reserve: dlmmPool.lbPair.reserveX.toString(),
@@ -537,20 +395,26 @@ export class MeteoraDlmmService {
     positionAddress: string | PublicKey,
     poolAddress: string | PublicKey
   ): Promise<ParsedPositionData> {
-    const { lbPair, lbPosition } = await this.getPosition(
+    const { lbPair, lbPosition } = await this.getPositionOnChain(
       positionAddress,
       poolAddress
     );
 
     if (!lbPosition) {
-      throw new Error(`Position not found: ${this.toBase58(positionAddress)}`);
+      throw new Error(
+        `Position not found: ${typeof positionAddress === "string" ? positionAddress : positionAddress.toBase58()}`
+      );
     }
 
     const positionData = lbPosition.positionData;
 
     return {
-      positionAddress: this.toBase58(positionAddress),
-      poolAddress: this.toBase58(poolAddress),
+      positionAddress:
+        typeof positionAddress === "string"
+          ? positionAddress
+          : positionAddress.toBase58(),
+      poolAddress:
+        typeof poolAddress === "string" ? poolAddress : poolAddress.toBase58(),
       lowerBinId: positionData.lowerBinId,
       upperBinId: positionData.upperBinId,
       tokenXAmount: positionData.totalXAmount?.toString() ?? "0",
@@ -620,160 +484,6 @@ export class MeteoraDlmmService {
     }
 
     return parsedPositions;
-  }
-
-  // ============================================
-  // Transaction Builders (Standardized Naming)
-  // ============================================
-
-  /**
-   * Builds transaction instructions for creating a new position.
-   * Standardized method name: buildCreatePositionTx
-   *
-   * @param poolAddress - The pool's public key or base58 address
-   * @param userPublicKey - The user's wallet public key or base58 address
-   * @param totalXAmount - Token X amount as Decimal
-   * @param totalYAmount - Token Y amount as Decimal
-   * @param strategy - Position strategy type (Spot, Curve, BidAsk)
-   * @param rangeInterval - Price range interval in bins
-   * @returns Transaction instructions and generated position keypair
-   */
-  async buildCreatePositionTx(
-    poolAddress: string | PublicKey,
-    userPublicKey: string | PublicKey,
-    totalXAmount: Decimal,
-    totalYAmount: Decimal,
-    strategy: StrategyType,
-    rangeInterval: number
-  ): Promise<{
-    instructions: TransactionInstruction[];
-    positionKp: Keypair;
-  }> {
-    const dlmmPool = await this.createInstance(poolAddress);
-
-    const activeBin = await dlmmPool.getActiveBin();
-    const minBinId = activeBin.binId - rangeInterval;
-    const maxBinId = activeBin.binId + rangeInterval;
-
-    console.log(
-      `[DLMM] buildCreatePositionTx - Active bin: ${activeBin.binId}, Range: [${minBinId}, ${maxBinId}], ` +
-        `X: ${totalXAmount.toString()}, Y: ${totalYAmount.toString()}, Strategy: ${strategy}`
-    );
-
-    if (totalXAmount.isZero() && totalYAmount.isZero()) {
-      throw new Error("Both token amounts cannot be zero");
-    }
-
-    const positionKeypair = Keypair.generate();
-
-    const createPositionTx =
-      await dlmmPool.initializePositionAndAddLiquidityByStrategy({
-        positionPubKey: positionKeypair.publicKey,
-        user: this.toPublicKey(userPublicKey),
-        totalXAmount: new BN(totalXAmount.toString()),
-        totalYAmount: new BN(totalYAmount.toString()),
-        strategy: {
-          maxBinId,
-          minBinId,
-          strategyType: strategy,
-        },
-      });
-
-    return {
-      instructions: createPositionTx.instructions,
-      positionKp: positionKeypair,
-    };
-  }
-
-  /**
-   * Builds transaction instructions for closing a position.
-   * Removes all liquidity and claims fees in a single transaction.
-   * Standardized method name: buildClosePositionTx
-   *
-   * @param ownerAddress - The position owner's public key or base58 address
-   * @param poolAddress - The pool's public key or base58 address
-   * @param positionAddress - The position's public key or base58 address
-   * @returns Transaction instructions for closing position
-   */
-  async buildClosePositionTx(
-    ownerAddress: string | PublicKey,
-    poolAddress: string | PublicKey,
-    positionAddress: string | PublicKey
-  ): Promise<{ instructions: TransactionInstruction[] }> {
-    return this.closePositionIx(
-      this.toPublicKey(ownerAddress),
-      this.toPublicKey(poolAddress),
-      this.toPublicKey(positionAddress)
-    );
-  }
-
-  /**
-   * Builds transaction instructions for claiming fees from a position.
-   * Standardized method name: buildClaimFeesTx
-   *
-   * @param ownerAddress - The position owner's public key or base58 address
-   * @param poolAddress - The pool's public key or base58 address
-   * @param positionAddress - The position's public key or base58 address
-   * @returns Transaction instructions for claiming fees
-   */
-  async buildClaimFeesTx(
-    ownerAddress: string | PublicKey,
-    poolAddress: string | PublicKey,
-    positionAddress: string | PublicKey
-  ): Promise<{ instructions: TransactionInstruction[] }> {
-    return this.claimFeesIx(
-      this.toPublicKey(ownerAddress),
-      this.toPublicKey(poolAddress),
-      this.toPublicKey(positionAddress)
-    );
-  }
-
-  /**
-   * Builds transaction instructions for rebalancing a position.
-   * Closes old position and creates new one with updated range.
-   *
-   * @param ownerAddress - The position owner's public key or base58 address
-   * @param poolAddress - The pool's public key or base58 address
-   * @param oldPositionAddress - The existing position's public key or base58 address
-   * @param newTotalXAmount - New token X amount as Decimal
-   * @param newTotalYAmount - New token Y amount as Decimal
-   * @param strategy - Position strategy type
-   * @param rangeInterval - New price range interval in bins
-   * @returns Transaction instructions for close and create operations
-   */
-  async buildRebalanceTx(
-    ownerAddress: string | PublicKey,
-    poolAddress: string | PublicKey,
-    oldPositionAddress: string | PublicKey,
-    newTotalXAmount: Decimal,
-    newTotalYAmount: Decimal,
-    strategy: StrategyType,
-    rangeInterval: number
-  ): Promise<{
-    closeInstructions: TransactionInstruction[];
-    createInstructions: TransactionInstruction[];
-    newPositionKp: Keypair;
-  }> {
-    const closeResult = await this.buildClosePositionTx(
-      ownerAddress,
-      poolAddress,
-      oldPositionAddress
-    );
-
-    const createResult = await this.buildCreatePositionTx(
-      poolAddress,
-      ownerAddress,
-      newTotalXAmount,
-      newTotalYAmount,
-      strategy,
-      rangeInterval
-    );
-
-    return {
-      closeInstructions: closeResult.instructions,
-      createInstructions: createResult.instructions,
-      newPositionKp: createResult.positionKp,
-    };
   }
 
   // ============================================

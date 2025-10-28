@@ -2,7 +2,7 @@ import { MessagePayload } from "@/domain/message";
 import { getTrendingKeyboard } from "@/presentation/keyboards/trending-menu";
 import { UnifiedPool } from "@/shared/types/pool.types";
 import { TrendingPoolsSortCriteria } from "@/types/trending.types";
-import { getPoolDeeplink, link } from "@/utils/misc";
+import { bold, getPoolDeeplink, getPoolUrl, link } from "@/utils/misc";
 import { formatAPR, formatCurrency, formatPercentage } from "./base.formatter";
 import { createTextMessage } from "./message-builder";
 
@@ -26,10 +26,13 @@ export class PoolFormatter {
   }
 
   static formatPoolDetails(pool: UnifiedPool): string {
-    const tokenPair = `${pool.tokenA.symbol.toUpperCase()}/${pool.tokenB.symbol.toUpperCase()}`;
-    const poolLink = `[Open](${getPoolDeeplink("pandalpbot", pool.dex, pool.address)})`
+    console.log(pool);
+    const tokenPair = pool.name;
+    const poolLink = link(
+      pool.dex.toUpperCase(),
+      getPoolUrl(pool.address, pool.dex)
+    );
     const tvl = formatCurrency(Number(pool.tvl), { maxDecimals: 3 });
-    const apy = `${(pool.apy * 100).toFixed(2)}%`;
     const fee24h = formatCurrency(pool.fees24h || 0, { maxDecimals: 3 });
     const feeTvl = pool.feeTvlRatio24h
       ? formatPercentage(pool.feeTvlRatio24h * 100, { decimals: 2 })
@@ -37,13 +40,11 @@ export class PoolFormatter {
     const vol24h = formatCurrency(pool.volume24h || 0, { maxDecimals: 3 });
 
     return [
-      `*${tokenPair}* | ${poolLink}`,
-      "",
-      `TVL: ${tvl}`,
-      `APY: ${apy}`,
-      `Fee (24h): ${fee24h}`,
-      `Fee/TVL (24h): ${feeTvl}`,
-      `24h Vol: ${vol24h}`,
+      `*${tokenPair}* | ${poolLink}\n`,
+      `TVL: ${bold(tvl)}`,
+      `Fee (24h): ${bold(fee24h)}`,
+      `Fee/TVL (24h): ${bold(feeTvl)}`,
+      `24h Vol: ${bold(vol24h)}`,
     ].join("\n");
   }
 

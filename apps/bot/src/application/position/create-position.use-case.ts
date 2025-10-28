@@ -26,7 +26,7 @@ import { CachePatterns } from "@/infrastructure/cache/cache-keys";
 import { WalletService } from "@/services/wallet.service";
 import { Token } from "@/types/token.types";
 import { uiToRawAmount } from "@/utils/number-utils";
-import { SOL_MINT, OPEN_POSITION_FEE } from "@/config/constants";
+import { SOL_MINT, OPEN_POSITION_FEE, SKIP_VALIDATE } from "@/config/constants";
 
 export interface DexRegistryLike {
   get(dexType: DexType): IDexAdapter;
@@ -195,7 +195,7 @@ export class CreatePositionUseCase {
 
       let txResult: CreatePositionResult;
       try {
-        txResult = await adapter.createPositionIx(adapterParams);
+        txResult = await adapter.createPositionIxs(adapterParams);
       } catch (error) {
         logger.error("Adapter.createPositionIx failed", { error, command });
         console.log("Adapter.createPositionIx failed", { error, command });
@@ -249,13 +249,6 @@ export class CreatePositionUseCase {
         strategy: command.strategy ?? "spot",
 
         depositMethod: command.depositMethod ?? "sol_auto_convert",
-        // depositMethod:
-        //   command.depositMethod ??
-        //   ((await this.settingsIntegration.shouldAutoConvertFeesToSol(
-        //     command.userId
-        //   ))
-        //     ? "sol_auto_convert"
-        //     : "single_sided"),
         depositSource: command.depositSource,
         solAmount: command.solAmount,
 

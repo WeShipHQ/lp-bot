@@ -1,5 +1,5 @@
-import { DexType, PoolType, TrendingPoolsSortCriteria } from './dex.types';
-import { TokenInfo } from './position.types';
+import { DexType, PoolType, TrendingPoolsSortCriteria } from "./dex.types";
+import { TokenInfo } from "./position.types";
 
 export interface UnifiedPool {
   id: string;

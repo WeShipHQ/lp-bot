@@ -108,7 +108,6 @@ export interface CreatePositionParams {
   strategy?: string;
   slippage?: number;
   rangeInterval?: number;
-  // metadata?: Record<string, any>;
 }
 
 export interface RebalanceParams {

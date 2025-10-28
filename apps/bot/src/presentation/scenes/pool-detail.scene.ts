@@ -37,11 +37,6 @@ poolDetailScene.enter(async (ctx) => {
     const useCase = container.get(GetPoolDetailsUseCase);
     const poolData = await useCase.execute({ poolAddress, dex });
 
-    ctx.scene.state = {
-      pool: poolData,
-      ...ctx.scene.state,
-    };
-
     if (!poolData) {
       await ctx.telegram.editMessageText(
         ctx.chat?.id,
@@ -52,6 +47,11 @@ poolDetailScene.enter(async (ctx) => {
       );
       return ctx.scene.leave();
     }
+
+    ctx.scene.state = {
+      pool: poolData,
+      ...ctx.scene.state,
+    };
 
     const message = PoolFormatter.formatPoolDetails(poolData);
     const keyboard = getPoolInfoKeyboard(poolData.address);

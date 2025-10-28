@@ -18,7 +18,11 @@ import {
   generatePositionSummary,
 } from "../formatters/position.formatter";
 import { GetPoolTokenBalancesUseCase } from "@/application/wallet/get-pool-token-balances.use-case";
-import { BUFFER_AMOUNT, SLIPPAGE_SMALL } from "@/config/constants";
+import {
+  BUFFER_AMOUNT,
+  SKIP_VALIDATE,
+  SLIPPAGE_SMALL,
+} from "@/config/constants";
 import { formatNumber } from "../formatters/base.formatter";
 import { link } from "@/utils/misc";
 import { DISABLE_LINK_PREVIEW } from "../constants/base.constants";
@@ -61,8 +65,6 @@ type WizardState = {
     rangeInterval: number;
   };
 };
-
-const SKIP_VALIDATE = false;
 
 export const createPositionScene = new Scenes.WizardScene<BotContext>(
   SCENE_IDS.CREATE_POSITION_SCENE,
@@ -460,23 +462,23 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       const prices = await priceRangeUc.execute({
         poolAddress: poolData.address,
         dex: dex as DexType,
-        rangeInterval: user.balancedPositionBinRange,
+        rangeInterval: user.getPreferences().defaultBinRange,
       });
 
       (ctx.scene.state as WizardState).tokenAAmountCalculated = tokenAAmount;
       (ctx.scene.state as WizardState).tokenBAmountCalculated = tokenBAmount;
       (ctx.scene.state as WizardState).priceRange = {
-        min: prices.fromPrice,
-        max: prices.toPrice,
-        rangeInterval: user.balancedPositionBinRange,
+        min: prices.fromPrice.toString(),
+        max: prices.toPrice.toString(),
+        rangeInterval: user.getPreferences().defaultBinRange,
       };
 
       const summary = generatePositionSummary(
         poolData,
         ctx.scene.state as WizardState,
         {
-          rangeMin: prices.fromPrice,
-          rangeMax: prices.toPrice,
+          rangeMin: prices.fromPrice.toString(),
+          rangeMax: prices.toPrice.toString(),
           tokenAAmount,
           tokenBAmount,
         }
@@ -509,7 +511,6 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     );
 
     const state = ctx.scene.state as WizardState;
-    console.log({ state });
     const { strategy, amount, poolData, autoRebalancing, dex, depositMethod } =
       state;
 

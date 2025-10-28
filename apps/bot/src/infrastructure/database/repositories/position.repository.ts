@@ -9,11 +9,6 @@ import {
   PositionToken,
 } from "../../../domain/position/position.entity";
 import { IPositionRepository } from "../../../domain/position/position.repository";
-import {
-  Money,
-  TokenAmount,
-  Range,
-} from "../../../domain/shared/value-objects";
 
 export class PositionRepository implements IPositionRepository {
   constructor(private readonly db: PostgresJsDatabase<typeof schema>) {}

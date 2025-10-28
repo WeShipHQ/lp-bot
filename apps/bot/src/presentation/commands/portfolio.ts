@@ -18,10 +18,14 @@ export function portfolioCommand(bot: Telegraf<BotContext>) {
 
     const loadingMessage = await messageService.send({
       context: { chatId },
-      payload: createTextMessage("portfolio.loading", "⏳ Loading portfolio...", {
-        parseMode: "markdown",
-        disableLinkPreview: true,
-      }),
+      payload: createTextMessage(
+        "portfolio.loading",
+        "⏳ Loading portfolio...",
+        {
+          parseMode: "markdown",
+          disableLinkPreview: true,
+        }
+      ),
     });
     try {
       const useCase = container.get(GetPortfolioUseCase);
@@ -32,7 +36,9 @@ export function portfolioCommand(bot: Telegraf<BotContext>) {
       const feesByAddress: Record<string, number> = {};
       if (walletAddress) {
         try {
-          const registry = container.get<typeof import("@/services/dex-registry.service").dexRegistry>(DI_TOKENS.DexRegistry);
+          const registry = container.get<
+            typeof import("@/services/dex-registry.service").dexRegistry
+          >(DI_TOKENS.DexRegistry);
           const active = portfolio.getActivePositions();
           const dexes = Array.from(new Set(active.map((p) => p.dex)));
           for (const dex of dexes) {
@@ -40,7 +46,8 @@ export function portfolioCommand(bot: Telegraf<BotContext>) {
               const adapter = registry.get(dex as any);
               const unified = await adapter.getUserPositions(walletAddress);
               for (const up of unified) {
-                feesByAddress[up.address] = (feesByAddress[up.address] || 0) + (up.unclaimedFeesUsd || 0);
+                feesByAddress[up.address] =
+                  (feesByAddress[up.address] || 0) + (up.unclaimedFeesUsd || 0);
               }
             } catch {}
           }
@@ -80,6 +87,5 @@ export function portfolioCommand(bot: Telegraf<BotContext>) {
     }
   });
 
-  // Register callbacks for refresh/close actions
   registerPortfolioCallbacks(bot);
 }

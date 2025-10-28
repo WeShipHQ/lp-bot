@@ -4,6 +4,74 @@ import type {
   StrategyType,
 } from "@meteora-ag/dlmm";
 import type { PublicKey } from "@solana/web3.js";
+import BN from "bn.js";
+
+export type LbPair = {
+  parameters: {
+    baseFactor: number;
+    filterPeriod: number;
+    decayPeriod: number;
+    reductionFactor: number;
+    variableFeeControl: number;
+    maxVolatilityAccumulator: number;
+    minBinId: number;
+    maxBinId: number;
+    protocolShare: number;
+    baseFeePowerFactor: number;
+    padding: number[];
+  };
+  vParameters: {
+    volatilityAccumulator: number;
+    volatilityReference: number;
+    indexReference: number;
+    padding: number[];
+    lastUpdateTimestamp: BN;
+    padding1: number[];
+  };
+  oracle: PublicKey;
+  activationType: number;
+  pairType: number;
+  protocolFee: {
+    amountX: BN;
+    amountY: BN;
+  };
+  rewardInfos: {
+    mint: PublicKey;
+    vault: PublicKey;
+    funder: PublicKey;
+    rewardDuration: BN;
+    rewardDurationEnd: BN;
+    rewardRate: BN;
+    lastUpdateTime: BN;
+    cumulativeSecondsWithEmptyLiquidityReward: BN;
+  }[];
+  activeId: number;
+  binStep: number;
+  activationPoint: BN;
+  creatorPoolOnOffControl: number;
+  bumpSeed: number[];
+  binStepSeed: number[];
+  status: number;
+  requireBaseFactorSeed: number;
+  baseFactorSeed: number[];
+  tokenXMint: PublicKey;
+  tokenYMint: PublicKey;
+  reserveX: PublicKey;
+  reserveY: PublicKey;
+  padding1: number[];
+  binArrayBitmap: BN[];
+  lastUpdatedAt: BN;
+  padding2: number[];
+  preActivationSwapAddress: PublicKey;
+  baseKey: PublicKey;
+  preActivationDuration: BN;
+  padding3: number[];
+  padding4: BN;
+  creator: PublicKey;
+  tokenMintXProgramFlag: number;
+  tokenMintYProgramFlag: number;
+  reserved: number[];
+};
 
 export type MeteoraStrategyTypeKey = keyof typeof StrategyType;
 export type MeteoraPoolType = "damm_v1" | "damm_v2" | "dlmm";

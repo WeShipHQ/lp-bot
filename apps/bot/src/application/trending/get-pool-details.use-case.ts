@@ -11,11 +11,6 @@ export interface GetPoolDetailsParams {
   dex: DexType;
 }
 
-/**
- * Use case to fetch a single pool's unified details from a specific DEX adapter.
- * - Wraps access through the dexRegistry
- * - Adds lightweight caching
- */
 export class GetPoolDetailsUseCase {
   private readonly cache: ICacheService;
 
@@ -37,8 +32,7 @@ export class GetPoolDetailsUseCase {
     const adapter = dexRegistry.get(dex);
     const pool = await adapter.getPool(poolAddress);
 
-    // Cache for 5 minutes; pool details change relatively slowly vs. prices
-    await this.cache.set(cacheKey, pool, 300);
+    await this.cache.set(cacheKey, pool, 5 * 60);
     return pool;
   }
 }

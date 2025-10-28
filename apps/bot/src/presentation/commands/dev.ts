@@ -2,6 +2,11 @@ import { Telegraf } from "telegraf";
 import { BotContext } from "@/types/bot.types";
 import { FastifyInstance } from "fastify";
 import { DISABLE_LINK_PREVIEW } from "../constants/base.constants";
+import { MeteoraDlmmService } from "@/adapters/dex/meteora";
+import { container } from "@/infrastructure/di/container";
+import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
+import { JOB_NOTIFICATION } from "@/infrastructure/jobs/job-definitions";
+import { getPositionDeeplink, link } from "@/utils/misc";
 // import { SCENE_IDS } from "../config/scenes";
 // import { init } from "@/utils/tx-parser";
 // import { LAMPORTS_PER_SOL, PublicKey, SystemProgram } from "@solana/web3.js";
@@ -14,17 +19,38 @@ export function devCommand(
   _server: FastifyInstance
 ) {
   bot.command("dev", async (ctx) => {
-    // init();
+    // const jobQueue = container.resolve(JobQueueService);
+    const jobQueue = new JobQueueService({ producerOnly: true });
 
-    // const adapter = container.get(MeteoraAdapter);
-    // const pos = await adapter.getPosition(
-    //   "EBmsNX9Va2gVbP1tXfrW3mD7aQ8cmtdPGHC2BD6v7mMM",
-    //   {
-    //     poolAddress: "4GfTwijVFhE1qFCZgEnJo8f69vLwCqTCSDZD5xyQu3J9",
-    //   }
-    // );
+    //   ✅ Position Created Successfully!
 
-    // console.dir(pos);
+    // Transaction: [signature link]
+    // Position ID: [position-address]
+
+    // Your position is now active and earning fees!
+
+    const primaryMessage = [
+      "✅ Position Created Successfully!",
+      "",
+      `${link("View Position", getPositionDeeplink("panda", "meteora", "HNpsi26Am2ZsW94sfkAoM8onqkQsXkkCxYDsPLSUECJe"))} \t|\t ${link("View Transaction", "https://solscan.io/tx/5mXyWoii97YnPNxJ34dBA4hREBUCWTJxyMtdKzCAshTjPEaVp48wJof88hbyQKbUX7xPW1fPxZB8kGMFvLvzraHd")}`,
+      "",
+      "Your position is now active and earning fees!",
+    ].join("\n");
+
+    await jobQueue.enqueue(JOB_NOTIFICATION, {
+      userId: "a6ce61f1-da2c-4efa-a4d7-19dc3da2b1b3",
+      notification: {
+        type: "general",
+        title: "Position Created",
+        messages: [
+          {
+            text: primaryMessage,
+            parseMode: "Markdown",
+            disableLinkPreview: true,
+          },
+        ],
+      },
+    });
 
     return ctx.replyWithMarkdown(`Dev command`, DISABLE_LINK_PREVIEW);
 

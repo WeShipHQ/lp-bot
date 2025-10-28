@@ -18,6 +18,8 @@ export const BUFFER_AMOUNT = 0.01;
 export const DEFAULT_BIN_RANGE = 10;
 export const MINIMAL_SOL_AMOUNT_IN_LAMPORTS = 10_000_000;
 
+export const SKIP_VALIDATE = true;
+
 // decimals
 
 // export const TOTAL_RANGE_INTERVAL = 20;

@@ -1,3 +1,5 @@
+import { DexType } from "@/types/core.types";
+
 export function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -8,6 +10,13 @@ export function getPoolDeeplink(
   poolAddress: string
 ): string {
   return `https://t.me/${botName}?start=pool_${dexCode}_${poolAddress}`;
+}
+
+export function getPoolUrl(poolAddress: string, dex: DexType): string {
+  if (dex === "meteora") {
+    return `https://www.meteora.ag/dlmm/${poolAddress}`;
+  }
+  return "";
 }
 
 export function getPositionDeeplink(

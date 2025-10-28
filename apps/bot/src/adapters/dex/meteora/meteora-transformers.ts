@@ -16,6 +16,7 @@ import {
   getTokenPriceService,
 } from "@/services/token-price.service";
 import { JupiterService } from "@/services/jupiter.service";
+import { JupiterToken, JupiterTokenInfo } from "@/types/jupiter.types";
 
 /**
  * Context required for transforming on-chain position data
@@ -145,7 +146,7 @@ export class MeteoraTransformers {
       apr: this.toNumeric(data.apr) ?? 0,
       apy: this.calculateApy(data),
       currentPrice: this.toNumeric(data.current_price) ?? 0,
-      isVerified: this.isVerifiedPool(data),
+      isVerified: data.is_verified,
 
       // Time-based metrics (USD amounts)
       volume24h,
@@ -405,13 +406,13 @@ export class MeteoraTransformers {
       tokenA,
       tokenB,
       positionData,
-      priceMap,
+      // priceMap,
       lbPairInfo,
       metadataExtras,
     } = context;
 
-    const tokenAPrice = priceMap[tokenA.address]?.price ?? 0;
-    const tokenBPrice = priceMap[tokenB.address]?.price ?? 0;
+    // const tokenAPrice = priceMap[tokenA.address]?.price ?? 0;
+    // const tokenBPrice = priceMap[tokenB.address]?.price ?? 0;
 
     // Extract token amounts (prefer excludeTransferFee variants)
     const totalXRaw =
@@ -427,8 +428,8 @@ export class MeteoraTransformers {
     const tokenBAmountUi = this.fromRawAmount(totalYRaw, tokenB.decimals);
 
     // Calculate current value in USD
-    const currentValueUsd =
-      tokenAAmountUi * tokenAPrice + tokenBAmountUi * tokenBPrice;
+    // const currentValueUsd =
+    //   tokenAAmountUi * tokenAPrice + tokenBAmountUi * tokenBPrice;
 
     // Extract fee amounts
     const feeXRaw =
@@ -436,24 +437,22 @@ export class MeteoraTransformers {
     const feeYRaw =
       positionData.feeYExcludeTransferFee ?? positionData.feeY ?? 0;
 
-    const unclaimedFeesUsd =
-      this.fromRawAmount(feeXRaw, tokenA.decimals) * tokenAPrice +
-      this.fromRawAmount(feeYRaw, tokenB.decimals) * tokenBPrice;
+    // const unclaimedFeesUsd =
+    //   this.fromRawAmount(feeXRaw, tokenA.decimals) * tokenAPrice +
+    //   this.fromRawAmount(feeYRaw, tokenB.decimals) * tokenBPrice;
 
     // Extract claimed fees (if available)
     const claimedFeeXRaw = positionData.totalClaimedFeeXAmount ?? 0;
     const claimedFeeYRaw = positionData.totalClaimedFeeYAmount ?? 0;
-    const claimedFeesUsd =
-      this.fromRawAmount(claimedFeeXRaw, tokenA.decimals) * tokenAPrice +
-      this.fromRawAmount(claimedFeeYRaw, tokenB.decimals) * tokenBPrice;
+    // const claimedFeesUsd =
+    //   this.fromRawAmount(claimedFeeXRaw, tokenA.decimals) * tokenAPrice +
+    //   this.fromRawAmount(claimedFeeYRaw, tokenB.decimals) * tokenBPrice;
 
     // Determine price range and in-range status
-    const lowerBinId = this.toNumeric(
-      positionData.lowerBinId ?? positionData.binLower
-    ) ?? 0;
-    const upperBinId = this.toNumeric(
-      positionData.upperBinId ?? positionData.binUpper
-    ) ?? 0;
+    const lowerBinId =
+      this.toNumeric(positionData.lowerBinId ?? positionData.binLower) ?? 0;
+    const upperBinId =
+      this.toNumeric(positionData.upperBinId ?? positionData.binUpper) ?? 0;
     const activeId = this.toNumeric(lbPairInfo.activeId) ?? 0;
     const binStepBps = this.toNumeric(lbPairInfo.binStep) ?? 0;
 
@@ -479,12 +478,12 @@ export class MeteoraTransformers {
       tokenBAmount: tokenBAmountUi.toString(),
 
       // USD values
-      currentValueUsd,
-      initialValueUsd: currentValueUsd, // Unknown here, should be updated from DB
+      currentValueUsd: 0,
+      initialValueUsd: 0, // Unknown here, should be updated from DB
 
       // Fees and rewards (USD)
-      unclaimedFeesUsd,
-      claimedFeesUsd,
+      unclaimedFeesUsd: 0,
+      claimedFeesUsd: 0,
       unclaimedRewardsUsd: 0, // DLMM positions may not have rewards
       claimedRewardsUsd: 0,
 
@@ -559,13 +558,13 @@ export class MeteoraTransformers {
    * @param tokenInfo - Token metadata from Jupiter
    * @returns Normalized Token object
    */
-  transformToken(tokenInfo: any): Token {
+  transformToken(tokenInfo: JupiterTokenInfo): Token {
     return {
-      address: tokenInfo.id || tokenInfo.address || "",
+      address: tokenInfo.id,
       symbol: tokenInfo.symbol || tokenInfo.id?.slice(0, 4) || "UNKNOWN",
       name: tokenInfo.name || tokenInfo.id || "Unknown Token",
       decimals: tokenInfo.decimals ?? 9,
-      logoUri: tokenInfo.icon || tokenInfo.logoUri,
+      logoUri: tokenInfo.icon,
     };
   }
 

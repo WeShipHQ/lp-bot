@@ -27,14 +27,13 @@ import {
   TokenPriceService,
   getTokenPriceService,
 } from "@/services/token-price.service";
-import {
-  meteoraDlmmService,
-  MeteoraDlmmService,
-} from "@/adapters/dex/meteora";
-import { PublicKey } from "@solana/web3.js";
+import { meteoraDlmmService, MeteoraDlmmService } from "@/adapters/dex/meteora";
+import { Keypair, PublicKey } from "@solana/web3.js";
 import Decimal from "decimal.js";
 import { MeteoraDlmmPoolResponse } from "@/types/meteora.types";
 import { StrategyType } from "@meteora-ag/dlmm";
+import { DEFAULT_BIN_RANGE } from "@/domain";
+import { JupiterService } from "@/services/jupiter.service";
 
 /**
  * MeteoraAdapter
@@ -49,7 +48,8 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
   private readonly dlmm: MeteoraDlmmService;
   private readonly api: MeteoraApiClient;
   private readonly transformers: MeteoraTransformers;
-  private readonly prices: TokenPriceService;
+  private readonly jupiterService: JupiterService;
+  // private readonly prices: TokenPriceService;
 
   private readonly urlPatterns = {
     dlmm: /^https:\/\/(?:www\.)?meteora\.ag\/dlmm\/([1-9A-HJ-NP-Za-km-z]{32,44})(?:\?.*)?$/,
@@ -64,20 +64,13 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     apiClient?: MeteoraApiClient;
     transformers?: MeteoraTransformers;
     tokenPriceService?: TokenPriceService;
+    jupiterService: JupiterService;
   }) {
     super();
     this.dlmm = deps?.dlmmService ?? meteoraDlmmService;
     this.api = deps?.apiClient ?? meteoraApiClient;
     this.transformers = deps?.transformers ?? meteoraTransformers;
-    this.prices =
-      deps?.tokenPriceService ??
-      (() => {
-        try {
-          return getTokenPriceService();
-        } catch {
-          return new TokenPriceService();
-        }
-      })();
+    this.jupiterService = new JupiterService();
   }
 
   async getPool(poolId: string): Promise<UnifiedPool> {
@@ -146,8 +139,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
 
   async getUserPositions(userAddress: string): Promise<UnifiedPosition[]> {
     try {
-      const positionsByPool =
-        await this.dlmm.getAllLbPairPositionsByUser(userAddress);
+      const positionsByPool = await this.dlmm.getUserPositions(userAddress);
 
       const unified: UnifiedPosition[] = [];
 
@@ -159,75 +151,32 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
         uniqueMints.add(xMint);
         uniqueMints.add(yMint);
       }
-      const priceMap = await this.prices.getPrices(Array.from(uniqueMints));
+      // const priceMap = await this.prices.getPrices(Array.from(uniqueMints));
+
+      const tokens = await this.jupiterService.searchTokens(
+        Array.from(uniqueMints).join(",")
+      );
 
       for (const [poolAddress, info] of Array.from(positionsByPool)) {
-        const xMint = info.lbPair.tokenXMint.toString();
-        const yMint = info.lbPair.tokenYMint.toString();
+        const xMint = info.lbPair.tokenXMint.toBase58();
+        const yMint = info.lbPair.tokenYMint.toBase58();
 
         const xDecimals = Number((info as any).tokenX?.mint?.decimals ?? 0);
         const yDecimals = Number((info as any).tokenY?.mint?.decimals ?? 0);
 
-        const tokenA: Token = this.transformers.transformToken({
-          id: xMint,
-          symbol:
-            (info as any).tokenX?.mint?.symbol ??
-            (info as any).tokenX?.symbol ??
-            xMint.slice(0, 4),
-          name:
-            (info as any).tokenX?.mint?.name ??
-            (info as any).tokenX?.name ??
-            xMint,
-          decimals: xDecimals,
-          icon:
-            (info as any).tokenX?.mint?.icon ??
-            (info as any).tokenX?.icon ??
-            (info as any).tokenX?.logoUri,
-        });
-        const tokenB: Token = this.transformers.transformToken({
-          id: yMint,
-          symbol:
-            (info as any).tokenY?.mint?.symbol ??
-            (info as any).tokenY?.symbol ??
-            yMint.slice(0, 4),
-          name:
-            (info as any).tokenY?.mint?.name ??
-            (info as any).tokenY?.name ??
-            yMint,
-          decimals: yDecimals,
-          icon:
-            (info as any).tokenY?.mint?.icon ??
-            (info as any).tokenY?.icon ??
-            (info as any).tokenY?.logoUri,
-        });
+        const tokenA: Token = this.transformers.transformToken(
+          tokens.find((token) => token.id === xMint)!
+        );
+
+        const tokenB: Token = this.transformers.transformToken(
+          tokens.find((token) => token.id === yMint)!
+        );
 
         const activeId = Number(info.lbPair.activeId);
         const binStepBps = Number(info.lbPair.binStep);
 
-        const xPrice = priceMap[xMint]?.price ?? 0;
-        const yPrice = priceMap[yMint]?.price ?? 0;
-
-        // SDK exposes lbPairPositionsData at runtime although TS defs omit it
-        for (const pos of ((info as any).lbPairPositionsData ?? []) as Array<{
-          publicKey: PublicKey;
-          version: number;
-          positionData: {
-            lowerBinId: number;
-            upperBinId: number;
-            totalXAmount?: string | bigint | number;
-            totalYAmount?: string | bigint | number;
-            totalXAmountExcludeTransferFee?: string | bigint | number;
-            totalYAmountExcludeTransferFee?: string | bigint | number;
-            feeX?: string | bigint | number;
-            feeY?: string | bigint | number;
-            feeXExcludeTransferFee?: string | bigint | number;
-            feeYExcludeTransferFee?: string | bigint | number;
-            totalClaimedFeeXAmount?: string | bigint | number;
-            totalClaimedFeeYAmount?: string | bigint | number;
-            lastUpdatedAt?: any;
-          };
-        }>) {
-          const address = pos.publicKey.toString();
+        for (const pos of info.lbPairPositionsData ?? []) {
+          const address = pos.publicKey.toBase58();
           const pd = pos.positionData;
 
           const unifiedPosition = this.transformers.onChainToUnifiedPosition({
@@ -236,7 +185,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
             tokenA,
             tokenB,
             positionData: pd,
-            priceMap,
+            priceMap: {},
             lbPairInfo: {
               activeId,
               binStep: binStepBps,
@@ -258,23 +207,21 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     context?: PositionContext
   ): Promise<UnifiedPosition> {
     try {
-      this.validateAddress(positionAddress);
       const userAddress = context?.userAddress;
       const poolAddress = context?.poolAddress;
 
       console.log({ positionAddress, userAddress, poolAddress });
 
-      if (userAddress) {
-        return await this.getPositionForUser(positionAddress, userAddress);
-      }
-
       if (poolAddress) {
-        this.validateAddress(poolAddress);
         return await this.getPositionForPool(
           positionAddress,
           poolAddress,
           context?.userAddress
         );
+      }
+
+      if (userAddress) {
+        return await this.getPositionForUser(positionAddress, userAddress);
       }
 
       throw new Error(
@@ -285,93 +232,56 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     }
   }
 
+  async getUserPosition(
+    userAddress: string,
+    positionAddress: string
+  ): Promise<UnifiedPosition> {
+    try {
+      return this.getPositionForUser(positionAddress, userAddress);
+    } catch (error) {
+      return this.handleError(error, "getPosition");
+    }
+  }
+
   private async getPositionForUser(
     positionAddress: string,
     userAddress: string
   ): Promise<UnifiedPosition> {
-    const positionsByPool =
-      await this.dlmm.getAllLbPairPositionsByUser(userAddress);
+    const positionInfoMap = await this.dlmm.getUserPositions(userAddress);
+    const positionInfos = Array.from(positionInfoMap.values());
+    const positionInfo = positionInfos.find((info) =>
+      info.lbPairPositionsData.find(
+        (pos) => pos.publicKey.toBase58() === positionAddress
+      )
+    );
 
-    for (const [poolAddress, info] of Array.from(positionsByPool.entries())) {
-      const positionsData = ((info as any).lbPairPositionsData ?? []) as Array<{
-        publicKey: PublicKey;
-        positionData: any;
-      }>;
-
-      const matched = positionsData.find(
-        (pos) => pos.publicKey.toString() === positionAddress
-      );
-
-      if (!matched) {
-        continue;
-      }
-
-      const xMint = info.lbPair.tokenXMint.toString();
-      const yMint = info.lbPair.tokenYMint.toString();
-
-      const xDecimals = Number(
-        (info as any).tokenX?.mint?.decimals ??
-          (info as any).tokenX?.decimals ??
-          6
-      );
-      const yDecimals = Number(
-        (info as any).tokenY?.mint?.decimals ??
-          (info as any).tokenY?.decimals ??
-          6
-      );
-
-      const prices = await this.prices.getPrices([xMint, yMint]);
-
-      const tokenA: Token = this.transformers.transformToken({
-        id: xMint,
-        symbol:
-          (info as any).tokenX?.mint?.symbol ??
-          (info as any).tokenX?.symbol ??
-          xMint.slice(0, 4),
-        name:
-          (info as any).tokenX?.mint?.name ??
-          (info as any).tokenX?.name ??
-          xMint,
-        decimals: xDecimals,
-        icon:
-          (info as any).tokenX?.mint?.icon ??
-          (info as any).tokenX?.icon ??
-          (info as any).tokenX?.logoUri,
-      });
-
-      const tokenB: Token = this.transformers.transformToken({
-        id: yMint,
-        symbol:
-          (info as any).tokenY?.mint?.symbol ??
-          (info as any).tokenY?.symbol ??
-          yMint.slice(0, 4),
-        name:
-          (info as any).tokenY?.mint?.name ??
-          (info as any).tokenY?.name ??
-          yMint,
-        decimals: yDecimals,
-        icon:
-          (info as any).tokenY?.mint?.icon ??
-          (info as any).tokenY?.icon ??
-          (info as any).tokenY?.logoUri,
-      });
-
-      return this.transformers.onChainToUnifiedPosition({
-        poolAddress,
-        positionAddress,
-        tokenA,
-        tokenB,
-        positionData: matched.positionData ?? {},
-        priceMap: prices,
-        lbPairInfo: {
-          activeId: Number(info.lbPair.activeId ?? 0),
-          binStep: Number(info.lbPair.binStep ?? 0),
-        },
-        metadataExtras: { userAddress },
-      });
+    if (!positionInfo) {
+      throw new Error("Position not found");
     }
 
-    throw new Error("Position not found for provided user");
+    const lbPair = positionInfo.lbPair;
+
+    const { tokenX, tokenY } = await this.jupiterService.getTokenPairInfo(
+      positionInfo.tokenX.mint.address.toBase58(),
+      positionInfo.tokenY.mint.address.toBase58()
+    );
+
+    return this.transformers.onChainToUnifiedPosition({
+      poolAddress: positionInfo.publicKey.toBase58(),
+      positionAddress,
+      tokenA: this.transformers.transformToken(tokenX),
+      tokenB: this.transformers.transformToken(tokenY),
+      positionData:
+        positionInfo.lbPairPositionsData.find(
+          (pos) => pos.publicKey.toBase58() === positionAddress
+        )?.positionData ?? {},
+      priceMap: {},
+      lbPairInfo: {
+        activeId: Number(lbPair.activeId ?? 0),
+        binStep: Number(lbPair.binStep ?? 0),
+      },
+      metadataExtras: { userAddress },
+    });
   }
 
   private async getPositionForPool(
@@ -379,7 +289,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     poolAddress: string,
     userAddress?: string
   ): Promise<UnifiedPosition> {
-    const { lbPair, lbPosition } = await this.dlmm.getPosition(
+    const { lbPair, lbPosition } = await this.dlmm.getPositionOnChain(
       positionAddress,
       poolAddress
     );
@@ -387,37 +297,18 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       throw new Error("Position not found");
     }
 
-    const pool = await this.api.getPool(poolAddress);
-    const [symA, symB] = (pool?.name || "")
-      .split("-")
-      .map((s) => (s ? s.trim().toUpperCase() : undefined));
-
-    const xMint = lbPair.tokenXMint.toString();
-    const yMint = lbPair.tokenYMint.toString();
-
-    const tokenA: Token = this.transformers.transformToken({
-      id: xMint,
-      symbol: symA || xMint.slice(0, 4),
-      name: symA || xMint,
-      decimals: 6,
-    });
-
-    const tokenB: Token = this.transformers.transformToken({
-      id: yMint,
-      symbol: symB || yMint.slice(0, 4),
-      name: symB || yMint,
-      decimals: 6,
-    });
-
-    const prices = await this.prices.getPrices([xMint, yMint]);
+    const { tokenX, tokenY } = await this.jupiterService.getTokenPairInfo(
+      lbPair.tokenXMint.toString(),
+      lbPair.tokenYMint.toString()
+    );
 
     return this.transformers.onChainToUnifiedPosition({
       poolAddress,
       positionAddress,
-      tokenA,
-      tokenB,
+      tokenA: this.transformers.transformToken(tokenX),
+      tokenB: this.transformers.transformToken(tokenY),
       positionData: lbPosition.positionData ?? {},
-      priceMap: prices,
+      priceMap: {},
       lbPairInfo: {
         activeId: Number(lbPair.activeId ?? 0),
         binStep: Number(lbPair.binStep ?? 0),
@@ -429,53 +320,18 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     });
   }
 
-  async createPosition(
-    params: CreatePositionParams
-  ): Promise<TransactionResult> {
-    try {
-      this.validateAddress(params.poolAddress);
-      this.validateAddress(params.userAddress);
-      // this.validateAmount(params.tokenAAmount);
-      // this.validateAmount(params.tokenBAmount);
-
-      const strategy = this.mapStrategy(params.strategy);
-      const rangeInterval = Number(params?.rangeInterval ?? 10);
-
-      const res = await this.dlmm.buildCreatePositionTx(
-        params.poolAddress,
-        params.userAddress,
-        new Decimal(params.tokenAAmount),
-        new Decimal(params.tokenBAmount),
-        strategy,
-        rangeInterval
-      );
-
-      return {
-        success: true,
-        metadata: {
-          instructions: res.instructions,
-          positionKp: res.positionKp,
-          estimatedFeesLamports: 0,
-        },
-      };
-    } catch (error) {
-      return this.handleError(error, "createPosition");
-    }
-  }
-
-  async createPositionIx(
+  async createPositionIxs(
     params: CreatePositionParams
   ): Promise<CreatePositionResult> {
     try {
-      this.validateAddress(params.poolAddress);
-      this.validateAddress(params.userAddress);
-
       const strategy = this.mapStrategy(params.strategy);
-      const rangeInterval = Number(params?.rangeInterval ?? 10);
+      const rangeInterval = Number(params?.rangeInterval ?? DEFAULT_BIN_RANGE);
+      const positionKp = Keypair.generate();
 
-      const res = await this.dlmm.buildCreatePositionTx(
-        params.poolAddress,
-        params.userAddress,
+      const res = await this.dlmm.buildCreatePositionIxs(
+        positionKp.publicKey,
+        new PublicKey(params.poolAddress),
+        new PublicKey(params.userAddress),
         new Decimal(params.tokenAAmount),
         new Decimal(params.tokenBAmount),
         strategy,
@@ -485,7 +341,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       return {
         success: true,
         instructions: res.instructions,
-        positionKp: res.positionKp,
+        positionKp: positionKp,
       };
     } catch (error) {
       console.log("createPositionIx failed", { error, params });
@@ -493,45 +349,10 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     }
   }
 
-  async closePosition(positionAddress: string): Promise<TransactionResult> {
-    try {
-      this.validateAddress(positionAddress);
-      // Expect caller to provide required context via metadata on the call site
-      // @ts-expect-error
-      const ctx = (arguments as any)[1] || {};
-      if (!ctx.userAddress || !ctx.poolAddress) {
-        throw new Error(
-          "Missing userAddress or poolAddress in metadata for closePosition"
-        );
-      }
-      const owner = new PublicKey(ctx.userAddress);
-      const pool = new PublicKey(ctx.poolAddress);
-
-      const res = await this.dlmm.buildClosePositionTx(
-        owner,
-        pool,
-        new PublicKey(positionAddress)
-      );
-
-      return {
-        success: true,
-        metadata: {
-          instructions: res.instructions,
-        },
-      };
-    } catch (error) {
-      return this.handleError(error, "closePosition");
-    }
-  }
-
-  async closePositionIx(
+  async closePositionIxs(
     params: ClosePositionParams
   ): Promise<ClosePositionResult> {
     try {
-      this.validateAddress(params.poolAddress);
-      this.validateAddress(params.userAddress);
-      this.validateAddress(params.positionAddress);
-
       if (!params.userAddress || !params.poolAddress) {
         throw new Error(
           "Missing userAddress or poolAddress in metadata for closePosition"
@@ -540,7 +361,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       const owner = new PublicKey(params.userAddress);
       const pool = new PublicKey(params.poolAddress);
 
-      const res = await this.dlmm.buildClosePositionTx(
+      const res = await this.dlmm.buildClosePositionIxs(
         owner,
         pool,
         new PublicKey(params.positionAddress)
@@ -555,16 +376,12 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     }
   }
 
-  async claimFeesIx(params: ClaimFeesParams): Promise<ClaimFeesResult> {
+  async claimFeesIxs(params: ClaimFeesParams): Promise<ClaimFeesResult> {
     try {
-      this.validateAddress(params.poolAddress);
-      this.validateAddress(params.positionAddress);
-      this.validateAddress(params.userAddress);
-
       const owner = new PublicKey(params.userAddress);
       const pool = new PublicKey(params.poolAddress);
 
-      const res = await this.dlmm.buildClaimFeesTx(
+      const res = await this.dlmm.buildClaimFeesIxs(
         owner,
         pool,
         new PublicKey(params.positionAddress)
@@ -579,46 +396,29 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     }
   }
 
-  async rebalancePosition(
-    positionAddress: string,
-    params: RebalanceParams
-  ): Promise<TransactionResult> {
+  async getPriceRange(
+    poolAddress: string,
+    rangeInterval: number
+  ): Promise<{
+    fromPrice: Decimal;
+    toPrice: Decimal;
+    activeBinId: number;
+    fromBinId: number;
+    toBinId: number;
+  }> {
     try {
-      const md = params.metadata || {};
-      const userAddress = new PublicKey(String((md as any).userAddress));
-      const poolAddress = new PublicKey(String((md as any).poolAddress));
-      const newXA = String((md as any).tokenAAmount || "0");
-      const newYA = String((md as any).tokenBAmount || "0");
-      const strategy = (md as any).strategy as any;
-      const rangeInterval = Number((md as any).rangeInterval ?? 10);
-
-      const closeRes = await this.dlmm.buildClosePositionTx(
-        userAddress,
-        poolAddress,
-        new PublicKey(positionAddress)
-      );
-
-      const createRes = await this.dlmm.buildCreatePositionTx(
-        poolAddress,
-        userAddress,
-        new Decimal(newXA),
-        new Decimal(newYA),
-        strategy,
-        rangeInterval
-      );
+      const pool = new PublicKey(poolAddress);
+      const res = await this.dlmm.calculatePriceRange(pool, rangeInterval);
 
       return {
-        success: true,
-        metadata: {
-          close: { instructions: closeRes.instructions },
-          create: {
-            instructions: createRes.instructions,
-            positionKp: createRes.positionKp,
-          },
-        },
+        fromPrice: new Decimal(res.fromPrice),
+        toPrice: new Decimal(res.toPrice),
+        activeBinId: res.activeBinId,
+        fromBinId: res.fromBinId,
+        toBinId: res.toBinId,
       };
     } catch (error) {
-      return this.handleError(error, "rebalancePosition");
+      return this.handleError(error, "getPriceRange");
     }
   }
 

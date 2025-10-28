@@ -92,7 +92,7 @@ export class ClosePositionUseCase {
 
       let txResult: ClosePositionResultType;
       try {
-        txResult = await adapter.closePositionIx({
+        txResult = await adapter.closePositionIxs({
           userAddress: command.userAddress,
           poolAddress: position.poolAddress,
           positionAddress,
