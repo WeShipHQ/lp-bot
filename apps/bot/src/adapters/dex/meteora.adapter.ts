@@ -612,7 +612,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       const strategy = this.mapStrategy(params.strategy);
       const rangeInterval = Number(params?.rangeInterval ?? 10);
 
-      const res = await this.dlmm.buildCreatePositionIxs(
+      const res = await this.dlmm.buildCreatePositionTx(
         params.poolAddress,
         params.userAddress,
         new Decimal(params.tokenAAmount),
@@ -644,7 +644,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       const strategy = this.mapStrategy(params.strategy);
       const rangeInterval = Number(params?.rangeInterval ?? 10);
 
-      const res = await this.dlmm.buildCreatePositionIxs(
+      const res = await this.dlmm.buildCreatePositionTx(
         params.poolAddress,
         params.userAddress,
         new Decimal(params.tokenAAmount),
@@ -769,7 +769,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
         new PublicKey(positionAddress)
       );
 
-      const createRes = await this.dlmm.buildCreatePositionIxs(
+      const createRes = await this.dlmm.buildCreatePositionTx(
         poolAddress,
         userAddress,
         new Decimal(newXA),
