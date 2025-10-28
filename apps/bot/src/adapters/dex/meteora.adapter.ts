@@ -19,6 +19,8 @@ import {
 import {
   MeteoraApiClient,
   meteoraApiClient,
+  MeteoraTransformers,
+  meteoraTransformers,
 } from "./meteora";
 import { Token } from "@/types/token.types";
 import {
@@ -33,7 +35,6 @@ import { PublicKey } from "@solana/web3.js";
 import Decimal from "decimal.js";
 import { MeteoraDlmmPoolResponse } from "@/types/meteora.types";
 import { StrategyType } from "@meteora-ag/dlmm";
-import { JupiterService } from "@/services/jupiter.service";
 
 /**
  * MeteoraAdapter
@@ -47,7 +48,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
 
   private readonly dlmm: MeteoraDlmmService;
   private readonly api: MeteoraApiClient;
-  private readonly jupiter: JupiterService;
+  private readonly transformers: MeteoraTransformers;
   private readonly prices: TokenPriceService;
 
   private readonly urlPatterns = {
@@ -61,11 +62,13 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
   constructor(deps?: {
     dlmmService?: MeteoraDlmmService;
     apiClient?: MeteoraApiClient;
+    transformers?: MeteoraTransformers;
     tokenPriceService?: TokenPriceService;
   }) {
     super();
     this.dlmm = deps?.dlmmService ?? meteoraDlmmService;
     this.api = deps?.apiClient ?? meteoraApiClient;
+    this.transformers = deps?.transformers ?? meteoraTransformers;
     this.prices =
       deps?.tokenPriceService ??
       (() => {
@@ -75,13 +78,12 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
           return new TokenPriceService();
         }
       })();
-    this.jupiter = new JupiterService();
   }
 
   async getPool(poolId: string): Promise<UnifiedPool> {
     try {
       const pool = await this.api.getPool(poolId);
-      return this.transformPoolToUnified(pool);
+      return this.transformers.toUnifiedPool(pool);
     } catch (error) {
       return this.handleError(error, "getPool");
     }
@@ -105,7 +107,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       });
 
       const pools: UnifiedPool[] = await Promise.all(
-        (res.pairs || []).map((p) => this.transformPoolToUnified(p))
+        (res.pairs || []).map((p) => this.transformers.toUnifiedPool(p))
       );
 
       const totalPages = limit > 0 ? Math.ceil((res.total || 0) / limit) : 1;
@@ -135,7 +137,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       );
 
       return await Promise.all(
-        filtered.map((p) => this.transformPoolToUnified(p))
+        filtered.map((p) => this.transformers.toUnifiedPool(p))
       );
     } catch (error) {
       return this.handleError(error, "searchPools");
@@ -166,18 +168,38 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
         const xDecimals = Number((info as any).tokenX?.mint?.decimals ?? 0);
         const yDecimals = Number((info as any).tokenY?.mint?.decimals ?? 0);
 
-        const tokenA: Token = {
-          address: xMint,
-          symbol: (info as any).tokenX?.mint?.symbol || xMint.slice(0, 4),
-          name: (info as any).tokenX?.mint?.name || xMint,
+        const tokenA: Token = this.transformers.transformToken({
+          id: xMint,
+          symbol:
+            (info as any).tokenX?.mint?.symbol ??
+            (info as any).tokenX?.symbol ??
+            xMint.slice(0, 4),
+          name:
+            (info as any).tokenX?.mint?.name ??
+            (info as any).tokenX?.name ??
+            xMint,
           decimals: xDecimals,
-        };
-        const tokenB: Token = {
-          address: yMint,
-          symbol: (info as any).tokenY?.mint?.symbol || yMint.slice(0, 4),
-          name: (info as any).tokenY?.mint?.name || yMint,
+          icon:
+            (info as any).tokenX?.mint?.icon ??
+            (info as any).tokenX?.icon ??
+            (info as any).tokenX?.logoUri,
+        });
+        const tokenB: Token = this.transformers.transformToken({
+          id: yMint,
+          symbol:
+            (info as any).tokenY?.mint?.symbol ??
+            (info as any).tokenY?.symbol ??
+            yMint.slice(0, 4),
+          name:
+            (info as any).tokenY?.mint?.name ??
+            (info as any).tokenY?.name ??
+            yMint,
           decimals: yDecimals,
-        };
+          icon:
+            (info as any).tokenY?.mint?.icon ??
+            (info as any).tokenY?.icon ??
+            (info as any).tokenY?.logoUri,
+        });
 
         const activeId = Number(info.lbPair.activeId);
         const binStepBps = Number(info.lbPair.binStep);
@@ -208,70 +230,20 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
           const address = pos.publicKey.toString();
           const pd = pos.positionData;
 
-          const totalXRaw = (pd.totalXAmountExcludeTransferFee ??
-            pd.totalXAmount) as any;
-          const totalYRaw = (pd.totalYAmountExcludeTransferFee ??
-            pd.totalYAmount) as any;
-
-          const tokenAAmount = this.fromRawAmount(
-            totalXRaw,
-            xDecimals
-          ).toString();
-          const tokenBAmount = this.fromRawAmount(
-            totalYRaw,
-            yDecimals
-          ).toString();
-
-          const currentValueUsd =
-            this.fromRawAmount(totalXRaw, xDecimals) * xPrice +
-            this.fromRawAmount(totalYRaw, yDecimals) * yPrice;
-
-          const lower = Number(pd.lowerBinId);
-          const upper = Number(pd.upperBinId);
-          const inRange = activeId >= lower && activeId <= upper;
-
-          // Compute fees (unclaimed and claimed) in USD where possible
-          const feeXRaw = (pd.feeXExcludeTransferFee ?? pd.feeX) as any;
-          const feeYRaw = (pd.feeYExcludeTransferFee ?? pd.feeY) as any;
-          const feeX = this.fromRawAmount(feeXRaw, xDecimals);
-          const feeY = this.fromRawAmount(feeYRaw, yDecimals);
-          const unclaimedFeesUsd = feeX * xPrice + feeY * yPrice;
-
-          const claimedFeeXRaw = (pd.totalClaimedFeeXAmount ?? 0) as any;
-          const claimedFeeYRaw = (pd.totalClaimedFeeYAmount ?? 0) as any;
-          const claimedFeesUsd =
-            this.fromRawAmount(claimedFeeXRaw, xDecimals) * xPrice +
-            this.fromRawAmount(claimedFeeYRaw, yDecimals) * yPrice;
-
-          unified.push({
-            id: `${poolAddress}-${address}`,
-            address,
+          const unifiedPosition = this.transformers.onChainToUnifiedPosition({
             poolAddress,
-            dex: this.dexType,
-            type: "DLMM",
+            positionAddress: address,
             tokenA,
             tokenB,
-            tokenAAmount,
-            tokenBAmount,
-            currentValueUsd,
-            initialValueUsd: currentValueUsd, // Unknown here; set equal for now
-            unclaimedFeesUsd,
-            claimedFeesUsd,
-            unclaimedRewardsUsd: 0,
-            claimedRewardsUsd: 0,
-            pnlUsd: 0,
-            pnlPercentage: 0,
-            inRange,
-            isActive: true,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            metadata: {
-              binStepBps,
+            positionData: pd,
+            priceMap,
+            lbPairInfo: {
               activeId,
-              lowerBinId: lower,
-              upperBinId: upper,
+              binStep: binStepBps,
             },
           });
+
+          unified.push(unifiedPosition);
         }
       }
 
@@ -350,8 +322,8 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
 
       const prices = await this.prices.getPrices([xMint, yMint]);
 
-      const tokenA: Token = {
-        address: xMint,
+      const tokenA: Token = this.transformers.transformToken({
+        id: xMint,
         symbol:
           (info as any).tokenX?.mint?.symbol ??
           (info as any).tokenX?.symbol ??
@@ -361,10 +333,14 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
           (info as any).tokenX?.name ??
           xMint,
         decimals: xDecimals,
-      };
+        icon:
+          (info as any).tokenX?.mint?.icon ??
+          (info as any).tokenX?.icon ??
+          (info as any).tokenX?.logoUri,
+      });
 
-      const tokenB: Token = {
-        address: yMint,
+      const tokenB: Token = this.transformers.transformToken({
+        id: yMint,
         symbol:
           (info as any).tokenY?.mint?.symbol ??
           (info as any).tokenY?.symbol ??
@@ -374,9 +350,13 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
           (info as any).tokenY?.name ??
           yMint,
         decimals: yDecimals,
-      };
+        icon:
+          (info as any).tokenY?.mint?.icon ??
+          (info as any).tokenY?.icon ??
+          (info as any).tokenY?.logoUri,
+      });
 
-      return this.buildUnifiedPosition({
+      return this.transformers.onChainToUnifiedPosition({
         poolAddress,
         positionAddress,
         tokenA,
@@ -415,23 +395,23 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     const xMint = lbPair.tokenXMint.toString();
     const yMint = lbPair.tokenYMint.toString();
 
-    const tokenA: Token = {
-      address: xMint,
+    const tokenA: Token = this.transformers.transformToken({
+      id: xMint,
       symbol: symA || xMint.slice(0, 4),
       name: symA || xMint,
       decimals: 6,
-    };
+    });
 
-    const tokenB: Token = {
-      address: yMint,
+    const tokenB: Token = this.transformers.transformToken({
+      id: yMint,
       symbol: symB || yMint.slice(0, 4),
       name: symB || yMint,
       decimals: 6,
-    };
+    });
 
     const prices = await this.prices.getPrices([xMint, yMint]);
 
-    return this.buildUnifiedPosition({
+    return this.transformers.onChainToUnifiedPosition({
       poolAddress,
       positionAddress,
       tokenA,
@@ -447,157 +427,6 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
         lbVersion: lbPosition.version,
       },
     });
-  }
-
-  private buildUnifiedPosition(params: {
-    poolAddress: string;
-    positionAddress: string;
-    tokenA: Token;
-    tokenB: Token;
-    positionData: any;
-    priceMap: Record<string, { price?: number } | undefined>;
-    lbPairInfo: { activeId?: number; binStep?: number };
-    metadataExtras?: Record<string, unknown>;
-  }): UnifiedPosition {
-    const {
-      poolAddress,
-      positionAddress,
-      tokenA,
-      tokenB,
-      positionData,
-      priceMap,
-      lbPairInfo,
-      metadataExtras,
-    } = params;
-
-    const tokenAPrice = priceMap[tokenA.address]?.price ?? 0;
-    const tokenBPrice = priceMap[tokenB.address]?.price ?? 0;
-
-    const totalXRaw =
-      positionData.totalXAmountExcludeTransferFee ??
-      positionData.totalXAmount ??
-      0;
-    const totalYRaw =
-      positionData.totalYAmountExcludeTransferFee ??
-      positionData.totalYAmount ??
-      0;
-
-    const tokenAAmountUi = this.fromRawAmount(totalXRaw, tokenA.decimals);
-    const tokenBAmountUi = this.fromRawAmount(totalYRaw, tokenB.decimals);
-
-    const currentValueUsd =
-      tokenAAmountUi * tokenAPrice + tokenBAmountUi * tokenBPrice;
-
-    const feeXRaw =
-      positionData.feeXExcludeTransferFee ?? positionData.feeX ?? 0;
-    const feeYRaw =
-      positionData.feeYExcludeTransferFee ?? positionData.feeY ?? 0;
-
-    const unclaimedFeesUsd =
-      this.fromRawAmount(feeXRaw, tokenA.decimals) * tokenAPrice +
-      this.fromRawAmount(feeYRaw, tokenB.decimals) * tokenBPrice;
-
-    const claimedFeeXRaw = positionData.totalClaimedFeeXAmount ?? 0;
-    const claimedFeeYRaw = positionData.totalClaimedFeeYAmount ?? 0;
-    const claimedFeesUsd =
-      this.fromRawAmount(claimedFeeXRaw, tokenA.decimals) * tokenAPrice +
-      this.fromRawAmount(claimedFeeYRaw, tokenB.decimals) * tokenBPrice;
-
-    const lowerBinId = Number(
-      positionData.lowerBinId ?? positionData.binLower ?? 0
-    );
-    const upperBinId = Number(
-      positionData.upperBinId ?? positionData.binUpper ?? 0
-    );
-    const activeId = Number(lbPairInfo.activeId ?? 0);
-    const binStepBps = Number(lbPairInfo.binStep ?? 0);
-
-    const updatedAt = this.toDate(
-      positionData.lastUpdatedAt ?? positionData.updatedAt ?? Date.now()
-    );
-    const createdAt = this.toDate(positionData.createdAt ?? updatedAt);
-
-    return {
-      id: `${poolAddress}-${positionAddress}`,
-      address: positionAddress,
-      poolAddress,
-      dex: this.dexType,
-      type: "DLMM",
-      tokenA,
-      tokenB,
-      tokenAAmount: tokenAAmountUi.toString(),
-      tokenBAmount: tokenBAmountUi.toString(),
-      currentValueUsd,
-      initialValueUsd: currentValueUsd,
-      unclaimedFeesUsd,
-      claimedFeesUsd,
-      unclaimedRewardsUsd: 0,
-      claimedRewardsUsd: 0,
-      pnlUsd: 0,
-      pnlPercentage: 0,
-      inRange: activeId >= lowerBinId && activeId <= upperBinId,
-      isActive: true,
-      createdAt,
-      updatedAt,
-      metadata: {
-        binStepBps,
-        activeId,
-        lowerBinId,
-        upperBinId,
-        ...(metadataExtras ?? {}),
-      },
-    };
-  }
-
-  private toNumeric(value: any): number | undefined {
-    if (value == null) return undefined;
-    if (typeof value === "number") return value;
-    if (typeof value === "bigint") return Number(value);
-    if (value instanceof Date) return value.getTime();
-    if (typeof value === "string") {
-      const parsed = Number(value);
-      return Number.isFinite(parsed) ? parsed : undefined;
-    }
-    if (typeof value === "object") {
-      if (typeof (value as any).toNumber === "function") {
-        const num = (value as any).toNumber();
-        return typeof num === "number" && Number.isFinite(num)
-          ? num
-          : undefined;
-      }
-      if (typeof (value as any).toString === "function") {
-        const parsed = Number((value as any).toString());
-        if (Number.isFinite(parsed)) {
-          return parsed;
-        }
-      }
-    }
-    return undefined;
-  }
-
-  private toDate(value: any): Date {
-    if (value instanceof Date) {
-      return value;
-    }
-
-    const numeric = this.toNumeric(value);
-    if (numeric == null) {
-      return new Date();
-    }
-
-    if (numeric > 1e12) {
-      return new Date(numeric);
-    }
-
-    if (numeric > 1e9) {
-      return new Date(numeric * 1000);
-    }
-
-    if (numeric > 1e5) {
-      return new Date(numeric * 1000);
-    }
-
-    return new Date(numeric);
   }
 
   async createPosition(
@@ -824,83 +653,6 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     }
 
     return null;
-  }
-
-  private async transformPoolToUnified(
-    p: MeteoraDlmmPoolResponse
-  ): Promise<UnifiedPool> {
-    const { tokenX, tokenY } = await this.jupiter.getTokenPairInfo(
-      p.mint_x,
-      p.mint_y
-    );
-
-    const volume24h = Number(p.trade_volume_24h ?? 0);
-    const fees24h = Number(p.fees_24h ?? 0);
-    const feeTvlRatio24h = (
-      typeof (p as any).fee_tvl_ratio === "object"
-        ? Number((p as any).fee_tvl_ratio?.hour_24 ?? 0)
-        : Number((p as any).fee_tvl_ratio ?? 0)
-    ) as number;
-
-    return {
-      id: p.address,
-      address: p.address,
-      name: p.name,
-      dex: this.dexType,
-      type: "DLMM",
-      tokenA: {
-        address: tokenX.id,
-        symbol: tokenX.symbol,
-        name: tokenX.name,
-        decimals: tokenX.decimals,
-        logoUri: tokenX.icon,
-      },
-      tokenB: {
-        address: tokenY.id,
-        symbol: tokenY.symbol,
-        name: tokenY.name,
-        decimals: tokenY.decimals,
-        logoUri: tokenY.icon,
-      },
-      liquidity: String(p.liquidity ?? "0"),
-      tvl: String(p.liquidity ?? "0"),
-      apr: Number((p as any).apr ?? 0),
-      apy: Number((p as any).apy ?? (p as any).apr ?? 0),
-      currentPrice: Number((p as any).current_price ?? 0),
-      isVerified: !!(p as any).is_verified,
-      volume24h,
-      fees24h,
-      feeTvlRatio24h,
-      volume: {
-        hour1: Number((p.volume as any)?.hour_1 ?? 0),
-        hour4: Number((p.volume as any)?.hour_4 ?? 0),
-        hour12: Number((p.volume as any)?.hour_12 ?? 0),
-        hour24: Number((p.volume as any)?.hour_24 ?? 0),
-      },
-      fees: {
-        hour1: Number((p.fees as any)?.hour_1 ?? 0),
-        hour4: Number((p.fees as any)?.hour_4 ?? 0),
-        hour12: Number((p.fees as any)?.hour_12 ?? 0),
-        hour24: Number((p.fees as any)?.hour_24 ?? 0),
-      },
-      metadata: {
-        base_fee_percentage: (p as any).base_fee_percentage,
-        bin_step: (p as any).bin_step,
-        farm_apr: (p as any).farm_apr,
-        farm_apy: (p as any).farm_apy,
-        launchpad: (p as any).launchpad,
-        max_fee_percentage: (p as any).max_fee_percentage,
-        protocol_fee_percentage: (p as any).protocol_fee_percentage,
-        reserve_x: (p as any).reserve_x,
-        reserve_y: (p as any).reserve_y,
-        tags: (p as any).tags,
-      },
-    };
-  }
-
-  private fromRawAmount(raw?: string | bigint | number, decimals = 0): number {
-    const v = raw == null ? 0 : Number(raw.toString());
-    return v / Math.pow(10, decimals || 0);
   }
 
   private mapSortKey(sortBy?: TrendingParams["sortBy"]): DlmmSortKey {

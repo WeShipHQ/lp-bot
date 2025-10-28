@@ -6,6 +6,7 @@
  * - Position fee/reward queries
  * - Resilience features (retry, circuit breaker, caching)
  * - Structured logging and error handling
+ * - Centralized transformation logic for API and on-chain data
  */
 
 export {
@@ -20,3 +21,9 @@ export {
   meteoraDlmmService,
   type DepositAmountCalculation,
 } from "./meteora-dlmm.service";
+
+export {
+  MeteoraTransformers,
+  meteoraTransformers,
+  type PositionTransformContext,
+} from "./meteora-transformers";
