@@ -94,7 +94,7 @@ export class RebalancePositionUseCase {
           positionAddress: position.positionAddress,
         });
       } catch (error) {
-        logger.error("Failed to build close position instructions", { error });
+        logger.error({ error }, "Failed to build close position instructions");
         return {
           success: false,
           error:
@@ -120,7 +120,7 @@ export class RebalancePositionUseCase {
           []
         );
       } catch (error) {
-        logger.error("Failed to submit close position transaction", { error });
+        logger.error({ error }, "Failed to submit close position transaction");
         return {
           success: false,
           error:
@@ -181,9 +181,7 @@ export class RebalancePositionUseCase {
           maxRetries: 3,
         });
       } catch (error) {
-        logger.error("Failed to record pending rebalance transaction", {
-          error,
-        });
+        logger.error({ error }, "Failed to record pending rebalance transaction");
         return {
           success: false,
           error: "Failed to persist pending transaction for processing",
@@ -194,9 +192,7 @@ export class RebalancePositionUseCase {
         position.startRebalancing();
         await this.positionRepository.update(position);
       } catch (error) {
-        logger.warn("Failed to update position status to REBALANCING", {
-          error,
-        });
+        logger.warn({ error }, "Failed to update position status to REBALANCING");
       }
 
       try {
@@ -213,9 +209,7 @@ export class RebalancePositionUseCase {
           { delay: 500 }
         );
       } catch (error) {
-        logger.warn("Failed to enqueue rebalance confirmation job", {
-          error,
-        });
+        logger.warn({ error }, "Failed to enqueue rebalance confirmation job");
       }
 
       try {
@@ -231,16 +225,12 @@ export class RebalancePositionUseCase {
           CachePatterns.positionPattern(command.positionId)
         );
       } catch (error) {
-        logger.debug("Failed to invalidate cache after rebalance submission", {
-          error,
-        });
+        logger.debug({ error }, "Failed to invalidate cache after rebalance submission");
       }
 
       return { success: true, signature };
     } catch (error) {
-      logger.error("RebalancePositionUseCase.execute unexpected error", {
-        error,
-      });
+      logger.error({ error }, "RebalancePositionUseCase.execute unexpected error");
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",

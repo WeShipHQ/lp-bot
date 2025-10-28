@@ -128,11 +128,14 @@ export class MeteoraApiClient {
       timeoutMs: cbConfig.timeoutMs ?? 15000,
     });
 
-    this.logger.info("MeteoraApiClient initialized", {
-      dlmmApiUrl: this.dlmmApiUrl,
-      maxRetries: this.maxRetries,
-      timeoutMs: this.timeoutMs,
-    });
+    this.logger.info(
+      {
+        dlmmApiUrl: this.dlmmApiUrl,
+        maxRetries: this.maxRetries,
+        timeoutMs: this.timeoutMs,
+      },
+      "MeteoraApiClient initialized"
+    );
   }
 
   /**
@@ -251,14 +254,14 @@ export class MeteoraApiClient {
     // Check in-memory cache first
     const cachedInMemory = this.getFromMemoryCache<T>(key);
     if (cachedInMemory) {
-      requestLogger.debug("Cache hit (memory)", { cacheKey: key });
+      requestLogger.debug({ cacheKey: key }, "Cache hit (memory)");
       return cachedInMemory;
     }
 
     // Check Redis cache
     const cachedInRedis = await this.cache.get<T>(key);
     if (cachedInRedis) {
-      requestLogger.debug("Cache hit (redis)", { cacheKey: key });
+      requestLogger.debug({ cacheKey: key }, "Cache hit (redis)");
       // Populate in-memory cache
       this.setInMemoryCache(key, cachedInRedis, cacheTtl);
       return cachedInRedis;
@@ -268,7 +271,7 @@ export class MeteoraApiClient {
     try {
       const data = await this.breaker.execute(
         async () => {
-          requestLogger.debug("Making HTTP request", { attempt: 1 });
+          requestLogger.debug({ attempt: 1 }, "Making HTTP request");
           
           const response = await this.fetchWithRetryAndTimeout<T>(
             endpoint,
@@ -277,10 +280,10 @@ export class MeteoraApiClient {
           );
 
           const duration = Date.now() - startTime;
-          requestLogger.info("Request successful", {
+          requestLogger.info({
             duration,
             cached: false,
-          });
+          }, "Request successful");
 
           return response;
         },
@@ -290,10 +293,10 @@ export class MeteoraApiClient {
           const fallbackCache = await this.cache.get<T>(key);
           if (fallbackCache) {
             const duration = Date.now() - startTime;
-            requestLogger.info("Fallback to stale cache", {
+            requestLogger.info({
               cacheKey: key,
               duration,
-            });
+            }, "Fallback to stale cache");
             this.setInMemoryCache(key, fallbackCache, cacheTtl);
             return fallbackCache;
           }
@@ -311,10 +314,10 @@ export class MeteoraApiClient {
       return data;
     } catch (error) {
       const duration = Date.now() - startTime;
-      requestLogger.error("Request failed", {
+      requestLogger.error({
         error: error instanceof Error ? error.message : String(error),
         duration,
-      });
+      }, "Request failed");
 
       if (error instanceof MeteoraApiError) {
         throw error;

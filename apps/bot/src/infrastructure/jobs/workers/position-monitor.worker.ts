@@ -26,7 +26,7 @@ export class PositionMonitorWorker implements IWorker<PositionMonitorJobData> {
   ) {}
 
   async process(job: Job<PositionMonitorJobData>) {
-    logger.info("[PositionMonitorWorker] Processing job", { jobId: job.id });
+    logger.info({ jobId: job.id }, "[PositionMonitorWorker] Processing job");
 
     const start = Date.now();
     const { userId, positionId } = job.data;

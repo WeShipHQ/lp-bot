@@ -101,10 +101,10 @@ export class GetPositionUseCase {
           position.updateTokenAmounts(tokenXAmount, tokenYAmount);
         }
       } catch (err) {
-        logger.warn("Failed to enrich position with on-chain data", {
+        logger.warn({
           err,
           positionId: position.id,
-        });
+        }, "Failed to enrich position with on-chain data");
         console.error("Failed to enrich position with on-chain data", {
           err,
           positionId: position.id,
@@ -123,12 +123,12 @@ export class GetPositionUseCase {
         try {
           pool = await adapter.getPool(position.poolAddress);
         } catch (err) {
-          logger.warn("Failed to fetch pool metadata for position", {
+          logger.warn({
             err,
             poolAddress: position.poolAddress,
-          });
+          }, "Failed to fetch pool metadata for position");
         }
-      }
+
 
       let prices: Record<string, TokenPrice | undefined> | undefined;
       if (command.includePrices) {
@@ -139,10 +139,10 @@ export class GetPositionUseCase {
             position.tokenY.address,
           ]);
         } catch (err) {
-          logger.warn("Failed to fetch token prices for position", {
+          logger.warn({
             err,
             positionId: position.id,
-          });
+          }, "Failed to fetch token prices for position");
         }
       }
 
@@ -155,7 +155,7 @@ export class GetPositionUseCase {
         userAddress,
       };
     } catch (error) {
-      logger.error("GetPositionUseCase.execute unexpected error", { error });
+      logger.error({ error }, "GetPositionUseCase.execute unexpected error");
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
