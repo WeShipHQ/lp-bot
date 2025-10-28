@@ -16,15 +16,20 @@ import { meteoraApiClient, meteoraDlmmService } from "@/adapters/dex/meteora";
 // Fetch a pool
 const pool = await meteoraApiClient.getPool(poolAddress);
 
-// Build position instructions with the DLMM SDK
-const { instructions } = await meteoraDlmmService.createPositionIx(
-  positionPublicKey,
-  poolPublicKey,
-  userPublicKey,
+// Build position creation transaction (RECOMMENDED - standardized naming)
+const { instructions, positionKp } = await meteoraDlmmService.buildCreatePositionTx(
+  poolAddress,
+  userAddress,
   totalXAmount,
   totalYAmount,
-  strategyType,
-  rangeInterval,
+  StrategyType.Spot,
+  rangeInterval
+);
+
+// Parse position data from on-chain
+const positionData = await meteoraDlmmService.parsePositionData(
+  positionAddress,
+  poolAddress
 );
 ```
 
