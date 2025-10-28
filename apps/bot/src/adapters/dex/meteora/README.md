@@ -5,25 +5,27 @@ This directory contains the enhanced Meteora API client with comprehensive suppo
 ## Files
 
 - **`meteora-api.client.ts`** - Main API client implementation with retry, caching, circuit breaker, and logging
+- **`meteora-dlmm.service.ts`** - Meteora DLMM SDK wrapper for position creation, closing, and on-chain interactions
 - **`index.ts`** - Barrel export for clean imports
 
 ## Quick Start
 
 ```typescript
-import { meteoraApiClient } from "@/adapters/dex/meteora";
+import { meteoraApiClient, meteoraDlmmService } from "@/adapters/dex/meteora";
 
 // Fetch a pool
 const pool = await meteoraApiClient.getPool(poolAddress);
 
-// Get trending pools
-const trending = await meteoraApiClient.getTrendingPools({
-  page: 1,
-  limit: 10,
-  sort_key: "feetvlratio",
-});
-
-// Position fees
-const fees = await meteoraApiClient.getPositionClaimFees(positionAddress);
+// Build position instructions with the DLMM SDK
+const { instructions } = await meteoraDlmmService.createPositionIx(
+  positionPublicKey,
+  poolPublicKey,
+  userPublicKey,
+  totalXAmount,
+  totalYAmount,
+  strategyType,
+  rangeInterval,
+);
 ```
 
 ## Features

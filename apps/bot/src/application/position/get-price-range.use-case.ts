@@ -1,5 +1,5 @@
 import { DexType } from "@/types/core.types";
-import { meteoraDlmmService } from "@/services/meteora/dlmm.service";
+import { meteoraDlmmService } from "@/adapters/dex/meteora";
 import { SarosDlmmService } from "@/services/saros/dlmm.service";
 
 export interface GetPriceRangeInput {

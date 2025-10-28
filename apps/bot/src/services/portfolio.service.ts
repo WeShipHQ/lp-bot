@@ -14,7 +14,7 @@ import {
   PortfolioResult,
   PortfolioTotals,
 } from "@/types/portfolio.types";
-import { meteoraDlmmService } from "./meteora/dlmm.service";
+import { meteoraDlmmService } from "@/adapters/dex/meteora";
 import { getTokenPriceService } from "@/services/token-price.service";
 
 // Numeric helpers (data-layer)
