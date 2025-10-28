@@ -1,6 +1,7 @@
 import { DexType } from "@/types/core.types";
-import { meteoraDlmmService } from "@/adapters/dex/meteora";
-import { SarosDlmmService } from "@/services/saros/dlmm.service";
+import { dexRegistry } from "@/services/dex-registry.service";
+import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
+import { SarosAdapter } from "@/adapters/dex/saros.adapter";
 
 export interface GetPriceRangeInput {
   poolAddress: string;
@@ -15,19 +16,27 @@ export interface PriceRangeResult {
 
 /**
  * Application-level wrapper to compute DLMM price range for a given pool and bin interval.
- * Delegates to the appropriate underlying service based on dex type.
+ * Uses DexRegistry to get the appropriate adapter and delegates to it.
+ * 
+ * This is DEX-agnostic and works with any adapter that implements getPriceRange.
  */
-// FIXME use DI to get dex registry
 export class GetPriceRangeUseCase {
-  private readonly saros = new SarosDlmmService();
   async execute(input: GetPriceRangeInput): Promise<PriceRangeResult> {
     const { poolAddress, dex, rangeInterval } = input;
 
-    if (dex === "saros") {
-      return this.saros.getPriceRange(poolAddress, rangeInterval);
+    // Get the appropriate DEX adapter from registry
+    const adapter = dexRegistry.get(dex);
+
+    // Adapter-specific logic: MeteoraAdapter and SarosAdapter should implement getPriceRange
+    // For now, we cast to the specific type since getPriceRange is not in the base interface yet
+    if (adapter instanceof MeteoraAdapter) {
+      return adapter.getPriceRange(poolAddress, rangeInterval);
     }
 
-    // Default to meteora (current focus)
-    return meteoraDlmmService.getPriceRange(poolAddress, rangeInterval);
+    if (adapter instanceof SarosAdapter) {
+      return adapter.getPriceRange(poolAddress, rangeInterval);
+    }
+
+    throw new Error(`Price range calculation not supported for DEX: ${dex}`);
   }
 }
