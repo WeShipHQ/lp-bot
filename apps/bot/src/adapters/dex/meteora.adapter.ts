@@ -287,6 +287,8 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       const userAddress = context?.userAddress;
       const poolAddress = context?.poolAddress;
 
+      console.log({ positionAddress, userAddress, poolAddress });
+
       if (userAddress) {
         return await this.getPositionForUser(positionAddress, userAddress);
       }
@@ -638,7 +640,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
 
       const strategy = this.mapStrategy(params.strategy);
       const rangeInterval = Number(params?.rangeInterval ?? 10);
-      
+
       const res = await this.dlmm.buildCreatePositionIxs(
         params.poolAddress,
         params.userAddress,

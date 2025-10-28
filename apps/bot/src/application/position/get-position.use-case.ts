@@ -1,13 +1,13 @@
-import { IPositionRepository } from '@/domain/position/position.repository';
-import type { Position } from '@/domain/position/position.entity';
-import { IUserRepository } from '@/domain/user/user.repository';
-import { Money, TokenAmount } from '@/domain/shared/value-objects';
-import { DexType, UnifiedPool, UnifiedPosition } from '@/types/core.types';
-import type { TokenPrice } from '@/types/token.types';
-import { IDexAdapter } from '@/types/dex-adapter.interface';
-import { logger } from '@/utils/logger';
-import { getTokenPriceService } from '@/services/token-price.service';
-import { DexRegistryLike } from './create-position.use-case';
+import { IPositionRepository } from "@/domain/position/position.repository";
+import type { Position } from "@/domain/position/position.entity";
+import { IUserRepository } from "@/domain/user/user.repository";
+import { Money, TokenAmount } from "@/domain/shared/value-objects";
+import { DexType, UnifiedPool, UnifiedPosition } from "@/types/core.types";
+import type { TokenPrice } from "@/types/token.types";
+import { IDexAdapter } from "@/types/dex-adapter.interface";
+import { logger } from "@/utils/logger";
+import { getTokenPriceService } from "@/services/token-price.service";
+import { DexRegistryLike } from "./create-position.use-case";
 
 export interface GetPositionCommand {
   positionId?: string;
@@ -38,18 +38,20 @@ export class GetPositionUseCase {
   async execute(command: GetPositionCommand): Promise<GetPositionResult> {
     try {
       if (!command?.positionId && !command?.positionAddress) {
-        return { success: false, error: 'Position identifier is required' };
+        return { success: false, error: "Position identifier is required" };
       }
 
       let position: Position | null = null;
       if (command.positionId) {
         position = await this.positionRepository.findById(command.positionId);
       } else if (command.positionAddress) {
-        position = await this.positionRepository.findByPositionAddress(command.positionAddress);
+        position = await this.positionRepository.findByPositionAddress(
+          command.positionAddress
+        );
       }
 
       if (!position) {
-        return { success: false, error: 'Position not found' };
+        return { success: false, error: "Position not found" };
       }
 
       const resolvedUserId = command.userId ?? position.userId;
@@ -60,11 +62,16 @@ export class GetPositionUseCase {
           const user = await this.userRepository.findById(resolvedUserId);
           userAddress = user?.walletAddress ?? undefined;
         } catch (err) {
-          logger.warn({ err, resolvedUserId }, 'GetPositionUseCase.resolveUserAddress failed');
+          logger.warn(
+            { err, resolvedUserId },
+            "GetPositionUseCase.resolveUserAddress failed"
+          );
         }
       }
 
-      const adapter: IDexAdapter = this.dexRegistry.get(position.dex as DexType);
+      const adapter: IDexAdapter = this.dexRegistry.get(
+        position.dex as DexType
+      );
 
       let onchain: UnifiedPosition | undefined;
       const adapterContext = {
@@ -73,7 +80,10 @@ export class GetPositionUseCase {
       } as const;
 
       try {
-        onchain = await adapter.getPosition(position.positionAddress, adapterContext);
+        onchain = await adapter.getPosition(
+          position.positionAddress,
+          adapterContext
+        );
 
         if (onchain) {
           position.updateCurrentValue(Money.usd(onchain.currentValueUsd));
@@ -91,11 +101,21 @@ export class GetPositionUseCase {
           position.updateTokenAmounts(tokenXAmount, tokenYAmount);
         }
       } catch (err) {
-        logger.warn('Failed to enrich position with on-chain data', { err, positionId: position.id });
+        logger.warn("Failed to enrich position with on-chain data", {
+          err,
+          positionId: position.id,
+        });
+        console.error("Failed to enrich position with on-chain data", {
+          err,
+          positionId: position.id,
+        });
       }
 
       if (!userAddress) {
-        logger.debug({ positionId: position.id }, 'On-chain enrichment executed without a resolved user address');
+        logger.debug(
+          { positionId: position.id },
+          "On-chain enrichment executed without a resolved user address"
+        );
       }
 
       let pool: UnifiedPool | undefined;
@@ -103,7 +123,10 @@ export class GetPositionUseCase {
         try {
           pool = await adapter.getPool(position.poolAddress);
         } catch (err) {
-          logger.warn('Failed to fetch pool metadata for position', { err, poolAddress: position.poolAddress });
+          logger.warn("Failed to fetch pool metadata for position", {
+            err,
+            poolAddress: position.poolAddress,
+          });
         }
       }
 
@@ -116,7 +139,10 @@ export class GetPositionUseCase {
             position.tokenY.address,
           ]);
         } catch (err) {
-          logger.warn('Failed to fetch token prices for position', { err, positionId: position.id });
+          logger.warn("Failed to fetch token prices for position", {
+            err,
+            positionId: position.id,
+          });
         }
       }
 
@@ -129,8 +155,11 @@ export class GetPositionUseCase {
         userAddress,
       };
     } catch (error) {
-      logger.error('GetPositionUseCase.execute unexpected error', { error });
-      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+      logger.error("GetPositionUseCase.execute unexpected error", { error });
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
     }
   }
 }

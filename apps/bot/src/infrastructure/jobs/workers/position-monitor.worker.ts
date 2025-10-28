@@ -3,7 +3,6 @@ import { IWorker } from "../worker-registry";
 import {
   JOB_POSITION_MONITOR,
   JOB_REBALANCE,
-  NotificationJobData,
   PositionMonitorJobData,
   RebalanceJobData,
 } from "../job-definitions";

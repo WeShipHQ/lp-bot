@@ -2,10 +2,12 @@ import { Telegraf } from "telegraf";
 import { BotContext } from "@/types/bot.types";
 import { FastifyInstance } from "fastify";
 import { DISABLE_LINK_PREVIEW } from "../constants/base.constants";
-import { SCENE_IDS } from "../config/scenes";
-import { init } from "@/utils/tx-parser";
-import { LAMPORTS_PER_SOL, PublicKey, SystemProgram } from "@solana/web3.js";
-import { WalletService } from "@/services/wallet.service";
+// import { SCENE_IDS } from "../config/scenes";
+// import { init } from "@/utils/tx-parser";
+// import { LAMPORTS_PER_SOL, PublicKey, SystemProgram } from "@solana/web3.js";
+// import { WalletService } from "@/services/wallet.service";
+// import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
+// import { container } from "@/infrastructure/di/container";
 
 export function devCommand(
   bot: Telegraf<BotContext>,
@@ -14,21 +16,15 @@ export function devCommand(
   bot.command("dev", async (ctx) => {
     // init();
 
-    const ix = SystemProgram.transfer({
-      fromPubkey: new PublicKey(ctx.user.walletAddress),
-      toPubkey: new PublicKey("XLXwXZ6gEDERzH2H3N928Xf3DtCtLy2rpLFi9bArZQF"),
-      lamports: LAMPORTS_PER_SOL / 1000,
-    });
+    // const adapter = container.get(MeteoraAdapter);
+    // const pos = await adapter.getPosition(
+    //   "EBmsNX9Va2gVbP1tXfrW3mD7aQ8cmtdPGHC2BD6v7mMM",
+    //   {
+    //     poolAddress: "4GfTwijVFhE1qFCZgEnJo8f69vLwCqTCSDZD5xyQu3J9",
+    //   }
+    // );
 
-    const s = await WalletService.signAndSendViaGateway(
-      ctx.user.walletId,
-      ctx.user.walletAddress,
-      [ix],
-      [],
-      {}
-    );
-
-    console.log(s);
+    // console.dir(pos);
 
     return ctx.replyWithMarkdown(`Dev command`, DISABLE_LINK_PREVIEW);
 
