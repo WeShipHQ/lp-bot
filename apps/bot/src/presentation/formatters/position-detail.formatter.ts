@@ -3,6 +3,7 @@ import type {
   TokenPrice,
   UnifiedPool,
   UnifiedPosition,
+  UserPosition,
 } from "@/types/core.types";
 import {
   formatCurrency,
@@ -152,6 +153,65 @@ export class PositionDetailFormatter {
 
     const updatedAt = onchain?.updatedAt ?? position.getUpdatedAt();
     lines.push(`_Last updated: ${updatedAt.toLocaleString()}_`);
+
+    return {
+      text: lines.join("\n"),
+      pairLabel,
+    };
+  }
+
+  static formatUserPosition(position: UserPosition): PositionDetailView {
+    const tokenA = position.tokenA;
+    const tokenB = position.tokenB;
+    const pairLabel = `${tokenA.symbol}/${tokenB.symbol}`;
+
+    const tokenAUi = parseFloat(position.tokenAAmount);
+    const tokenBUi = parseFloat(position.tokenBAmount);
+
+    const totalCurrentValueUsd = position.currentValueUsd;
+    const claimedFeesUsd = position.claimedFeesUsd;
+    const unclaimedFeesUsd = position.unclaimedFeesUsd;
+    const netProfitUsd = position.metrics.totalPnlUsd;
+    const netProfitPct = position.pnlPercentage;
+    const pnlEmoji = netProfitUsd > 0 ? "📈" : netProfitUsd < 0 ? "📉" : "➖";
+
+    const lines: string[] = [];
+
+    lines.push(`*${pairLabel}* (${position.dex.toUpperCase()})`);
+    lines.push("");
+    lines.push(
+      `${pnlEmoji} *Net PnL:* ${formatCurrency(netProfitUsd, { maxDecimals: 2 })} (${formatPercentage(netProfitPct, { decimals: 2, alwaysShowSign: true })})`
+    );
+    lines.push(divider());
+
+    lines.push(`*Balance*`);
+    lines.push(`• ${tokenA.symbol}: ${formatNumber(tokenAUi, { maxDecimals: 6 })}`);
+    lines.push(`• ${tokenB.symbol}: ${formatNumber(tokenBUi, { maxDecimals: 6 })}`);
+    lines.push(
+      `• Total Value: ${formatCurrency(totalCurrentValueUsd, { maxDecimals: 2 })}`
+    );
+    lines.push("");
+
+    lines.push(`*Fees*`);
+    lines.push(
+      `• Claimed: ${formatCurrency(claimedFeesUsd, { maxDecimals: 2 })}`
+    );
+    lines.push(
+      `• Unclaimed: ${formatCurrency(unclaimedFeesUsd, { maxDecimals: 2 })}`
+    );
+    lines.push("");
+
+    lines.push(`*Status*`);
+    lines.push(`• ${position.inRange ? "🟢 In Range" : "🔴 Out of Range"}`);
+
+    lines.push("");
+    lines.push(
+      `_Duration: ${position.metrics.durationDays.toFixed(2)} days | Rebalances: ${position.metrics.rebalanceCount}_`
+    );
+
+    lines.push(
+      `_Last updated: ${position.updatedAt.toLocaleString()}_`
+    );
 
     return {
       text: lines.join("\n"),

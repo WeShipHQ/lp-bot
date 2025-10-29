@@ -803,6 +803,13 @@ export class TransactionConfirmWorker
     signature: string;
     pendingTxId: string;
     metadata: any;
+    //metadata ->  {
+    //           positionId: string,
+    //           userId: command.userIdstring,
+    //           dex: DexType,
+    //           poolAddress: string,
+    //           oldPositionAddress: string,
+    //         }
     session: RebalanceSessionMetadata;
     userId: string;
   }): Promise<void> {
@@ -896,62 +903,9 @@ export class TransactionConfirmWorker
       claimedFeesTokenB: claimedTokenBLamports.toString(),
       totalTokenA: totalTokenALamports.toString(),
       totalTokenB: totalTokenBLamports.toString(),
-      // solFromTokenA: "0",
-      // solFromTokenB: "0",
-      // swapSignaturesToSol: {
-      //   tokenA: undefined as string | undefined,
-      //   tokenB: undefined as string | undefined,
-      // },
     };
 
-    // let solFromALamports = new Decimal(0);
-    // let solFromBLamports = new Decimal(0);
-
-    // if (totalTokenALamports.gt(0)) {
-    //   const { result, solReceived } = await this.swapService.swapTokenToSol(
-    //     userRecord,
-    //     session.tokenA.address,
-    //     totalTokenALamports.toFixed(0)
-    //   );
-    //   if (!result.success) {
-    //     throw new Error(
-    //       `Failed to convert ${session.tokenA.symbol ?? "Token A"} to SOL: ${
-    //         result.error ?? "unknown error"
-    //       }`
-    //     );
-    //   }
-    //   console.log("solReceived", solReceived);
-
-    //   closeSummary.solFromTokenA = solToLamports(solReceived).toString();
-    //   closeSummary.swapSignaturesToSol.tokenA = result.signature;
-    //   solFromALamports = new Decimal(closeSummary.solFromTokenA);
-    // }
-
-    // if (totalTokenBLamports.gt(0)) {
-    //   const { result, solReceived } = await this.swapService.swapTokenToSol(
-    //     userRecord,
-    //     session.tokenB.address,
-    //     totalTokenBLamports.toFixed(0)
-    //   );
-    //   if (!result.success) {
-    //     throw new Error(
-    //       `Failed to convert ${session.tokenB.symbol ?? "Token B"} to SOL: ${
-    //         result.error ?? "unknown error"
-    //       }`
-    //     );
-    //   }
-    //   console.log("solReceived", solReceived);
-
-    //   closeSummary.solFromTokenB = solToLamports(solReceived).toString();
-    //   closeSummary.swapSignaturesToSol.tokenB = result.signature;
-    //   solFromBLamports = new Decimal(closeSummary.solFromTokenB);
-    // }
-
-    // const totalSolLamports = solFromALamports
-    //   .add(solFromBLamports)
-    //   .toDecimalPlaces(0, Decimal.ROUND_DOWN);
-
-    if (totalTokensInSol.lte(0)) {
+    if (totalTokensInSolLamports.lte(0)) {
       throw new Error(
         "No SOL recovered from rebalance close; cannot recreate position"
       );
@@ -1066,7 +1020,9 @@ export class TransactionConfirmWorker
       tokenBAmount: tokenBUi,
       strategy: session.strategy,
       autoRebalance: session.autoRebalance,
-      depositMethod: "single_sided",
+      solAmount: totalTokensInSolLamports.toString(),
+      // FIXME dynamic value
+      depositMethod: "sol_auto_convert",
       rebalanceSession: {
         ...session,
         stage: "creating",

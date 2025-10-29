@@ -38,20 +38,19 @@ export class PositionMonitorWorker implements IWorker<PositionMonitorJobData> {
     try {
       const res = await this.getPositionUseCase.execute({ positionId });
       logger.info(
-        { positionId, position: res.onchain?.inRange },
+        { positionId, inRange: res.position?.inRange },
         "[PositionMonitorWorker] Get position result"
       );
 
       if (!res.success || !res.position)
         return { success: false, reason: res.error || "not_found" };
 
-      const position = res.position;
-      const onchain = res.onchain;
+      const userPosition = res.position;
 
-      const inRange = onchain?.inRange ?? true;
-      const activeId = onchain?.metadata?.activeId as number | undefined;
-      const lowerId = onchain?.metadata?.lowerBinId as number | undefined;
-      const upperId = onchain?.metadata?.upperBinId as number | undefined;
+      const inRange = userPosition.inRange;
+      const activeId = userPosition.metadata?.activeId as number | undefined;
+      const lowerId = userPosition.metadata?.lowerBinId as number | undefined;
+      const upperId = userPosition.metadata?.upperBinId as number | undefined;
 
       // If position is out of range, send a notification
       if (inRange === false) {
@@ -59,7 +58,7 @@ export class PositionMonitorWorker implements IWorker<PositionMonitorJobData> {
           await this.notificationService.sendNotification(userId, {
             type: "rebalance",
             title: "Position Out of Range",
-            message: `Your position ${position.positionAddress.slice(0, 6)}... is out of range${typeof activeId === "number" && typeof lowerId === "number" && typeof upperId === "number" ? ` (active ${activeId}, range ${lowerId}-${upperId})` : ""}.`,
+            message: `Your position ${userPosition.address.slice(0, 6)}... is out of range${typeof activeId === "number" && typeof lowerId === "number" && typeof upperId === "number" ? ` (active ${activeId}, range ${lowerId}-${upperId})` : ""}.`,
           });
         } catch (err) {
           logger.warn(
@@ -70,11 +69,11 @@ export class PositionMonitorWorker implements IWorker<PositionMonitorJobData> {
       }
 
       // Check if rebalancing needed: if out of range and auto-rebalance enabled
-      const shouldRebalance =
-        inRange === false && (position as any)["isRebalancingEnabled"];
+      // Note: isRebalancingEnabled would need to be added to UserPosition metadata or fetched separately
+      const shouldRebalance = inRange === false && userPosition.metadata?.isRebalancingEnabled;
+      
       if (shouldRebalance) {
-        const userAddress =
-          (res.onchain?.metadata?.userAddress as string) || res.userAddress || "";
+        const userAddress = userPosition.metadata?.userAddress as string;
         if (userAddress) {
           const payload: RebalanceJobData = {
             userId,

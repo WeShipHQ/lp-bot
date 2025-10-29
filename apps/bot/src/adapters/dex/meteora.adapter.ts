@@ -233,7 +233,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       positionData:
         positionInfo.lbPairPositionsData.find(
           (pos) => pos.publicKey.toBase58() === positionAddress
-        )?.positionData ?? {},
+        )?.positionData,
       lbPairInfo: {
         activeId: Number(lbPair.activeId ?? 0),
         binStep: Number(lbPair.binStep ?? 0),
@@ -262,7 +262,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       positionAddress,
       tokenA: tokenX,
       tokenB: tokenY,
-      positionData: lbPosition.positionData ?? {},
+      positionData: lbPosition.positionData,
       lbPairInfo: {
         activeId: Number(lbPair.activeId ?? 0),
         binStep: Number(lbPair.binStep ?? 0),

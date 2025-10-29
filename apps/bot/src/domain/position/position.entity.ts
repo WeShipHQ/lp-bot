@@ -1,9 +1,9 @@
-import { Money, PnL, TokenAmount, Range } from '../shared/value-objects';
-import { InvalidStateError, InvalidAmountError } from '../shared/errors';
+import { Money, PnL, TokenAmount, Range } from "../shared/value-objects";
+import { InvalidStateError, InvalidAmountError } from "../shared/errors";
 
-export type PositionStatus = 'ACTIVE' | 'CLOSED' | 'REBALANCING';
-export type DexType = 'meteora' | 'saros' | 'orca' | 'raydium';
-export type StrategyType = 'DLMM' | 'DAMM' | 'CONCENTRATED';
+export type PositionStatus = "ACTIVE" | "CLOSED" | "REBALANCING";
+export type DexType = "meteora" | "saros" | "orca" | "raydium";
+export type StrategyType = "DLMM" | "DAMM" | "CONCENTRATED";
 
 export interface PositionToken {
   address: string;
@@ -62,13 +62,13 @@ export class Position {
   static create(data: CreatePositionData): Position {
     const initialValue = Money.usd(data.initialValueUsd);
     const currentValue = Money.usd(data.initialValueUsd);
-    
+
     const initialTokenXAmount = TokenAmount.fromUi(
       data.tokenX.symbol,
       parseFloat(data.initialTokenXAmount),
       data.tokenX.decimals
     );
-    
+
     const initialTokenYAmount = TokenAmount.fromUi(
       data.tokenY.symbol,
       parseFloat(data.initialTokenYAmount),
@@ -86,7 +86,7 @@ export class Position {
       data.strategyType,
       data.tokenX,
       data.tokenY,
-      'ACTIVE',
+      "ACTIVE",
       initialValue,
       currentValue,
       initialTokenXAmount,
@@ -134,7 +134,7 @@ export class Position {
       parseFloat(data.initialTokenXAmount),
       data.tokenX.decimals
     );
-    
+
     const initialTokenYAmount = TokenAmount.fromUi(
       data.tokenY.symbol,
       parseFloat(data.initialTokenYAmount),
@@ -146,14 +146,14 @@ export class Position {
       parseFloat(data.currentTokenXAmount),
       data.tokenX.decimals
     );
-    
+
     const currentTokenYAmount = TokenAmount.fromUi(
       data.tokenY.symbol,
       parseFloat(data.currentTokenYAmount),
       data.tokenY.decimals
     );
 
-    const priceRange = data.priceRange 
+    const priceRange = data.priceRange
       ? Range.create(data.priceRange.min, data.priceRange.max)
       : null;
 
@@ -194,7 +194,7 @@ export class Position {
   }
 
   canClaim(): boolean {
-    return this.status === 'ACTIVE';
+    return this.status === "ACTIVE";
   }
 
   shouldRebalance(currentPrice: number): boolean {
@@ -206,11 +206,12 @@ export class Position {
       return false;
     }
 
-    if (this.status !== 'ACTIVE') {
+    if (this.status !== "ACTIVE") {
       return false;
     }
 
-    const deviation = this.priceRange.calculateDeviationFromBounds(currentPrice);
+    const deviation =
+      this.priceRange.calculateDeviationFromBounds(currentPrice);
     return Math.abs(deviation) >= this.rebalanceThreshold;
   }
 
@@ -231,31 +232,36 @@ export class Position {
   }
 
   close(): void {
-    if (this.status === 'CLOSED') {
-      throw new InvalidStateError('Position is already closed');
+    if (this.status === "CLOSED") {
+      throw new InvalidStateError("Position is already closed");
     }
 
-    this.status = 'CLOSED';
+    this.status = "CLOSED";
     this.closedAt = new Date();
     this.updatedAt = new Date();
   }
 
   updateCurrentValue(value: Money): void {
-    if (this.status === 'CLOSED') {
-      throw new InvalidStateError('Cannot update value of closed position');
+    if (this.status === "CLOSED") {
+      throw new InvalidStateError("Cannot update value of closed position");
     }
 
     if (value.lessThan(Money.zero())) {
-      throw new InvalidAmountError('Position value cannot be negative');
+      throw new InvalidAmountError("Position value cannot be negative");
     }
 
     this.currentValue = value;
     this.updatedAt = new Date();
   }
 
-  updateTokenAmounts(tokenXAmount: TokenAmount, tokenYAmount: TokenAmount): void {
-    if (this.status === 'CLOSED') {
-      throw new InvalidStateError('Cannot update token amounts of closed position');
+  updateTokenAmounts(
+    tokenXAmount: TokenAmount,
+    tokenYAmount: TokenAmount
+  ): void {
+    if (this.status === "CLOSED") {
+      throw new InvalidStateError(
+        "Cannot update token amounts of closed position"
+      );
     }
 
     this.currentTokenXAmount = tokenXAmount;
@@ -264,12 +270,12 @@ export class Position {
   }
 
   addClaimedFees(amount: Money): void {
-    if (this.status === 'CLOSED') {
-      throw new InvalidStateError('Cannot claim fees for closed position');
+    if (this.status === "CLOSED") {
+      throw new InvalidStateError("Cannot claim fees for closed position");
     }
 
     if (amount.lessThan(Money.zero())) {
-      throw new InvalidAmountError('Claimed fees amount cannot be negative');
+      throw new InvalidAmountError("Claimed fees amount cannot be negative");
     }
 
     this.claimedFees = this.claimedFees.add(amount);
@@ -278,7 +284,7 @@ export class Position {
 
   setTransactionSignature(signature: string): void {
     if (!signature || signature.trim().length === 0) {
-      throw new InvalidAmountError('Transaction signature cannot be empty');
+      throw new InvalidAmountError("Transaction signature cannot be empty");
     }
 
     this.transactionSignature = signature;
@@ -286,8 +292,10 @@ export class Position {
   }
 
   updatePriceRange(range: Range): void {
-    if (this.status === 'CLOSED') {
-      throw new InvalidStateError('Cannot update price range of closed position');
+    if (this.status === "CLOSED") {
+      throw new InvalidStateError(
+        "Cannot update price range of closed position"
+      );
     }
 
     this.priceRange = range;
@@ -295,20 +303,20 @@ export class Position {
   }
 
   startRebalancing(): void {
-    if (this.status !== 'ACTIVE') {
-      throw new InvalidStateError('Can only rebalance active positions');
+    if (this.status !== "ACTIVE") {
+      throw new InvalidStateError("Can only rebalance active positions");
     }
 
-    this.status = 'REBALANCING';
+    this.status = "REBALANCING";
     this.updatedAt = new Date();
   }
 
   completeRebalancing(): void {
-    if (this.status !== 'REBALANCING') {
-      throw new InvalidStateError('Position is not in rebalancing state');
+    if (this.status !== "REBALANCING") {
+      throw new InvalidStateError("Position is not in rebalancing state");
     }
 
-    this.status = 'ACTIVE';
+    this.status = "ACTIVE";
     this.updatedAt = new Date();
   }
 
@@ -361,15 +369,15 @@ export class Position {
   }
 
   isActive(): boolean {
-    return this.status === 'ACTIVE';
+    return this.status === "ACTIVE";
   }
 
   isClosed(): boolean {
-    return this.status === 'CLOSED';
+    return this.status === "CLOSED";
   }
 
   isRebalancing(): boolean {
-    return this.status === 'REBALANCING';
+    return this.status === "REBALANCING";
   }
 
   addEvent(event: any): void {

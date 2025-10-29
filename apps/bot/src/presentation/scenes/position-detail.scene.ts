@@ -2,7 +2,7 @@ import { Scenes } from "telegraf";
 import type { InlineKeyboardMarkup } from "@telegraf/types";
 import type { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
-import { container } from "@/infrastructure/di/container";
+import { container, DI_TOKENS } from "@/infrastructure/di/container";
 import { GetPositionUseCase } from "@/application/position/get-position.use-case";
 import { PositionDetailFormatter } from "../formatters/position-detail.formatter";
 import {
@@ -22,6 +22,7 @@ import { ClaimFeesUseCase } from "@/application/position/claim-fees.use-case";
 import { RebalancePositionUseCase } from "@/application/position/rebalance-position.use-case";
 import { getSolscanLink } from "@/utils/link";
 import type { PositionStatus } from "@/domain/position/position.entity";
+import { IPositionRepository } from "@/domain";
 
 interface SceneState {
   positionId?: string;
@@ -94,39 +95,41 @@ function buildPositionKeyboard(
 }
 
 async function loadPositionDetail(
-  ctx: BotContext,
+  _ctx: BotContext,
   identifiers: PositionIdentifiers
 ): Promise<PositionDetailData> {
   const useCase = container.get(GetPositionUseCase);
-  const result = await useCase.execute({
-    positionId: identifiers.positionId,
-    positionAddress: identifiers.positionAddress,
-    userId: ctx.user.id,
-    userAddress: ctx.user.walletAddress ?? undefined,
-    includePool: true,
-    includePrices: true,
-  });
+  const posRepo = container.get<IPositionRepository>(DI_TOKENS.PositionRepo);
+
+  let positionId = identifiers.positionId;
+  if (!positionId && identifiers.positionAddress) {
+    const pos = await posRepo.findByPositionAddress(
+      identifiers.positionAddress
+    );
+    if (!pos) throw new Error("Position not found");
+    positionId = pos.id;
+  }
+
+  if (!positionId) throw new Error("Position identifier missing");
+
+  const result = await useCase.execute({ positionId });
 
   if (!result.success || !result.position) {
     throw new Error(result.error ?? "Position not found");
   }
 
-  const view = PositionDetailFormatter.format({
-    position: result.position,
-    onchain: result.onchain,
-    pool: result.pool,
-    prices: result.prices,
-  });
+  const userPosition = result.position;
 
-  const status = result.position.getStatus();
+  const view = PositionDetailFormatter.formatUserPosition(userPosition);
+  const status = userPosition.status;
 
   return {
     text: view.text,
     pairLabel: view.pairLabel,
-    positionId: result.position.id,
-    positionAddress: result.position.positionAddress,
+    positionId: userPosition.id,
+    positionAddress: userPosition.address,
     status,
-    keyboard: buildPositionKeyboard(result.position.id, status),
+    keyboard: buildPositionKeyboard(userPosition.id, status),
   };
 }
 
