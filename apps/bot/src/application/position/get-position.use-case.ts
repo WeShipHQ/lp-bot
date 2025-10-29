@@ -1,48 +1,41 @@
 import { IPositionRepository } from "@/domain/position/position.repository";
-import type { Position } from "@/domain/position/position.entity";
 import { IUserRepository } from "@/domain/user/user.repository";
-import { Money, TokenAmount } from "@/domain/shared/value-objects";
+import { TokenAmount } from "@/domain/shared/value-objects";
 import {
   DexType,
-  UnifiedPool,
-  UnifiedPosition,
-  TokenPrice,
-  PositionWithPrices,
   UserPosition,
 } from "@/types/core.types";
 import { IDexAdapter } from "@/types/dex-adapter.interface";
 import { logger } from "@/utils/logger";
-import { getTokenPriceService } from "@/services/token-price.service";
 import { PriceEnrichmentService } from "@/services/price-enrichment.service";
 import { DexRegistryLike } from "./create-position.use-case";
+import { findRebalanceEventsByPositionId } from "@/db/queries";
 
 export interface GetPositionCommand {
-  positionId?: string;
-  positionAddress?: string;
-  userId?: string;
-  userAddress?: string;
-  includePool?: boolean;
-  includePrices?: boolean;
+  positionId: string;
 }
 
 export interface GetPositionResult {
   success: boolean;
-  position?: Position;
-  onchain?: UnifiedPosition;
-  pool?: UnifiedPool;
-  prices?: Record<string, TokenPrice | undefined>;
-  userAddress?: string;
-  error?: string;
-}
-
-export interface GetPositionEnrichedResult {
-  success: boolean;
   position?: UserPosition;
-  pool?: UnifiedPool;
-  userAddress?: string;
   error?: string;
 }
 
+/**
+ * GetPositionUseCase
+ * 
+ * Refactored use case that:
+ * - Accepts only positionId as input
+ * - Loads the DB Position record
+ * - Resolves the appropriate DEX adapter
+ * - Fetches the raw UnifiedPosition from the adapter
+ * - Enriches it via PriceEnrichmentService
+ * - Composes the final UserPosition payload with aggregated metrics:
+ *   - claimed fees (from DB)
+ *   - total pnl (calculated)
+ *   - duration (days since creation)
+ *   - rebalance count (from rebalanceEvents table)
+ */
 export class GetPositionUseCase {
   private readonly enrichmentService: PriceEnrichmentService;
 
@@ -55,108 +48,107 @@ export class GetPositionUseCase {
     this.enrichmentService = enrichmentService ?? new PriceEnrichmentService();
   }
 
+  /**
+   * Execute the use case to fetch and enrich a position
+   * 
+   * @param command - Contains only the positionId
+   * @returns GetPositionResult with enriched UserPosition
+   */
   async execute(command: GetPositionCommand): Promise<GetPositionResult> {
     try {
-      if (!command?.positionId && !command?.positionAddress) {
-        return { success: false, error: "Position identifier is required" };
+      // Validate input
+      if (!command?.positionId) {
+        return { success: false, error: "Position ID is required" };
       }
 
-      let position: Position | null = null;
-      if (command.positionId) {
-        position = await this.positionRepository.findById(command.positionId);
-      } else if (command.positionAddress) {
-        position = await this.positionRepository.findByPositionAddress(
-          command.positionAddress
-        );
-      }
-
+      // Load position from database
+      const position = await this.positionRepository.findById(command.positionId);
       if (!position) {
         return { success: false, error: "Position not found" };
       }
 
+      // Get rebalancing settings from position
+      const isRebalancingEnabled = (position as any)["isRebalancingEnabled"] ?? false;
+      const rebalanceThreshold = (position as any)["rebalanceThreshold"] ?? 20;
+
+      // Fetch user information for aggregated metadata
+      const user = await this.userRepository.findById(position.userId);
+      const userAddress = user?.walletAddress ?? "";
+
+      // Resolve DEX adapter
       const adapter: IDexAdapter = this.dexRegistry.get(
         position.dex as DexType
       );
 
-      let onchain: UnifiedPosition | undefined;
-
+      // Fetch raw on-chain position data
+      let onchainPosition = null;
       try {
-        onchain = await adapter.getPosition(
+        const rawPosition = await adapter.getPosition(
           position.positionAddress,
           position.poolAddress
         );
 
-        if (onchain) {
+        if (rawPosition) {
           // Update domain entity with latest on-chain token amounts
-          const tokenXAmount = TokenAmount.fromUi(
+          const tokenXAmount = this.parseTokenAmount(
+            rawPosition.tokenAAmount,
             position.tokenX.symbol,
-            parseFloat(onchain.tokenAAmount),
             position.tokenX.decimals
           );
-          const tokenYAmount = TokenAmount.fromUi(
+          const tokenYAmount = this.parseTokenAmount(
+            rawPosition.tokenBAmount,
             position.tokenY.symbol,
-            parseFloat(onchain.tokenBAmount),
             position.tokenY.decimals
           );
           position.updateTokenAmounts(tokenXAmount, tokenYAmount);
+
+          // Enrich the raw position with price data
+          onchainPosition = await this.enrichmentService.enrichPosition(rawPosition);
         }
       } catch (err) {
         logger.warn(
           {
             err,
             positionId: position.id,
+            positionAddress: position.positionAddress,
           },
-          "Failed to enrich position with on-chain data"
+          "[GetPositionUseCase] Failed to fetch on-chain position data"
         );
-        console.error("Failed to enrich position with on-chain data", {
-          err,
-          positionId: position.id,
-        });
       }
 
-      let pool: UnifiedPool | undefined;
-      if (command.includePool) {
-        try {
-          pool = await adapter.getPool(position.poolAddress);
-        } catch (err) {
-          logger.warn(
-            {
-              err,
-              poolAddress: position.poolAddress,
-            },
-            "Failed to fetch pool metadata for position"
-          );
-        }
-      }
-      let prices: Record<string, TokenPrice | undefined> | undefined;
-      if (command.includePrices) {
-        try {
-          const priceService = getTokenPriceService();
-          prices = await priceService.getPrices([
-            position.tokenX.address,
-            position.tokenY.address,
-          ]);
-        } catch (err) {
-          logger.warn(
-            {
-              err,
-              positionId: position.id,
-            },
-            "Failed to fetch token prices for position"
-          );
-        }
-      }
+      // Enrich domain position to UserPosition with prices and PnL
+      const enrichedPosition = await this.enrichmentService.enrichDomainPosition(
+        position,
+        onchainPosition ?? undefined
+      );
+
+      // Calculate aggregated metrics
+      const durationDays = this.calculateDurationDays(position.createdAt);
+      const rebalanceCount = await this.getRebalanceCount(position.id);
+
+      // Compose final UserPosition with all aggregated metrics
+      const userPosition: UserPosition = {
+        ...enrichedPosition,
+        metadata: {
+          ...enrichedPosition.metadata,
+          isRebalancingEnabled,
+          rebalanceThreshold,
+          userAddress, // Add for worker compatibility
+        },
+        metrics: {
+          claimedFeesUsd: enrichedPosition.claimedFeesUsd,
+          totalPnlUsd: enrichedPosition.pnlUsd,
+          durationDays,
+          rebalanceCount,
+        },
+      };
 
       return {
         success: true,
-        position,
-        onchain,
-        pool,
-        prices,
-        userAddress: command.userAddress,
+        position: userPosition,
       };
     } catch (error) {
-      logger.error({ error }, "GetPositionUseCase.execute unexpected error");
+      logger.error({ error, command }, "[GetPositionUseCase] Unexpected error");
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
@@ -165,51 +157,35 @@ export class GetPositionUseCase {
   }
 
   /**
-   * New enriched execution that returns a fully priced position
+   * Parse token amount string to TokenAmount value object
    */
-  async executeEnriched(command: GetPositionCommand): Promise<GetPositionEnrichedResult> {
-    const result = await this.execute({ ...command, includePrices: true });
+  private parseTokenAmount(amount: string, symbol: string, decimals: number) {
+    return TokenAmount.fromUi(symbol, parseFloat(amount), decimals);
+  }
 
-    if (!result.success || !result.position) {
-      return {
-        success: false,
-        error: result.error ?? "Failed to fetch position",
-      };
-    }
+  /**
+   * Calculate duration in days since position creation
+   */
+  private calculateDurationDays(createdAt: Date): number {
+    const now = new Date();
+    const diffMs = now.getTime() - createdAt.getTime();
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    return Math.max(0, Math.round(diffDays * 100) / 100); // Round to 2 decimal places
+  }
 
+  /**
+   * Get rebalance count from database
+   */
+  private async getRebalanceCount(positionId: string): Promise<number> {
     try {
-      const prices = result.prices
-        ? (Object.entries(result.prices).reduce((acc, [key, value]) => {
-            if (value) acc[key] = value;
-            return acc;
-          }, {} as Record<string, TokenPrice>))
-        : await getTokenPriceService().getPrices([
-            result.position.tokenX.address,
-            result.position.tokenY.address,
-          ]);
-
-      const enrichedOnchain = result.onchain
-        ? await this.enrichmentService.enrichPosition(result.onchain, prices)
-        : undefined;
-
-      const userPosition = await this.enrichmentService.enrichDomainPosition(
-        result.position,
-        enrichedOnchain,
-        prices
+      const rebalanceEvents = await findRebalanceEventsByPositionId(positionId);
+      return rebalanceEvents.length;
+    } catch (err) {
+      logger.warn(
+        { err, positionId },
+        "[GetPositionUseCase] Failed to fetch rebalance count"
       );
-
-      return {
-        success: true,
-        position: userPosition,
-        pool: result.pool,
-        userAddress: result.userAddress,
-      };
-    } catch (error) {
-      logger.error({ error }, "GetPositionUseCase.executeEnriched failed");
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
+      return 0;
     }
   }
 }

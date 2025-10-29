@@ -91,6 +91,16 @@ export interface PositionWithPrices extends UnifiedPosition {
 }
 
 /**
+ * Aggregated metrics for a user position
+ */
+export interface PositionAggregatedMetrics {
+  claimedFeesUsd: number;
+  totalPnlUsd: number;
+  durationDays: number;
+  rebalanceCount: number;
+}
+
+/**
  * UserPosition - Complete position view with historical context
  * Combines on-chain position data with database history for PnL calculation
  */
@@ -101,6 +111,12 @@ export interface UserPosition extends PositionWithPrices {
   // Calculated PnL (requires initial value from DB)
   pnlUsd: number;
   pnlPercentage: number;
+
+  // Position status
+  status: "ACTIVE" | "CLOSED" | "REBALANCING";
+  
+  // Aggregated metrics payload
+  metrics: PositionAggregatedMetrics;
 }
 
 export interface TransactionResult {

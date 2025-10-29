@@ -158,6 +158,8 @@ export class PriceEnrichmentService {
       unclaimedFeesUsd
     );
 
+    const durationDays = this.calculateDurationDays(position.createdAt);
+
     return {
       id: position.id,
       address: position.positionAddress,
@@ -193,6 +195,13 @@ export class PriceEnrichmentService {
       initialValueUsd,
       pnlUsd,
       pnlPercentage,
+      status: position.getStatus(),
+      metrics: {
+        claimedFeesUsd,
+        totalPnlUsd: pnlUsd,
+        durationDays,
+        rebalanceCount: 0,
+      },
     };
   }
 
@@ -288,6 +297,16 @@ export class PriceEnrichmentService {
       totalRewardsUsd,
       dexBreakdown,
     };
+  }
+
+  /**
+   * Calculate duration in days since position creation
+   */
+  private calculateDurationDays(createdAt: Date): number {
+    const now = new Date();
+    const diffMs = now.getTime() - createdAt.getTime();
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    return Math.max(0, Math.round(diffDays * 100) / 100);
   }
 
   /**
