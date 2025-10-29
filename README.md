@@ -101,9 +101,32 @@ export class SarosDLMMService {
 
 - **Layered Architecture**: Clean separation of concerns with service, repository, and adapter patterns
 - **Scene-Based Flow Management**: Complex user interactions handled through Telegraf scenes
+- **Flow State Machine**: Idempotent transaction flows with recovery checkpoints, cleanup workers, and explicit state transitions
 - **Worker Processes**: Background monitoring and rebalancing with job queues
 - **Dependency Injection**: Modular design for easy testing and maintenance
 - **Error Handling**: Comprehensive error management with user-friendly messages
+
+## 🔐 Transaction Safety & Reliability
+
+### Flow State Machine (v2.0)
+
+All critical transaction flows (CREATE, CLAIM, CLOSE, REBALANCE) are managed by an explicit state machine providing:
+
+- **Idempotency Guarantees**: Duplicate requests don't create duplicate positions
+- **Recovery Checkpoints**: Resume from any point after crashes or failures
+- **Automatic Cleanup**: Stale flows detected and handled automatically
+- **Error Tracking**: Full error history with retry strategies
+- **Observability**: Every state transition logged and traceable
+
+### Monitoring Expectations
+
+- **Flow Success Rate**: > 95% of transactions complete successfully
+- **Recovery Time**: Failed flows auto-recover within 5 minutes
+- **Stale Flow Detection**: Cleanup worker runs every 5 minutes
+- **Transaction Confirmation**: p95 < 30 seconds
+- **Operational Visibility**: Real-time dashboards for flow health, queue status, and RPC performance
+
+See [Developer Documentation](/docs/developer/) for detailed guides on architecture, troubleshooting, and monitoring.
 
 ## 🚀 Getting Started
 
