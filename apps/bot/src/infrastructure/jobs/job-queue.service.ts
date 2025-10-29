@@ -31,6 +31,12 @@ import { PrivyTransactionService } from "@/services/transaction.service";
 import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
 import { container } from "../di/container";
 import { SwapService } from "@/services/swap.service";
+import { normalizeError } from "@/utils/errors";
+import {
+  shouldRetryJob,
+  calculateRetryDelay,
+  handleWorkerError,
+} from "./retry-strategy";
 
 export type EnqueueOptions = {
   delay?: number;
@@ -170,13 +176,23 @@ export class JobQueueService {
       );
     });
 
-    worker.on("failed", (job, err) => {
+    worker.on("failed", async (job, err) => {
+      const telemetry = await import("@/utils/errors").then((m) =>
+        m.extractErrorTelemetry(err, {
+          jobId: job?.id,
+          jobName: name,
+          attemptsMade: job?.attemptsMade,
+        })
+      );
+
       logger.error(
         {
           jobId: job?.id,
           name,
           attemptsMade: job?.attemptsMade,
           data: job?.data,
+          errorCode: telemetry.errorCode,
+          errorCategory: telemetry.errorCategory,
           error: err?.message,
           stack: err?.stack,
         },
