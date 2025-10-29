@@ -3,6 +3,7 @@ import type {
   TInitializePositionAndAddLiquidityParamsByStrategy,
   StrategyType,
 } from "@meteora-ag/dlmm";
+import type { StrategyName } from "@/domain/strategies";
 import type { PublicKey } from "@solana/web3.js";
 import BN from "bn.js";
 
@@ -75,7 +76,11 @@ export type LbPair = {
 
 export type MeteoraStrategyTypeKey = keyof typeof StrategyType;
 export type MeteoraPoolType = "damm_v1" | "damm_v2" | "dlmm";
-export type MeteoraCreatePositionStrategy = "spot" | "curve" | "bid-ask";
+
+/**
+ * @deprecated Use StrategyName from @/domain/strategies instead
+ */
+export type MeteoraCreatePositionStrategy = StrategyName;
 
 export interface CreateMeteoraPositionParams
   extends TInitializePositionAndAddLiquidityParamsByStrategy {}
