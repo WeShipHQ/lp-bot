@@ -16,28 +16,16 @@ import {
 } from "@/services/token-price.service";
 import { JupiterService } from "@/services/jupiter.service";
 
-/**
- * Context required for transforming on-chain position data
- */
 export interface PositionTransformContext {
-  /** Pool address where the position exists */
   poolAddress: string;
-  /** Position account address */
   positionAddress: string;
-  /** Token A information */
   tokenA: Token;
-  /** Token B information */
   tokenB: Token;
-  /** Raw position data from DLMM SDK or API */
   positionData: any;
-  /** Token price map for USD calculations */
-  priceMap: Record<string, { price?: number } | undefined>;
-  /** LbPair metadata (binStep, activeId, etc.) */
   lbPairInfo: {
     activeId?: number;
     binStep?: number;
   };
-  /** Additional metadata to include in the position */
   metadataExtras?: Record<string, unknown>;
 }
 
@@ -73,28 +61,11 @@ export interface PositionTransformContext {
  */
 export class MeteoraTransformers {
   private readonly dexType: DexType = "meteora";
-  private readonly prices: TokenPriceService;
   private readonly jupiter: JupiterService;
 
-  constructor(deps?: {
-    tokenPriceService?: TokenPriceService;
-    jupiterService?: JupiterService;
-  }) {
-    this.prices =
-      deps?.tokenPriceService ??
-      (() => {
-        try {
-          return getTokenPriceService();
-        } catch {
-          return new TokenPriceService();
-        }
-      })();
+  constructor(deps?: { jupiterService?: JupiterService }) {
     this.jupiter = deps?.jupiterService ?? new JupiterService();
   }
-
-  // ============================================================================
-  // Public Transformation Entry Points
-  // ============================================================================
 
   /**
    * Transform Meteora DLMM API response to UnifiedPool
@@ -389,15 +360,10 @@ export class MeteoraTransformers {
       tokenA,
       tokenB,
       positionData,
-      // priceMap,
       lbPairInfo,
       metadataExtras,
     } = context;
 
-    // const tokenAPrice = priceMap[tokenA.address]?.price ?? 0;
-    // const tokenBPrice = priceMap[tokenB.address]?.price ?? 0;
-
-    // Extract token amounts (prefer excludeTransferFee variants)
     const totalXRaw =
       positionData.totalXAmountExcludeTransferFee ??
       positionData.totalXAmount ??
@@ -410,28 +376,6 @@ export class MeteoraTransformers {
     const tokenAAmountUi = this.fromRawAmount(totalXRaw, tokenA.decimals);
     const tokenBAmountUi = this.fromRawAmount(totalYRaw, tokenB.decimals);
 
-    // Calculate current value in USD
-    // const currentValueUsd =
-    //   tokenAAmountUi * tokenAPrice + tokenBAmountUi * tokenBPrice;
-
-    // Extract fee amounts
-    // const feeXRaw =
-    //   positionData.feeXExcludeTransferFee ?? positionData.feeX ?? 0;
-    // const feeYRaw =
-    //   positionData.feeYExcludeTransferFee ?? positionData.feeY ?? 0;
-
-    // const unclaimedFeesUsd =
-    //   this.fromRawAmount(feeXRaw, tokenA.decimals) * tokenAPrice +
-    //   this.fromRawAmount(feeYRaw, tokenB.decimals) * tokenBPrice;
-
-    // Extract claimed fees (if available)
-    // const claimedFeeXRaw = positionData.totalClaimedFeeXAmount ?? 0;
-    // const claimedFeeYRaw = positionData.totalClaimedFeeYAmount ?? 0;
-    // const claimedFeesUsd =
-    //   this.fromRawAmount(claimedFeeXRaw, tokenA.decimals) * tokenAPrice +
-    //   this.fromRawAmount(claimedFeeYRaw, tokenB.decimals) * tokenBPrice;
-
-    // Determine price range and in-range status
     const lowerBinId =
       this.toNumeric(positionData.lowerBinId ?? positionData.binLower) ?? 0;
     const upperBinId =
@@ -441,7 +385,6 @@ export class MeteoraTransformers {
 
     const inRange = activeId >= lowerBinId && activeId <= upperBinId;
 
-    // Parse timestamps
     const updatedAt = this.toDate(
       positionData.lastUpdatedAt ?? positionData.updatedAt ?? Date.now()
     );
@@ -479,30 +422,6 @@ export class MeteoraTransformers {
     };
   }
 
-  /**
-   * Transform API position data to UnifiedPosition
-   *
-   * **Data Source:** Meteora API position endpoints (deposits, withdrawals, fees, rewards)
-   *
-   * **Note:** This method is a placeholder for future API-based position transformations.
-   * Currently, positions are primarily fetched via on-chain SDK calls.
-   * API endpoints expose position history (deposits/withdrawals/claims) but not full state.
-   *
-   * @param data - Position data from Meteora API
-   * @param poolAddress - Pool address for the position
-   * @param positionAddress - Position account address
-   * @returns Unified position structure
-   * @throws Not yet implemented - use onChainToUnifiedPosition for now
-   */
-  toUnifiedPosition(
-    data: any,
-    poolAddress: string,
-    positionAddress: string
-  ): UnifiedPosition {
-    throw new Error(
-      "API-based position transformation not yet implemented. Use onChainToUnifiedPosition instead."
-    );
-  }
 
   // ============================================================================
   // Helper Methods
