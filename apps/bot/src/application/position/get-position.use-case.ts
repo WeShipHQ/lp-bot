@@ -1,10 +1,7 @@
 import { IPositionRepository } from "@/domain/position/position.repository";
 import { IUserRepository } from "@/domain/user/user.repository";
 import { TokenAmount } from "@/domain/shared/value-objects";
-import {
-  DexType,
-  UserPosition,
-} from "@/types/core.types";
+import { DexType, UserPosition, PositionWithPrices } from "@/types/core.types";
 import { IDexAdapter } from "@/types/dex-adapter.interface";
 import { logger } from "@/utils/logger";
 import { PriceEnrichmentService } from "@/services/price-enrichment.service";
@@ -21,21 +18,6 @@ export interface GetPositionResult {
   error?: string;
 }
 
-/**
- * GetPositionUseCase
- * 
- * Refactored use case that:
- * - Accepts only positionId as input
- * - Loads the DB Position record
- * - Resolves the appropriate DEX adapter
- * - Fetches the raw UnifiedPosition from the adapter
- * - Enriches it via PriceEnrichmentService
- * - Composes the final UserPosition payload with aggregated metrics:
- *   - claimed fees (from DB)
- *   - total pnl (calculated)
- *   - duration (days since creation)
- *   - rebalance count (from rebalanceEvents table)
- */
 export class GetPositionUseCase {
   private readonly enrichmentService: PriceEnrichmentService;
 
@@ -48,40 +30,35 @@ export class GetPositionUseCase {
     this.enrichmentService = enrichmentService ?? new PriceEnrichmentService();
   }
 
-  /**
-   * Execute the use case to fetch and enrich a position
-   * 
-   * @param command - Contains only the positionId
-   * @returns GetPositionResult with enriched UserPosition
-   */
   async execute(command: GetPositionCommand): Promise<GetPositionResult> {
     try {
-      // Validate input
       if (!command?.positionId) {
         return { success: false, error: "Position ID is required" };
       }
 
-      // Load position from database
-      const position = await this.positionRepository.findById(command.positionId);
+      const position = await this.positionRepository.findById(
+        command.positionId
+      );
+
       if (!position) {
         return { success: false, error: "Position not found" };
       }
 
-      // Get rebalancing settings from position
-      const isRebalancingEnabled = (position as any)["isRebalancingEnabled"] ?? false;
-      const rebalanceThreshold = (position as any)["rebalanceThreshold"] ?? 20;
-
-      // Fetch user information for aggregated metadata
       const user = await this.userRepository.findById(position.userId);
+      if (!user) {
+        return { success: false, error: "User not found" };
+      }
       const userAddress = user?.walletAddress ?? "";
 
-      // Resolve DEX adapter
+      const isRebalancingEnabled =
+        user.getPreferences().autoRebalanceEnabled ?? false;
+      const rebalanceThreshold = user.getPreferences().rebalanceThreshold;
+
       const adapter: IDexAdapter = this.dexRegistry.get(
         position.dex as DexType
       );
 
-      // Fetch raw on-chain position data
-      let onchainPosition = null;
+      let onchainPosition: PositionWithPrices | null = null;
       try {
         const rawPosition = await adapter.getPosition(
           position.positionAddress,
@@ -89,7 +66,6 @@ export class GetPositionUseCase {
         );
 
         if (rawPosition) {
-          // Update domain entity with latest on-chain token amounts
           const tokenXAmount = this.parseTokenAmount(
             rawPosition.tokenAAmount,
             position.tokenX.symbol,
@@ -102,8 +78,8 @@ export class GetPositionUseCase {
           );
           position.updateTokenAmounts(tokenXAmount, tokenYAmount);
 
-          // Enrich the raw position with price data
-          onchainPosition = await this.enrichmentService.enrichPosition(rawPosition);
+          onchainPosition =
+            await this.enrichmentService.enrichPosition(rawPosition);
         }
       } catch (err) {
         logger.warn(
@@ -117,10 +93,11 @@ export class GetPositionUseCase {
       }
 
       // Enrich domain position to UserPosition with prices and PnL
-      const enrichedPosition = await this.enrichmentService.enrichDomainPosition(
-        position,
-        onchainPosition ?? undefined
-      );
+      const enrichedPosition =
+        await this.enrichmentService.enrichDomainPosition(
+          position,
+          onchainPosition
+        );
 
       // Calculate aggregated metrics
       const durationDays = this.calculateDurationDays(position.createdAt);
@@ -156,9 +133,6 @@ export class GetPositionUseCase {
     }
   }
 
-  /**
-   * Parse token amount string to TokenAmount value object
-   */
   private parseTokenAmount(amount: string, symbol: string, decimals: number) {
     return TokenAmount.fromUi(symbol, parseFloat(amount), decimals);
   }

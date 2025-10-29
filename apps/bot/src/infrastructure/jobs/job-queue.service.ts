@@ -27,7 +27,6 @@ import { RebalancePositionUseCase } from "@/application/position/rebalance-posit
 import { dexRegistry } from "@/services/dex-registry.service";
 import type { Telegraf } from "telegraf";
 import type { BotContext } from "@/types/bot.types";
-import { PrivyTransactionService } from "@/services/transaction.service";
 import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
 import { container } from "../di/container";
 import { SwapService } from "@/services/swap.service";
@@ -64,8 +63,8 @@ export class JobQueueService {
       connection: this.redis,
       defaultJobOptions: {
         removeOnComplete: 100,
-        removeOnFail: 50,
-        attempts: 3,
+        removeOnFail: 0,
+        attempts: 1,
         backoff: { type: "exponential", delay: 2000 },
       },
     } as QueueOptions;
@@ -85,8 +84,7 @@ export class JobQueueService {
         this
       );
 
-      const getPositionUseCase = container.get(GetPositionUseCase); //new GetPositionUseCase(positionRepo, dexRegistry);
-      const txService = new PrivyTransactionService();
+      const getPositionUseCase = container.get(GetPositionUseCase);
       const rebalanceUseCase = new RebalancePositionUseCase(
         positionRepo,
         dexRegistry

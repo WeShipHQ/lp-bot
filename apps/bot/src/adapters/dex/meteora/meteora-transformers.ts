@@ -15,13 +15,16 @@ import {
   getTokenPriceService,
 } from "@/services/token-price.service";
 import { JupiterService } from "@/services/jupiter.service";
+import { PositionData } from "@meteora-ag/dlmm";
+import Decimal from "decimal.js";
+import { rawToUiAmount } from "@/utils/number-utils";
 
 export interface PositionTransformContext {
   poolAddress: string;
   positionAddress: string;
   tokenA: Token;
   tokenB: Token;
-  positionData: any;
+  positionData?: PositionData;
   lbPairInfo: {
     activeId?: number;
     binStep?: number;
@@ -364,31 +367,54 @@ export class MeteoraTransformers {
       metadataExtras,
     } = context;
 
+    console.log("-----------------> feex", positionData?.feeX.toString());
+    console.log("-----------------> feeY", positionData?.feeY.toString());
+    console.log(
+      "-----------------> totalClaimedFeeXAmount",
+      positionData?.totalClaimedFeeXAmount.toString()
+    );
+    console.log(
+      "-----------------> totalClaimedFeeYAmount",
+      positionData?.totalClaimedFeeYAmount.toString()
+    );
+
     const totalXRaw =
-      positionData.totalXAmountExcludeTransferFee ??
-      positionData.totalXAmount ??
+      new Decimal(
+        positionData?.totalXAmountExcludeTransferFee.toString() ?? "0"
+      ) ??
+      new Decimal(positionData?.totalXAmount.toString() ?? "0") ??
       0;
     const totalYRaw =
-      positionData.totalYAmountExcludeTransferFee ??
-      positionData.totalYAmount ??
+      new Decimal(
+        positionData?.totalYAmountExcludeTransferFee.toString() ?? "0"
+      ) ??
+      new Decimal(positionData?.totalYAmount.toString() ?? "0") ??
       0;
 
-    const tokenAAmountUi = this.fromRawAmount(totalXRaw, tokenA.decimals);
-    const tokenBAmountUi = this.fromRawAmount(totalYRaw, tokenB.decimals);
+    const tokenAAmountUi = this.fromRawAmount(
+      totalXRaw.toString(),
+      tokenA.decimals
+    );
+    const tokenBAmountUi = this.fromRawAmount(
+      totalYRaw.toString(),
+      tokenB.decimals
+    );
 
     const lowerBinId =
-      this.toNumeric(positionData.lowerBinId ?? positionData.binLower) ?? 0;
+      this.toNumeric(positionData?.lowerBinId?.toString()) ?? 0;
     const upperBinId =
-      this.toNumeric(positionData.upperBinId ?? positionData.binUpper) ?? 0;
+      this.toNumeric(positionData?.upperBinId?.toString()) ?? 0;
     const activeId = this.toNumeric(lbPairInfo.activeId) ?? 0;
     const binStepBps = this.toNumeric(lbPairInfo.binStep) ?? 0;
 
     const inRange = activeId >= lowerBinId && activeId <= upperBinId;
 
     const updatedAt = this.toDate(
-      positionData.lastUpdatedAt ?? positionData.updatedAt ?? Date.now()
+      positionData?.lastUpdatedAt?.toString() ?? Date.now()
     );
-    const createdAt = this.toDate(positionData.createdAt ?? updatedAt);
+    const createdAt = this.toDate(
+      positionData?.lastUpdatedAt?.toString() ?? updatedAt
+    );
 
     return {
       id: `${poolAddress}-${positionAddress}`,
@@ -402,6 +428,24 @@ export class MeteoraTransformers {
       // Position amounts (UI format as strings)
       tokenAAmount: tokenAAmountUi.toString(),
       tokenBAmount: tokenBAmountUi.toString(),
+
+      // fees
+      unclaimedFeesX: rawToUiAmount(
+        positionData?.feeX.toString() ?? "0",
+        tokenA.decimals
+      ).toString(),
+      unclaimedFeesY: rawToUiAmount(
+        positionData?.feeY.toString() ?? "0",
+        tokenB.decimals
+      ).toString(),
+      claimedFeesX: rawToUiAmount(
+        positionData?.totalClaimedFeeXAmount.toString() ?? "0",
+        tokenA.decimals
+      ).toString(),
+      claimedFeesY: rawToUiAmount(
+        positionData?.totalClaimedFeeYAmount.toString() ?? "0",
+        tokenB.decimals
+      ).toString(),
 
       // Position status
       inRange,
@@ -421,7 +465,6 @@ export class MeteoraTransformers {
       },
     };
   }
-
 
   // ============================================================================
   // Helper Methods

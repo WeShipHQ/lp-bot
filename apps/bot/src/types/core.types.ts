@@ -63,6 +63,12 @@ export interface UnifiedPosition {
   tokenAAmount: string;
   tokenBAmount: string;
 
+  // fees
+  unclaimedFeesX: string;
+  unclaimedFeesY: string;
+  claimedFeesX: string;
+  claimedFeesY: string;
+
   // Position status
   inRange: boolean;
   isActive: boolean;
@@ -80,14 +86,9 @@ export interface UnifiedPosition {
  * Created by adding price data to a raw UnifiedPosition
  */
 export interface PositionWithPrices extends UnifiedPosition {
-  // Current USD values (calculated from current token amounts + prices)
   currentValueUsd: number;
-  
-  // Fee values in USD (calculated from on-chain fee amounts + prices)
   unclaimedFeesUsd: number;
   claimedFeesUsd: number;
-  unclaimedRewardsUsd?: number;
-  claimedRewardsUsd?: number;
 }
 
 /**
@@ -107,14 +108,14 @@ export interface PositionAggregatedMetrics {
 export interface UserPosition extends PositionWithPrices {
   // Historical values from database
   initialValueUsd: number;
-  
+
   // Calculated PnL (requires initial value from DB)
   pnlUsd: number;
   pnlPercentage: number;
 
   // Position status
   status: "ACTIVE" | "CLOSED" | "REBALANCING";
-  
+
   // Aggregated metrics payload
   metrics: PositionAggregatedMetrics;
 }
@@ -181,7 +182,6 @@ export interface UnifiedPortfolio {
   totalValueUsd: number;
   totalPnlUsd: number;
   totalFeesUsd: number;
-  totalRewardsUsd?: number;
   dexBreakdown: Record<
     DexType,
     {

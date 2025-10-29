@@ -22,6 +22,7 @@ import { ClaimFeesUseCase } from "@/application/position/claim-fees.use-case";
 import { RebalancePositionUseCase } from "@/application/position/rebalance-position.use-case";
 import { getSolscanLink } from "@/utils/link";
 import type { PositionStatus } from "@/domain/position/position.entity";
+import { IPositionRepository } from "@/domain";
 
 interface SceneState {
   positionId?: string;
@@ -94,21 +95,21 @@ function buildPositionKeyboard(
 }
 
 async function loadPositionDetail(
-  ctx: BotContext,
+  _ctx: BotContext,
   identifiers: PositionIdentifiers
 ): Promise<PositionDetailData> {
   const useCase = container.get(GetPositionUseCase);
-  
-  // Determine positionId - fallback to looking it up if only address provided
+  const posRepo = container.get<IPositionRepository>(DI_TOKENS.PositionRepo);
+
   let positionId = identifiers.positionId;
   if (!positionId && identifiers.positionAddress) {
-    const { IPositionRepository } = await import("@/domain/position/position.repository");
-    const posRepo = container.get<IPositionRepository>(DI_TOKENS.PositionRepo);
-    const pos = await posRepo.findByPositionAddress(identifiers.positionAddress);
+    const pos = await posRepo.findByPositionAddress(
+      identifiers.positionAddress
+    );
     if (!pos) throw new Error("Position not found");
     positionId = pos.id;
   }
-  
+
   if (!positionId) throw new Error("Position identifier missing");
 
   const result = await useCase.execute({ positionId });
