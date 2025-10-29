@@ -10,7 +10,7 @@ import {
 import { CacheKeys } from "@/infrastructure/cache/cache-keys";
 import { findUserById } from "@/db/queries";
 import { Money, TokenAmount } from "@/domain/shared/value-objects";
-import { getPriceEnrichmentService, PriceEnrichmentService } from "@/services/price-enrichment.service";
+import { PriceEnrichmentService } from "@/services/price-enrichment.service";
 
 export interface DexRegistryLike {
   get(dexType: DexType): IDexAdapter;
@@ -27,7 +27,7 @@ export class GetPortfolioUseCase {
     enrichmentService?: PriceEnrichmentService
   ) {
     this.cache = cacheService ?? getCacheService();
-    this.enrichmentService = enrichmentService ?? getPriceEnrichmentService();
+    this.enrichmentService = enrichmentService ?? new PriceEnrichmentService();
   }
 
   /**

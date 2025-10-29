@@ -13,7 +13,7 @@ import {
 import { IDexAdapter } from "@/types/dex-adapter.interface";
 import { logger } from "@/utils/logger";
 import { getTokenPriceService } from "@/services/token-price.service";
-import { getPriceEnrichmentService, PriceEnrichmentService } from "@/services/price-enrichment.service";
+import { PriceEnrichmentService } from "@/services/price-enrichment.service";
 import { DexRegistryLike } from "./create-position.use-case";
 
 export interface GetPositionCommand {
@@ -52,7 +52,7 @@ export class GetPositionUseCase {
     private readonly userRepository: IUserRepository,
     enrichmentService?: PriceEnrichmentService
   ) {
-    this.enrichmentService = enrichmentService ?? getPriceEnrichmentService();
+    this.enrichmentService = enrichmentService ?? new PriceEnrichmentService();
   }
 
   async execute(command: GetPositionCommand): Promise<GetPositionResult> {

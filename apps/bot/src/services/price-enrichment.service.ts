@@ -409,18 +409,18 @@ export class PriceEnrichmentService {
   }
 }
 
-// Singleton instance for convenience
+/**
+ * Note: PriceEnrichmentService should be obtained from the DI container
+ * instead of using these helper functions. These are provided for backwards
+ * compatibility during migration.
+ * 
+ * @deprecated Use container.get(PriceEnrichmentService) instead
+ */
 let enrichmentServiceInstance: PriceEnrichmentService | null = null;
 
-export function createPriceEnrichmentService(
-  priceService?: TokenPriceService
-): PriceEnrichmentService {
-  if (!enrichmentServiceInstance) {
-    enrichmentServiceInstance = new PriceEnrichmentService(priceService);
-  }
-  return enrichmentServiceInstance;
-}
-
+/**
+ * @deprecated Use container.get(PriceEnrichmentService) instead
+ */
 export function getPriceEnrichmentService(): PriceEnrichmentService {
   if (!enrichmentServiceInstance) {
     enrichmentServiceInstance = new PriceEnrichmentService();

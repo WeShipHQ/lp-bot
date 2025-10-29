@@ -66,6 +66,7 @@ import {
 } from "@/services/dex-registry.service";
 import { SwapService } from "@/services/swap.service";
 import { JupiterService } from "@/services/jupiter.service";
+import { PriceEnrichmentService } from "@/services/price-enrichment.service";
 
 // DB
 import { db } from "@/db";
@@ -159,6 +160,12 @@ function registerBase() {
     .toDynamicValue(() => new JupiterService())
     .inSingletonScope();
 
+  // Price enrichment service (singleton)
+  container
+    .bind(PriceEnrichmentService)
+    .toDynamicValue(() => new PriceEnrichmentService())
+    .inSingletonScope();
+
   // Use-cases (transient by default)
   container.bind(CreatePositionUseCase).toDynamicValue(
     (c) =>
@@ -198,7 +205,8 @@ function registerBase() {
         new GetPositionUseCase(
           c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
           c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
-          c.container.get<IUserRepository>(DI_TOKENS.UserRepo)
+          c.container.get<IUserRepository>(DI_TOKENS.UserRepo),
+          c.container.get(PriceEnrichmentService)
         )
     );
 
@@ -232,7 +240,8 @@ function registerBase() {
         new GetPortfolioUseCase(
           c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
           c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
-          c.container.get<ICacheService>(DI_TOKENS.Cache)
+          c.container.get<ICacheService>(DI_TOKENS.Cache),
+          c.container.get(PriceEnrichmentService)
         )
     );
 
