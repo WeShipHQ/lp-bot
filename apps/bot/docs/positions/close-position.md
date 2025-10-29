@@ -1,10 +1,10 @@
-# Close Position Flow (v2)
+# Close Position Flow — Current State Audit (Jan 2025)
 
 ## Overview
 
-Closing a position permanently withdraws liquidity, claims remaining fees, converts proceeds to SOL, and reports the final Profit & Loss (PnL). This flow is critical for the PRD’s requirement to surface accurate closure summaries and prevent residual liquidity.
+Closing a Meteora DLMM position withdraws all liquidity, harvests remaining fees, converts proceeds to SOL, and records realised PnL. The flow spans user confirmation, adapter orchestration, background processing, and persistence updates. This document captures the **current implementation** and the technical debt observed during the baseline audit.
 
-## High-Level Sequence
+## High-Level Flow
 
 ```mermaid
 sequenceDiagram
@@ -13,93 +13,106 @@ sequenceDiagram
     participant UC as ClosePositionUseCase
     participant Adapter as MeteoraAdapter
     participant Wallet as WalletService
-    participant DB as pendingTransactions
+    participant Jobs as JobQueueService
+    participant Pending as pendingTransactions
     participant Worker as transaction-confirm.worker.ts
     participant Swap as SwapService
     participant Persist as close-position-persistence.service.ts
-    participant Jobs as JobQueueService
 
-    User->>Scene: Tap "Close Position"
-    Scene->>Scene: Confirm closure (irreversible)
-    Scene->>UC: execute({ user, positionId, closureReason })
-    UC->>Repo: positionRepository.findById
-    UC->>Adapter: closePositionIx()
+    User->>Scene: tap "Close Position"
+    Scene->>Scene: display irreversible warning + confirmation modal
+    Scene->>UC: execute({ userId, positionId, userAddress, walletId })
+    UC->>Repo: positionRepository.findById(positionId)
+    UC->>Adapter: closePositionIxs({ poolAddress, positionAddress, userAddress })
     Adapter-->>UC: { instructions }
-    UC->>Wallet: sign & send close tx
+    UC->>Wallet: signAndSendViaGateway(walletId, userAddress, instructions)
     Wallet-->>UC: signature
-    UC->>DB: insert pendingTransactions (CLOSE_POSITION)
-    UC->>Jobs: enqueue JOB_TX_CONFIRM
-    Scene-->>User: "Close submitted" with Solscan link
+    UC->>Pending: insert CLOSE_POSITION row (status=PENDING)
+    UC->>Repo: position.close() + positionRepository.update(position)
+    UC->>Jobs: enqueue JOB_TX_CONFIRM(signature, CLOSE_POSITION)
+    Scene-->>User: "Closure submitted" + Solscan link
 
-    Worker->>Solana RPC: parse close instructions
+    Jobs->>Worker: process signature (CLOSE_POSITION)
+    Worker->>Solana RPC: getParsedTransaction(signature)
+    Worker->>Worker: parseMeteoraInstructions (withdraw + claim)
     Worker->>Swap: swapClaimedTokensToSOL(final tokens + fees)
-    Worker->>Persist: closePosition({ context, onChainData, prices })
-    Persist->>DB: update positions, segments, claimHistory, snapshots
+    Worker->>Persist: closePosition({ context, settlement, prices })
+    Persist->>DB: update positions/segments/claimHistory/snapshots
     Worker->>Cache: invalidate portfolio & position cache
     Worker->>Jobs: enqueue JOB_NOTIFICATION (PnL summary)
 ```
 
-## Layer Responsibilities
+## Implementation Snapshot
 
-| Layer | File(s) | Responsibilities |
-| --- | --- | --- |
-| Presentation | `presentation/scenes/position-detail.scene.ts` | Confirmation dialog, execution trigger, user messaging |
-| Application | `application/position/close-position.use-case.ts` | Validation, adapter invocation, pending tx metadata |
-| Worker | `transaction-confirm.worker.ts` | Instruction parsing, SOL conversions, persistence, notifications |
-| Infrastructure | `services/swap.service.ts` | Token → SOL conversions |
-| Persistence | `services/close-position-persistence.service.ts` | Final value & PnL computation, snapshots |
-| Data | `db/schema.ts` | `positions`, `positionSegments`, `claimHistory`, `positionSnapshots` |
+### Presentation Layer (`position-detail.scene.ts`)
+- Presents irreversible warning and requires explicit confirmation.
+- Sends command to `ClosePositionUseCase` with optional `closureReason` (default `user_close`).
+- Displays submission status and refreshes position card post-confirmation.
 
-## Presentation Strategy
+### Application Layer (`ClosePositionUseCase`)
+- Validates `userId`, `positionId`, `userAddress`, and ownership.
+- Fetches position from repository; ensures user owns the position.
+- Calls `IDexAdapter.closePositionIxs` to build remove-liquidity + claim instructions.
+- Submits transaction via `WalletService.signAndSendViaGateway`.
+- Persists pending transaction metadata (`PositionClosureContext`) including token metadata and closure reason.
+- Optimistically marks domain entity as `CLOSED` and persists immediately.
+- Enqueues `JOB_TX_CONFIRM` with 500 ms delay.
+- Invalidates portfolio and position caches (best-effort).
 
-1. **Confirmation** – The scene stresses irreversibility and requires explicit confirmation.
-2. **Execution** – On approval, the use case is invoked and the user sees a loading state until completion.
-3. **Post-Submission UX** – The chat message is replaced with success copy and the main position message is refreshed to show status `CLOSED`.
+### Worker Layer (`transaction-confirm.worker.ts`)
+- Polls Solana RPC for signature confirmation.
+- Parses Meteora instructions (`open/remove`, `claim`) to derive:
+  - `finalTokenAAmount`, `finalTokenBAmount`
+  - `claimedFeesTokenA/B`
+  - Raw lamport amounts
+- Converts all tokens to SOL using `SwapService`. Failures trigger retries; persistent failures leave tokens in native form (no UI feedback).
+- `closePositionPersistenceService.closePosition` transactionally:
+  - Inserts `claimHistory` row if fees harvested during close
+  - Closes current segment and records realised PnL
+  - Updates `positions` row with final valuations and status
+  - Inserts closure snapshot
+- Enqueues notification summarising realised PnL and refunds.
 
-## Application Strategy
+## Known Issues & Technical Debt
 
-`ClosePositionUseCase.execute` provides:
+| ID | Severity | Area | Description | Impact | Linked Work |
+|----|----------|------|-------------|--------|-------------|
+| CL-01 | 🔴 Critical | Application | **No idempotency** in `ClosePositionUseCase`. Retries could attempt duplicate closes. | Risk of double-close calls; though blockchain may reject, pending state becomes corrupted. | ADR-004, Enhancement Spec §Phase 1 |
+| CL-02 | 🔴 Critical | Worker | **Swap failure leaves funds in token form** with no user notification. | Users expect SOL; funds may remain illiquid, requiring manual support. | ADR-001, Enhancement Spec §Phase 2 |
+| CL-03 | 🔴 Critical | State | **Optimistic status update to CLOSED** before confirmation. If transaction fails, position remains incorrectly closed in DB. | Stale/incorrect portfolio, broken follow-up flows. | ADR-003, Enhancement Spec §Phase 1 |
+| CL-04 | 🟠 High | Validation | No pre-close validation (min liquidity, outstanding fees, pending transactions). | Potential to waste gas or conflict with concurrent operations. | Enhancement Spec §Phase 2 |
+| CL-05 | 🟠 High | Worker | **No rollback/compensation** when close fails after optimistic update. | Manual intervention required; state inconsistencies accumulate. | ADR-003, Enhancement Spec §Phase 1 |
+| CL-06 | 🟠 High | Error Handling | Mixed logging, generic error messages to users. | Hard to diagnose failures; users confused. | ADR-001 |
+| CL-07 | 🟠 High | Notification | PnL summary built on best-effort data; if price fetch fails, message may be misleading. | User trust impact; inaccurate analytics. | Enhancement Spec §Phase 3 |
+| CL-08 | 🟡 Medium | Swap | `MINIMAL_SOL_AMOUNT_IN_LAMPORTS` hardcoded; reserves may be insufficient for gas in volatile periods. | Transaction may fail due to insufficient SOL for fees. | Enhancement Spec §Phase 2 |
+| CL-09 | 🟡 Medium | Metrics | No instrumentation for close success rate or PnL distribution. | Can't validate PRD metrics (transaction success ≥95%). | Enhancement Spec §Phase 5 |
+| CL-10 | 🟢 Low | UX | No pre-close summary of expected token amounts or estimated SOL. | Users act without visibility; inconsistent with PRD guidelines. | Enhancement Spec §Phase 2 |
 
-1. **Validation** – Confirms ownership, wallet connectivity, and adapter availability.
-2. **Adapter Call** – `IDexAdapter.closePositionIx` builds the required remove + claim instructions.
-3. **Transaction Submission** – Submits via Sanctum Gateway (preferred) or Jito fallback.
-4. **Pending Metadata** – Records `PositionClosureContext` with token metadata, pool address, and closure reason (`user_close`, `stop_loss`, or `take_profit`).
-5. **Optimistic Update** – Marks the domain entity status as `CLOSED` to reflect intent immediately.
-6. **Job Scheduling** – Enqueues `JOB_TX_CONFIRM` for post-confirmation handling.
+> **Legend:** 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
-## Confirmation & Persistence Strategy
+## Observability & Telemetry
 
-Within `transaction-confirm.worker.ts`:
+- Logs missing structured metadata (e.g., `closureReason`, `finalValueUSD`).
+- No correlation IDs from close → worker → notification pipeline.
+- Pending transaction table lacks stage tracking (submitted vs confirmed vs persisted).
+- Swap retries logged but not exposed as metrics.
 
-1. **Instruction Parsing** – `extractCloseInstructionData` aggregates remove and claim transfers, outputting final token amounts and fee amounts in UI units and lamports.
-2. **Price Fetching** – USD prices for token A, token B, and SOL enable accurate reporting.
-3. **SOL Conversion** – Both final liquidity and fees are passed through `swapClaimedTokensToSOL`, ensuring the user ends with SOL. Conversion failures raise errors and trigger job retries.
-4. **Persistence** – `closePositionPersistenceService.closePosition` performs a DB transaction that:
-   - Inserts `claimHistory` (type `closure`) if fees were harvested.
-   - Updates the current segment with realised PnL and marks it closed.
-   - Updates the `positions` row with final USD/SOL values, final token amounts, and cumulative totals.
-   - Creates a `positionSnapshots` record (`snapshotType = "closure"`) capturing final metrics.
-5. **Cache & Notifications** – Portfolio and position caches are invalidated, and a multi-part notification summarises PnL and linking to Solscan is enqueued.
+## Next Steps (from Enhancement Specification)
 
-## PnL Calculation Summary
+1. **Idempotent Command Wrapper** for close position (ADR-004 — Phase 1).
+2. **State Machine** to manage optimistic updates and ensure rollbacks on failure (ADR-003).
+3. **Domain Error Classes** to improve user messaging and retry semantics (ADR-001).
+4. **Pre-Close Validation** (minimum liquidity, outstanding fees, pending operations).
+5. **Swap Reliability Improvements** with user feedback if conversion fails.
+6. **Compensation Logic:** If swap or persistence fails, notify user and retain tokens safely.
+7. **Pre-Close Summary UI** with estimated SOL/value breakdown.
+8. **Metrics:** close success rate, average PnL, swap failure counts.
 
-Inside the persistence service:
+## References
 
-- **Segment PnL** = `(finalValueUSD + feesClaimedUSD) - segmentInitialUSD`
-- **Total Realised PnL** accumulates prior segments + the current segment PnL.
-- **Total PnL Percentage** = `(positionValueGain + totalFeesClaimedUSD) / initialValueUSD`
-- **Final Value in SOL** is derived from the SOL price used during conversion for accurate wallet reconciliation.
-
-Full formulas are detailed in [`pnl-calculation.md`](./pnl-calculation.md).
-
-## Error Handling
-
-- **Missing Position Address** – If parsing fails to recover the on-chain position, the flow logs and aborts to avoid corrupting state.
-- **Swap Failures** – Logged and cause job retries; the transaction is marked failed only after retries are exhausted.
-- **Cache Invalidation Failures** – Logged at `debug` and do not block completion (UI will refetch on next request).
-
-## Extensibility Notes
-
-- **Stop-Loss / Take-Profit Automation** – When triggered automatically, reuse the same use case with `closureReason` set accordingly. Persistence and notifications already accept the reason.
-- **Summary Assets** – The notification payload reserves room for a visual summary; hooking into an image service only requires adding an additional notification message.
-- **Multi-DEX** – Adapters for other DEXes must expose compatible `closePositionIx` semantics; the downstream pipeline is DEX-agnostic as long as `extractCloseInstructionData` can interpret the instructions.
+- [`apps/bot/src/presentation/scenes/position-detail.scene.ts`](../../src/presentation/scenes/position-detail.scene.ts)
+- [`apps/bot/src/application/position/close-position.use-case.ts`](../../src/application/position/close-position.use-case.ts)
+- [`apps/bot/src/infrastructure/jobs/workers/transaction-confirm.worker.ts`](../../src/infrastructure/jobs/workers/transaction-confirm.worker.ts)
+- [`apps/bot/src/services/close-position-persistence.service.ts`](../../src/services/close-position-persistence.service.ts)
+- [Enhancement Specification](./enhancement-specification.md)
+- [ADR-001](../adrs/001-error-handling-classification.md), [ADR-003](../adrs/003-state-machine-position-flow.md), [ADR-004](../adrs/004-transaction-safety-idempotency.md)

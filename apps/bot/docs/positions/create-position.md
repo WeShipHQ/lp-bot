@@ -1,107 +1,122 @@
-# Position Creation Flow (v2)
+# Position Creation Flow — Current State Audit (Jan 2025)
 
 ## Overview
 
-The position creation flow guides a user from pool selection to an active Meteora DLMM position. It adheres to the conversational UX requirements in the PRD and respects the layered architecture in `SystemDesign.md`. This document captures both the high-level behaviour and the implementation strategy across all layers.
+The position creation experience guides a user from pool selection to an active Meteora DLMM position. The flow combines a multi-step Telegram wizard, application-layer orchestration, BullMQ-powered background jobs, and persistence services that materialise on-chain state into the database. This document reflects the **current implementation** (commit HEAD on `chore/baseline-position-flow-audit-docs-adrs`) and flags the gaps that must be addressed before Phase 2.
 
-## High-Level Sequence
+## High-Level Flow
 
 ```mermaid
 sequenceDiagram
     participant User
     participant Scene as create-position.scene.ts
+    participant Strategy as Strategy Helpers (spot only)
     participant UC as CreatePositionUseCase
     participant Adapter as MeteoraAdapter
     participant Wallet as WalletService
-    participant DB as pendingTransactions
+    participant Jobs as JobQueueService
+    participant Pending as pendingTransactions
     participant Worker as transaction-confirm.worker.ts
     participant Persist as position-persistence.service.ts
-    participant Jobs as JobQueueService
 
-    User->>Scene: /start → "Open Position" → pool selection
-    Scene->>Scene: Wizard steps (strategy, deposit method, amount, etc.)
+    User->>Scene: enter CREATE_POSITION_SCENE with pool context
+    Scene->>Scene: Wizard steps (strategy → deposit → amount → summary)
+    Scene->>Strategy: CalculateBalancedDistribution + GetPriceRange
     Scene->>UC: execute(command)
-    UC->>Adapter: createPositionIx(params)
+    UC->>Adapter: createPositionIxs()
     Adapter-->>UC: { instructions, positionKp }
-    UC->>Wallet: sign & send transaction
+    UC->>Wallet: signAndSendViaGateway(...)
     Wallet-->>UC: signature
-    UC->>DB: insert pendingTransactions (CREATE_POSITION)
+    UC->>Pending: insert CREATE_POSITION row (status=PENDING)
     UC->>Jobs: enqueue JOB_TX_CONFIRM
-    Scene-->>User: Confirmation message with Solscan link
+    Scene-->>User: "Position submitted" + Solscan link
+
+    Jobs->>Worker: process signature
     Worker->>Solana RPC: getParsedTransaction(signature)
-    Worker->>Persist: createPosition({ context, onChainData, prices })
-    Persist->>DB: insert positions + segments + snapshots
-    Worker->>Jobs: enqueue JOB_POSITION_MONITOR (if auto-rebalance)
-    Worker->>Jobs: enqueue JOB_NOTIFICATION (Position Created)
+    Worker->>Persist: createPosition(context, parsedInstructions)
+    Persist->>DB: insert positions/segments/snapshots
+    Worker->>Jobs: enqueue JOB_POSITION_MONITOR (if auto rebalance)
     Worker->>Cache: invalidate portfolio cache
+    Worker->>Jobs: enqueue JOB_NOTIFICATION (position created)
 ```
 
-## Layer Responsibilities & Key Modules
+> **Note:** The SOL auto-convert path diverges by enqueueing two `JOB_SWAP_EXECUTION` jobs **before** the adapter call. The feature is scaffolded but not yet production-ready (see Known Issues).
 
-| Layer | File(s) | Responsibilities |
-| --- | --- | --- |
-| Presentation | `presentation/scenes/create-position.scene.ts` | Multi-step wizard, validation, state management, progress updates |
-| Application | `application/position/create-position.use-case.ts` | Validation, adapter orchestration, transaction submission, pending-tx metadata |
-| Infrastructure | `types/dex-adapter.interface.ts`, `services/dex-registry.service.ts`, `adapters/meteora` | DEX abstraction and Meteora DLMM integration |
-|  | `services/wallet.service.ts` | Privy/Jito gateway submission |
-|  | `infrastructure/jobs/job-queue.service.ts` | Confirm + monitor job scheduling |
-| Worker | `infrastructure/jobs/workers/transaction-confirm.worker.ts` | Confirmation parsing, persistence, notifications |
-| Persistence | `services/position-persistence.service.ts` | Positions, segments, snapshots creation |
-| Data | `db/schema.ts` | Tables: `positions`, `positionSegments`, `pendingTransactions`, `positionSnapshots` |
+## Implementation Snapshot
 
-## Presentation Layer Strategy
+### Presentation Layer (`create-position.scene.ts`)
+- Uses a Telegraf wizard (`Scenes.WizardScene`) with seven concrete steps.
+- Relies on a mutable `WizardState` object stored in `ctx.scene.state`.
+- Currently only the **balanced (SOL auto-convert)** path is functional; single-sided steps have FIXMEs.
+- Calls into shared formatters (`generateProgressMessage`, `generatePositionSummary`).
+- Fetches on-chain context via `GetPoolDetailsUseCase`, `GetBalanceUseCase`, `GetPriceRangeUseCase`, `CalculateBalancedDistributionUseCase`.
+- Summary step calculates token split and price range before sending the command to the use case.
 
-1. **Scene Entry** – The wizard requires `poolAddress` and `dex` in the scene state. It fetches `UnifiedPool` data via `GetPoolDetailsUseCase` and renders strategy options.
-2. **Wizard Steps** – The flow currently supports balanced (SOL auto-convert) paths. The single-sided branch exists but is feature-flagged for future work.
-   - Strategy selection (`strategy:spot|curve|bid-ask`)
-   - Deposit method (Balanced vs Single-sided)
-   - Optional token/deposit source selection
-   - Amount capture with canned buttons and custom input (validated against SOL balance via `GetBalanceUseCase`)
-   - Auto-rebalance toggle (default on)
-   - Summary step uses `CalculateBalancedDistributionUseCase` and `GetPriceRangeUseCase`
-3. **Confirmation** – On approval, the scene calls the use case and updates the message with a non-blocking success state.
-4. **Error Handling** – Any validation failure replies with actionable errors and either repeats the step or terminates the scene safely.
+### Application Layer (`CreatePositionUseCase`)
+- Validates wallet/pool addresses and non-zero token amounts.
+- Invokes `IDexAdapter.createPositionIxs` to build Meteora instructions.
+- Submits transactions through `WalletService.signAndSendViaGateway`.
+- Persists metadata in `pendingTransactions` (`operationType = CREATE_POSITION`).
+- Enqueues `JOB_TX_CONFIRM` (500 ms delay) and invalidates portfolio cache.
+- Includes `handleSolAutoConvert` branch that orchestrates SOL→token swaps (two separate jobs) and stores a synthetic pending entry keyed by `positionCreationId`.
 
-## Application Layer Strategy
+### Worker Layer (`transaction-confirm.worker.ts`)
+- Polls Solana RPC for signature confirmation.
+- Parses Meteora instructions via `parseMeteoraInstructions` (expects `open` + `add`).
+- Derives actual token amounts and USD valuations using `TokenPriceService`.
+- Calls `positionPersistenceService.createPosition` to persist entities:
+  - `positions`
+  - `positionSegments`
+  - `positionSnapshots`
+- Enqueues monitoring and notification jobs if applicable.
 
-`CreatePositionUseCase.execute` performs the following:
+### Infrastructure & Persistence
+- `JobQueueService` initialises queues/workers (BullMQ) with exponential backoff.
+- `pendingTransactions` stores command metadata for recovery/retries.
+- `positionPersistenceService` wraps SQL inserts/updates and ensures snapshots.
 
-1. **Validation** – Ensures wallet context, pool address validity, and non-zero token amounts.
-2. **Adapter Call** – Invokes `IDexAdapter.createPositionIx` with raw token amounts (converted by `uiToRawAmount`).
-3. **Transaction Submission** – Uses `WalletService` to sign and send through Sanctum Gateway when available, falling back to the Jito path.
-4. **Pending Transaction Record** – Persists metadata in `pendingTransactions` with `operationType = CREATE_POSITION`. Metadata includes the full `PositionCreationContext` so the worker can reconstruct intent.
-5. **Job Scheduling** – Enqueues `JOB_TX_CONFIRM` (delayed 500 ms). Portfolio caches are invalidated optimistically.
-6. **Future Extension** – `handleSolAutoConvert` is scaffolded to support SOL→token swaps. The wizard still collects amount data in SOL, so enabling this path will not require UX changes.
+## Known Issues & Technical Debt
 
-## Confirmation & Persistence Strategy
+| ID | Severity | Area | Description | Impact | Linked Work |
+|----|----------|------|-------------|--------|-------------|
+| CP-01 | 🔴 Critical | Application | **No idempotency** in `CreatePositionUseCase`. Retries or duplicate submits can create multiple positions. | Risk of duplicate positions and double-spend. | ADR-004, Enhancement Spec §Phase 1 |
+| CP-02 | 🔴 Critical | Worker | **Manual transaction parsing** relies on instruction names and may miss edge cases (e.g., Meteora instruction updates). | Potentially incorrect token accounting, especially if Meteora updates their contracts. | Enhancement Spec §Phase 3 |
+| CP-03 | 🔴 Critical | SOL Auto-Convert | `handleSolAutoConvert` enqueues swap jobs but never resumes creation once swaps settle. `JOB_SWAP_EXECUTION` worker is stubbed. | Feature unusable; pending transactions remain PENDING. | Enhancement Spec §Phase 2 |
+| CP-04 | 🟠 High | Scene | Single-sided branch has TODO/FIXME at lines 227–244; deposit source selection uses placeholder copy and missing validation. | UX dead-end; violates PRD requirements. | ADR-002, Enhancement Spec §Phase 2 |
+| CP-05 | 🟠 High | Error Handling | Mixed use of `console.error`, `logger.error`, generic errors; no user-friendly message mapping. | Poor observability; bad UX when failures occur. | ADR-001 |
+| CP-06 | 🟠 High | Validation | No transaction simulation prior to submission. | Users encounter on-chain failures late, harming confidence. | Enhancement Spec §Phase 1 |
+| CP-07 | 🟠 High | Strategy | Strategy selection is cosmetic; logic identical for all options. | Cannot introduce curve/bid-ask behaviors; analytics inaccurate. | ADR-002 |
+| CP-08 | 🟠 High | State Mgmt | Wizard relies on branching `ctx.wizard.next()` calls with implicit knowledge of previous steps. | Hard to maintain; edge cases may leak. | ADR-003 |
+| CP-09 | 🟡 Medium | Cache | Cache invalidation occurs only for portfolio; single-position cache invalidation missing. | Stale UI when user opens position details immediately. | Enhancement Spec §Phase 1 |
+| CP-10 | 🟡 Medium | Notifications | Success message uses static copy; no templating or error states. | Inconsistent user messaging; no retries on failure. | Enhancement Spec §Phase 5 |
+| CP-11 | 🟡 Medium | Preferences | Auto-rebalance default toggled in wizard but not persisted per strategy. | Misalignment with future strategy features. | ADR-002 |
+| CP-12 | 🟢 Low | Metrics | Flow lacks dedicated metrics (duration, drop-off per step). | Hard to monitor success metrics from PRD. | Enhancement Spec §Phase 5 |
 
-The transaction confirm worker finalises the flow:
+> **Legend:** 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
-1. **Transaction Parsing** – `parseMeteoraInstructions` extracts open/add instructions and token transfer amounts to determine actual token deposits.
-2. **Price Fetching** – Pulls USD prices for token A, token B, and SOL via `TokenPriceService`, satisfying the PRD requirement for accurate USD reporting.
-3. **Persistence** – `positionPersistenceService.createPosition` executes a transaction that:
-   - Inserts into `positions` with initial USD/SOL values, token amounts, strategy metadata, and bin range.
-   - Creates `positionSegments` row (segment #1) and a corresponding `positionSnapshots` entry.
-4. **Monitoring** – If `autoRebalance` is true, enqueues `JOB_POSITION_MONITOR` with a repeat interval (currently 30 s placeholder; production aligns with user settings).
-5. **Notification** – Sends a general notification summarising success and advising the user to check the portfolio.
-6. **Cache Invalidation** – `CachePatterns.portfolioPattern(userId)` is cleared to refresh UI reads.
+## Observability & Telemetry
 
-## Error Handling & Observability
+- Logs use `logger.info/error` but lack structured fields (e.g., `idempotencyKey`, `strategy`).
+- No metrics for wizard drop-off or transaction durations.
+- Pending transactions table contains limited context; no state transition history.
+- Notification pipeline lacks correlation IDs for tracing.
 
-- **Timeouts** – The worker marks pending transactions as failed after five minutes without confirmation.
-- **Retries** – The job queue uses exponential backoff via BullMQ defaults; errors thrown from the worker will be retried automatically.
-- **Logging** – `logger.info/error` statements exist for each nuanced failure (adapter failure, wallet submission failure, DB insert failure).
-- **Metrics Alignment** – The flow instrumentation ties into the PRD success metrics (≥95 % creation success) by logging result status and providing raw data for dashboards.
+## Next Steps (from Enhancement Specification)
 
-## Extensibility Notes
+1. **Idempotent Command Wrapper** for create position (ADR-004 — Phase 1).
+2. **Domain Error Classes** + user-friendly messages (ADR-001).
+3. **Strategy Registry** to encapsulate Spot/Curve/Bid-Ask differences (ADR-002).
+4. **State Machine** driven wizard to simplify branching and enable analytics (ADR-003).
+5. **Transaction Simulation** before wallet submission; persist simulator results for support.
+6. **Complete Single-Sided Deposits** including token selection, deposit source, price coverage, and summary copy.
+7. **Finalize SOL Auto-Convert Pipeline** (swap completion → create position resume) with proper ordering guarantees.
+8. **Add Metrics**: step completion rates, create success vs failure reasons, RPC duration.
 
-- **Single-Sided Deposits** – Scene scaffolding exists. Enabling this requires implementing the deposit source branch and completing `handleSolAutoConvert`.
-- **DEX-Agnostic Support** – The use case defers to `dexRegistry.get(dex)` so other DEXes can hook into the same flow once adapters are registered.
-- **Advanced Stages** – Stop-loss/take-profit inputs can be collected post-summary; the context already includes `slPercentage`/`tpPercentage` fields.
-- **UX Enhancements** – Progress copy is centralised in `generateProgressMessage` to stay consistent with messaging standards described in the PRD.
+## References
 
-## Checklist for Future Changes
-
-- Update both this doc and the scene/use case comments when new steps are added.
-- Confirm that pending transaction metadata always contains enough context for the worker to recover from restarts.
-- Keep the wizard under Telegram’s 64-button limit and ensure every callback query is answered to satisfy Telegram API rules.
+- [`apps/bot/src/presentation/scenes/create-position.scene.ts`](../../src/presentation/scenes/create-position.scene.ts)
+- [`apps/bot/src/application/position/create-position.use-case.ts`](../../src/application/position/create-position.use-case.ts)
+- [`apps/bot/src/infrastructure/jobs/workers/transaction-confirm.worker.ts`](../../src/infrastructure/jobs/workers/transaction-confirm.worker.ts)
+- [`apps/bot/src/services/position-persistence.service.ts`](../../src/services/position-persistence.service.ts)
+- [Enhancement Specification](./enhancement-specification.md)
+- [ADR-001](../adrs/001-error-handling-classification.md), [ADR-002](../adrs/002-lp-strategy-abstraction.md), [ADR-003](../adrs/003-state-machine-position-flow.md), [ADR-004](../adrs/004-transaction-safety-idempotency.md)

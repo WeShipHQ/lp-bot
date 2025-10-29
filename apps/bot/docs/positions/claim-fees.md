@@ -1,10 +1,10 @@
-# Claim Fees Flow (v2)
+# Claim Fees Flow — Current State Audit (Jan 2025)
 
 ## Overview
 
-The claim fees flow lets users withdraw accrued DLMM fees from an active position. Claimed tokens are automatically converted to SOL to satisfy the PRD requirement for simplified custody. This document captures the conversational steps, backend orchestration, and persistence.
+The claim fees flow allows users to harvest accrued trading fees from an active DLMM position. Claimed tokens are automatically converted to SOL to simplify custody. This document reflects the **current implementation** and highlights technical debt that must be addressed in Phase 2 refactorings.
 
-## High-Level Sequence
+## High-Level Flow
 
 ```mermaid
 sequenceDiagram
@@ -13,84 +13,103 @@ sequenceDiagram
     participant UC as ClaimFeesUseCase
     participant Adapter as MeteoraAdapter
     participant Wallet as WalletService
-    participant DB as pendingTransactions
+    participant Jobs as JobQueueService
+    participant Pending as pendingTransactions
     participant Worker as transaction-confirm.worker.ts
     participant Swap as SwapService
     participant Persist as claim-fees-persistence.service.ts
-    participant Jobs as JobQueueService
 
-    User->>Scene: Tap "Claim Fees"
-    Scene->>Scene: Confirm intent → display modal
-    Scene->>UC: execute({ user, positionId })
-    UC->>Repo: positionRepository.findById
-    UC->>Adapter: claimFeesIx({ pool, position, userAddress })
+    User->>Scene: tap "Claim Fees" button
+    Scene->>UC: execute({ userId, positionId, walletAddress, walletId })
+    UC->>Repo: positionRepository.findById(positionId)
+    UC->>Adapter: claimFeesIxs({ poolAddress, positionAddress, userAddress })
     Adapter-->>UC: { instructions }
-    UC->>Wallet: sign & send claim tx
+    UC->>Wallet: signAndSendViaGateway(walletId, userAddress, instructions)
     Wallet-->>UC: signature
-    UC->>DB: insert pendingTransactions (CLAIM_FEES)
-    UC->>Jobs: enqueue JOB_TX_CONFIRM
-    Scene-->>User: "Claim submitted" with Solscan link
+    UC->>Pending: insert CLAIM_FEES row (status=PENDING)
+    UC->>Jobs: enqueue JOB_TX_CONFIRM(signature, CLAIM_FEES)
+    Scene-->>User: "Claim submitted" + Solscan link
+
+    Jobs->>Worker: process signature (CLAIM_FEES)
     Worker->>Solana RPC: getParsedTransaction(signature)
-    Worker->>Worker: parse claim transfers (token A/B amounts)
-    Worker->>Swap: swapClaimedTokensToSOL (Jupiter orders)
-    Worker->>Persist: recordClaim({ claimed, prices, snapshot })
-    Persist->>DB: update positions + segments + claimHistory
-    Worker->>Jobs: enqueue JOB_NOTIFICATION (Claim success)
+    Worker->>Worker: parseMeteoraInstructions → extract claim transfers
+    Worker->>Swap: swapClaimedTokensToSOL(tokenA, tokenB)
+    Worker->>Persist: recordClaim({ context, prices, snapshot })
+    Persist->>DB: insert claimHistory + update positions/segments
     Worker->>Cache: invalidate portfolio & position cache
+    Worker->>Jobs: enqueue JOB_NOTIFICATION (Claim success)
 ```
 
-## Layer Responsibilities
+## Implementation Snapshot
 
-| Layer | File(s) | Responsibilities |
-| --- | --- | --- |
-| Presentation | `presentation/scenes/position-detail.scene.ts` | Confirmation dialog, execution trigger, success copy |
-| Application | `application/position/claim-fees.use-case.ts` | Validation, adapter invocation, transaction submission, pending tx metadata |
-| Infrastructure | `services/swap.service.ts` | Jupiter-backed swaps to SOL |
-| Worker | `transaction-confirm.worker.ts` | Instruction parsing, price lookups, swap execution, persistence and notifications |
-| Persistence | `services/claim-fees-persistence.service.ts` | Claim history row, position fee totals, snapshots |
-| Data | `db/schema.ts` | `claimHistory`, `positions`, `positionSnapshots` |
+### Presentation Layer (`position-detail.scene.ts`)
+- **Confirmation Dialog:** Missing explicit confirmation step (see **Issue CF-03** below).
+- Invokes `ClaimFeesUseCase` with user/wallet context.
+- Displays loading state until use case resolves.
+- Updates message with success/failure copy and optionally refreshes position card.
 
-## Presentation Strategy
+### Application Layer (`ClaimFeesUseCase`)
+- **Validation:** Verifies `userId`, `positionId`, `walletAddress` presence and ownership.
+- **Adapter Invocation:** Calls `IDexAdapter.claimFeesIxs` to build DEX-specific instructions.
+- **Transaction Submission:** Uses `WalletService.signAndSendViaGateway` for Sanctum Gateway or Jito fallback.
+- **Pending Transaction:** Inserts record with `operationType = CLAIM_FEES` and `ClaimFeesContext` metadata:
+  - `userId`, `positionId`, `positionAddress`, `poolAddress`, `dex`
+  - Token metadata (`tokenA`, `tokenB`)
+  - `convertToSol = true` (hardcoded)
+  - `estimatedFeesUsd` (pre-fetched from adapter)
+- **Job Scheduling:** Enqueues `JOB_TX_CONFIRM` with 500 ms delay.
 
-1. **Action** – The position detail scene exposes a "Claim Fees" button when status is `ACTIVE`.
-2. **Confirm Dialog** – Displays a markdown confirmation emphasising automatic SOL conversion and the irreversible nature of the action.
-3. **Execution** – On approval, the scene calls `ClaimFeesUseCase` and replies with a loading message until the use case resolves.
-4. **User Feedback** – The scene updates the message with success/failure copy and prompts a refresh of the main position message.
+### Worker Layer (`transaction-confirm.worker.ts`)
+- **Confirmation Polling:** Monitors signature status via Solana RPC.
+- **Instruction Parsing:** `parseMeteoraInstructions` identifies claim-related transfers and aggregates token amounts.
+- **Pricing:** Fetches USD prices for token A, token B, and SOL via `TokenPriceService`.
+- **SOL Conversion:** `swapClaimedTokensToSOL` executes Jupiter orders for each non-SOL token. If swap fails, logs error but continues using estimated USD values.
+- **Snapshot Fetching:** Attempts to fetch on-chain position state via adapter to populate a post-claim snapshot.
+- **Persistence:** `claimFeesPersistenceService.recordClaim` performs a DB transaction:
+  - Inserts `claimHistory` row (`type = manual`)
+  - Updates `positions.totalFeesClaimedUSD` and current segment's `feesClaimedUSD`
+  - Inserts `positionSnapshots` record documenting post-claim state and recalculated PnL
+- **Notifications & Caching:** Enqueues `JOB_NOTIFICATION` summarising the claim (USD + SOL amounts) and invalidates portfolio/position caches.
 
-## Application Strategy
+## Known Issues & Technical Debt
 
-`ClaimFeesUseCase.execute` performs:
+| ID | Severity | Area | Description | Impact | Linked Work |
+|----|----------|------|-------------|--------|-------------|
+| CF-01 | 🔴 Critical | Application | **No idempotency** in `ClaimFeesUseCase`. Repeat submissions could attempt duplicate claims. | While blockchain prevents double-claims, pending TX table may become inconsistent. | ADR-004, Enhancement Spec §Phase 1 |
+| CF-02 | 🟠 High | Worker | **Swap failures are logged but not surfaced to user.** If SOL conversion fails, user doesn't know their fees are stuck in token form. | User confusion; support burden. | ADR-001, Enhancement Spec §Phase 2 |
+| CF-03 | 🟠 High | Scene | **No explicit confirmation dialog.** User taps button and claim is immediately submitted. | Accidental claims possible; UX mismatch with PRD guidelines. | Enhancement Spec §Phase 2 |
+| CF-04 | 🟠 High | Worker | **Estimated vs actual fees mismatch not reconciled.** Estimated USD in context may differ from parsed transaction amounts. | Inaccurate notifications and analytics. | Enhancement Spec §Phase 3 |
+| CF-05 | 🟠 High | Adapter | **Hard-coded `convertToSol = true`** in use case. No flexibility to keep tokens in native form. | Violates PRD preference for user control. | Enhancement Spec §Phase 2 |
+| CF-06 | 🟡 Medium | Error Handling | Mixed use of `console.error`, `logger.error`, generic errors. | Poor observability; bad UX. | ADR-001 |
+| CF-07 | 🟡 Medium | Validation | No check for minimum claimable amount. Users can pay gas to claim $0.01. | Wasted gas; negative UX. | Enhancement Spec §Phase 3 |
+| CF-08 | 🟡 Medium | Notifications | Success message uses static copy; no error state handling. | Inconsistent user messaging. | Enhancement Spec §Phase 5 |
+| CF-09 | 🟢 Low | Metrics | No instrumentation for claim success rate or fee amounts. | Hard to validate PRD metrics (e.g., zero lost funds). | Enhancement Spec §Phase 5 |
 
-1. **Validation** – Verifies user wallet, position ownership, and adapter availability.
-2. **Adapter Call** – Invokes `IDexAdapter.claimFeesIx` to obtain Meteora claim instructions.
-3. **Submission** – Sends the transaction via Sanctum Gateway or Jito fallback.
-4. **Pending Transaction** – Inserts a record with `operationType = CLAIM_FEES` and a `ClaimFeesContext` (position metadata, estimated USD amount, token definitions).
-5. **Job Scheduling** – Enqueues `JOB_TX_CONFIRM` for post-confirmation handling.
+> **Legend:** 🔴 Critical · 🟠 High · 🟡 Medium · 🟢 Low
 
-## Confirmation & Persistence Strategy
+## Observability & Telemetry
 
-Within the transaction-confirm worker:
+- Logs use `logger.info/warn/error` but lack structured fields (e.g., `claimId`, `estimatedFeesUsd`).
+- No correlation IDs for tracing claim → swap → notification pipeline.
+- Pending transactions table contains limited context; no state transition history.
+- Swap failures logged in worker but not tracked as metrics.
 
-1. **Parsing** – `parseMeteoraInstructions` aggregates all token transfers from claim instructions to derive `claimedFeesTokenA/B`.
-2. **Pricing** – `TokenPriceService` fetches USD prices for token A, token B, and SOL to support reporting.
-3. **Conversion to SOL** – `swapClaimedTokensToSOL` executes Jupiter orders for each non-SOL token. If the swap succeeds, the USD value is recalculated using actual SOL received; otherwise the estimated USD value is retained.
-4. **Snapshot Inputs** – If pool data remains accessible, the worker fetches the on-chain position via the adapter to populate a snapshot (current holdings, residual unclaimed fees).
-5. **Persistence** – `claimFeesPersistenceService.recordClaim` runs a DB transaction that:
-   - Inserts `claimHistory` row (type `manual` by default).
-   - Updates `positions.totalFeesClaimedUSD` and the latest segment’s `feesClaimedUSD`.
-   - Inserts a `positionSnapshots` record documenting post-claim state and recalculated total PnL.
-6. **Cache Invalidation** – Portfolio and position caches are invalidated to keep the UI consistent.
-7. **Notification** – A `JOB_NOTIFICATION` entry is queued summarising the claim (approximate USD and SOL amounts).
+## Next Steps (from Enhancement Specification)
 
-## Error Handling
+1. **Idempotent Command Wrapper** for claim fees (ADR-004 — Phase 1).
+2. **Domain Error Classes** + user-friendly messages (ADR-001).
+3. **Add Confirmation Dialog** in scene with fee estimate (Enhancement Spec §Phase 2).
+4. **Configurable Payout Token** (allow users to keep fees as tokens or convert to SOL).
+5. **Reconcile Estimated vs Actual Fees** in worker and adjust notification copy.
+6. **Minimum Claim Threshold** validation (e.g., $1 minimum to avoid wasted gas).
+7. **Surface Swap Failures** to user with actionable error message and retry button.
+8. **Add Metrics:** claim success rate, average fee amount, swap success rate.
 
-- **Missing Instructions** – If the worker cannot parse claim transfers, it logs an error and skips persistence to avoid corrupt data.
-- **Swap Failures** – Swap errors are logged; the flow continues using the estimated USD amount to preserve continuity.
-- **Ownership Conflicts** – The use case returns an "Unauthorized" error when the position does not belong to the caller.
-- **Retries** – Job retries handle transient RPC or price service errors.
+## References
 
-## Extensibility Notes
-
-- **Configurable Conversion** – `convertToSol` is currently hard-coded to true. Once wallet preferences support other payout tokens, the worker can branch accordingly.
-- **Partial Claims & Thresholds** – The persistence service records amounts per claim, enabling future thresholds (e.g., auto-claim at ≥$10).
-- **Metrics** – Claim success/failure logs can power a success-rate dashboard to track the PRD’s "zero lost funds" requirement.
+- [`apps/bot/src/presentation/scenes/position-detail.scene.ts`](../../src/presentation/scenes/position-detail.scene.ts)
+- [`apps/bot/src/application/position/claim-fees.use-case.ts`](../../src/application/position/claim-fees.use-case.ts)
+- [`apps/bot/src/infrastructure/jobs/workers/transaction-confirm.worker.ts`](../../src/infrastructure/jobs/workers/transaction-confirm.worker.ts)
+- [`apps/bot/src/services/claim-fees-persistence.service.ts`](../../src/services/claim-fees-persistence.service.ts)
+- [Enhancement Specification](./enhancement-specification.md)
+- [ADR-001](../adrs/001-error-handling-classification.md), [ADR-004](../adrs/004-transaction-safety-idempotency.md)
