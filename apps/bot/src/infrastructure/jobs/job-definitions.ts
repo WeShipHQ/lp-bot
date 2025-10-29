@@ -3,6 +3,7 @@
 
 import { SolSwapMetadata } from "@/application";
 import { DexType } from "@/types/core.types";
+import { FlowType } from "@/services/flows/flow-types";
 
 // Position monitoring job: checks on-chain position status and triggers notifications/rebalancing if needed
 export const JOB_POSITION_MONITOR = "position-monitor" as const;
@@ -79,12 +80,37 @@ export interface TransactionConfirmJobData {
   submittedAt?: number; // epoch ms
 }
 
+// Flow runner job: orchestrates state machine execution step-by-step
+export const JOB_FLOW_RUNNER = "flow-runner" as const;
+export interface FlowRunnerJobData {
+  flowId: string;
+  flowType: FlowType;
+}
+
+// Stale flow cleanup job: detects and cleans up flows stuck in non-terminal states
+export const JOB_FLOW_CLEANUP = "flow-cleanup" as const;
+export interface FlowCleanupJobData {
+  // Run on all stale flows or specific flowId
+  flowId?: string;
+  maxAgeMs?: number; // Override default stale threshold
+}
+
+// Flow recovery job: attempts to recover and resume failed/stalled flows
+export const JOB_FLOW_RECOVERY = "flow-recovery" as const;
+export interface FlowRecoveryJobData {
+  flowId: string;
+  strategy?: "retry" | "compensate" | "manual";
+}
+
 export type KnownJobNames =
   | typeof JOB_POSITION_MONITOR
   | typeof JOB_REBALANCE
   | typeof JOB_NOTIFICATION
   | typeof JOB_SWAP_EXECUTION
-  | typeof JOB_TX_CONFIRM;
+  | typeof JOB_TX_CONFIRM
+  | typeof JOB_FLOW_RUNNER
+  | typeof JOB_FLOW_CLEANUP
+  | typeof JOB_FLOW_RECOVERY;
 
 export type KnownJobDataMap = {
   [JOB_POSITION_MONITOR]: PositionMonitorJobData;
@@ -92,4 +118,7 @@ export type KnownJobDataMap = {
   [JOB_NOTIFICATION]: NotificationJobData;
   [JOB_SWAP_EXECUTION]: SwapExecutionJobData;
   [JOB_TX_CONFIRM]: TransactionConfirmJobData;
+  [JOB_FLOW_RUNNER]: FlowRunnerJobData;
+  [JOB_FLOW_CLEANUP]: FlowCleanupJobData;
+  [JOB_FLOW_RECOVERY]: FlowRecoveryJobData;
 };

@@ -9,6 +9,9 @@ import {
   JOB_REBALANCE,
   JOB_SWAP_EXECUTION,
   JOB_TX_CONFIRM,
+  JOB_FLOW_RUNNER,
+  JOB_FLOW_CLEANUP,
+  JOB_FLOW_RECOVERY,
   KnownJobNames,
   KnownJobDataMap,
 } from "./job-definitions";
@@ -17,6 +20,9 @@ import { RebalanceWorker } from "./workers/rebalance.worker";
 import { NotificationWorker } from "./workers/notification.worker";
 import { SwapExecutionWorker } from "./workers/swap-execution.worker";
 import { TransactionConfirmWorker } from "./workers/transaction-confirm.worker";
+import { FlowRunnerWorker } from "./workers/flow-runner.worker";
+import { FlowCleanupWorker } from "./workers/flow-cleanup.worker";
+import { FlowRecoveryWorker } from "./workers/flow-recovery.worker";
 import { TelegramClient } from "@/infrastructure/messaging/telegram-client";
 import { NotificationService } from "@/infrastructure/messaging/notification.service";
 import { UserRepository } from "@/infrastructure/database/repositories/user.repository";
@@ -122,6 +128,18 @@ export class JobQueueService {
         JOB_TX_CONFIRM,
         new TransactionConfirmWorker(solana, positionRepo)
       );
+      this.registry.register(
+        JOB_FLOW_RUNNER,
+        new FlowRunnerWorker(this)
+      );
+      this.registry.register(
+        JOB_FLOW_CLEANUP,
+        new FlowCleanupWorker(this)
+      );
+      this.registry.register(
+        JOB_FLOW_RECOVERY,
+        new FlowRecoveryWorker(undefined, this)
+      );
 
       // Setup queues and workers
       this.createQueueAndWorker(JOB_POSITION_MONITOR, this.qOpts, {
@@ -134,10 +152,32 @@ export class JobQueueService {
       this.createQueueAndWorker(JOB_TX_CONFIRM, this.qOpts, {
         concurrency: 20,
       });
+      this.createQueueAndWorker(JOB_FLOW_RUNNER, this.qOpts, {
+        concurrency: 10,
+      });
+      this.createQueueAndWorker(JOB_FLOW_CLEANUP, this.qOpts, {
+        concurrency: 1,
+      });
+      this.createQueueAndWorker(JOB_FLOW_RECOVERY, this.qOpts, {
+        concurrency: 2,
+      });
       if (telegramClient)
         this.createQueueAndWorker(JOB_NOTIFICATION, this.qOpts, {
           concurrency: 10,
         });
+
+      // Schedule periodic cleanup for stale flows
+      this.enqueue(
+        JOB_FLOW_CLEANUP,
+        { maxAgeMs: 10 * 60 * 1000 },
+        {
+          repeat: {
+            every: 5 * 60 * 1000,
+          },
+        }
+      ).catch((error) =>
+        logger.error({ error }, "[JobQueue] Failed to schedule flow cleanup job")
+      );
 
       logger.info("[JobQueue] initialized");
     } else {
