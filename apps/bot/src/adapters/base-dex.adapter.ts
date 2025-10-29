@@ -1,4 +1,4 @@
-import { IDexAdapter, PositionContext } from "@/types/dex-adapter.interface";
+import { IDexAdapter } from "@/types/dex-adapter.interface";
 import {
   DexType,
   UnifiedPool,
@@ -37,7 +37,7 @@ export abstract class BaseDexAdapter implements IDexAdapter {
   ): Promise<UnifiedPosition>;
   abstract getPosition(
     positionAddress: string,
-    context?: PositionContext
+    poolAddress: string
   ): Promise<UnifiedPosition>;
 
   abstract createPositionIxs(

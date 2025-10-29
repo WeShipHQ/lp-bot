@@ -79,10 +79,10 @@ export class ClaimFeesUseCase {
 
       let estimatedUnclaimedFeesUsd = 0;
       try {
-        const onchain = await adapter.getPosition(position.positionAddress, {
-          userAddress: command.walletAddress,
-          poolAddress: position.poolAddress,
-        });
+        const onchain = await adapter.getPosition(
+          position.positionAddress,
+          position.poolAddress
+        );
         estimatedUnclaimedFeesUsd = Number(onchain.unclaimedFeesUsd || 0);
       } catch (error) {
         logger.warn({ error, positionId: position.id }, "Failed to fetch on-chain position prior to claim");

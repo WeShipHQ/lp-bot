@@ -745,7 +745,7 @@ export class TransactionConfirmWorker
           }
         | undefined;
 
-      if (claimContext.poolAddress && claimContext.userAddress) {
+      if (claimContext.poolAddress) {
         try {
           const dexRegistryInstance = container.get<typeof dexRegistry>(
             DI_TOKENS.DexRegistry
@@ -756,10 +756,7 @@ export class TransactionConfirmWorker
 
           const onchainPosition = await adapter.getPosition(
             effectivePositionAddress,
-            {
-              userAddress: claimContext.userAddress,
-              poolAddress: claimContext.poolAddress,
-            }
+            claimContext.poolAddress
           );
 
           // console.log("onchainPosition", onchainPosition);

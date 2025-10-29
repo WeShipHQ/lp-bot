@@ -74,15 +74,11 @@ export class GetPositionUseCase {
       );
 
       let onchain: UnifiedPosition | undefined;
-      const adapterContext = {
-        userAddress,
-        poolAddress: position.poolAddress,
-      } as const;
 
       try {
         onchain = await adapter.getPosition(
           position.positionAddress,
-          adapterContext
+          position.poolAddress
         );
 
         if (onchain) {

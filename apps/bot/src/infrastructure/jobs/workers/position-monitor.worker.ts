@@ -66,7 +66,7 @@ export class PositionMonitorWorker implements IWorker<PositionMonitorJobData> {
         inRange === false && (position as any)["isRebalancingEnabled"];
       if (shouldRebalance) {
         const userAddress =
-          (res.onchain?.metadata?.userAddress as string) || "";
+          (res.onchain?.metadata?.userAddress as string) || res.userAddress || "";
         if (userAddress) {
           const payload: RebalanceJobData = {
             userId,

@@ -17,11 +17,6 @@ import {
   ClaimFeesResult,
 } from "./core.types";
 
-export interface PositionContext {
-  poolAddress?: string;
-  userAddress?: string;
-}
-
 export interface IDexAdapter {
   readonly dexType: DexType;
   readonly name: string;
@@ -36,7 +31,7 @@ export interface IDexAdapter {
   getUserPositions(userAddress: string): Promise<UnifiedPosition[]>;
   getPosition(
     positionAddress: string,
-    context?: PositionContext
+    poolAddress: string
   ): Promise<UnifiedPosition>;
   getUserPosition(
     userAddress: string,
