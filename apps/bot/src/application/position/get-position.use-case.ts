@@ -54,35 +54,16 @@ export class GetPositionUseCase {
         return { success: false, error: "Position not found" };
       }
 
-      const resolvedUserId = command.userId ?? position.userId;
-      let userAddress = command.userAddress;
-
-      if (!userAddress && resolvedUserId) {
-        try {
-          const user = await this.userRepository.findById(resolvedUserId);
-          userAddress = user?.walletAddress ?? undefined;
-        } catch (err) {
-          logger.warn(
-            { err, resolvedUserId },
-            "GetPositionUseCase.resolveUserAddress failed"
-          );
-        }
-      }
-
       const adapter: IDexAdapter = this.dexRegistry.get(
         position.dex as DexType
       );
 
       let onchain: UnifiedPosition | undefined;
-      const adapterContext = {
-        userAddress,
-        poolAddress: position.poolAddress,
-      } as const;
 
       try {
         onchain = await adapter.getPosition(
           position.positionAddress,
-          adapterContext
+          position.poolAddress
         );
 
         if (onchain) {
@@ -101,21 +82,17 @@ export class GetPositionUseCase {
           position.updateTokenAmounts(tokenXAmount, tokenYAmount);
         }
       } catch (err) {
-        logger.warn({
-          err,
-          positionId: position.id,
-        }, "Failed to enrich position with on-chain data");
+        logger.warn(
+          {
+            err,
+            positionId: position.id,
+          },
+          "Failed to enrich position with on-chain data"
+        );
         console.error("Failed to enrich position with on-chain data", {
           err,
           positionId: position.id,
         });
-      }
-
-      if (!userAddress) {
-        logger.debug(
-          { positionId: position.id },
-          "On-chain enrichment executed without a resolved user address"
-        );
       }
 
       let pool: UnifiedPool | undefined;
@@ -123,12 +100,15 @@ export class GetPositionUseCase {
         try {
           pool = await adapter.getPool(position.poolAddress);
         } catch (err) {
-          logger.warn({
-            err,
-            poolAddress: position.poolAddress,
-          }, "Failed to fetch pool metadata for position");
+          logger.warn(
+            {
+              err,
+              poolAddress: position.poolAddress,
+            },
+            "Failed to fetch pool metadata for position"
+          );
         }
-
+      }
 
       let prices: Record<string, TokenPrice | undefined> | undefined;
       if (command.includePrices) {
@@ -139,10 +119,13 @@ export class GetPositionUseCase {
             position.tokenY.address,
           ]);
         } catch (err) {
-          logger.warn({
-            err,
-            positionId: position.id,
-          }, "Failed to fetch token prices for position");
+          logger.warn(
+            {
+              err,
+              positionId: position.id,
+            },
+            "Failed to fetch token prices for position"
+          );
         }
       }
 
@@ -152,7 +135,7 @@ export class GetPositionUseCase {
         onchain,
         pool,
         prices,
-        userAddress,
+        userAddress: command.userAddress,
       };
     } catch (error) {
       logger.error({ error }, "GetPositionUseCase.execute unexpected error");

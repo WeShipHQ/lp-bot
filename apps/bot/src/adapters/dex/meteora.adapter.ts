@@ -1,5 +1,5 @@
 import { BaseDexAdapter } from "@/adapters/base-dex.adapter";
-import { IDexAdapter, PositionContext } from "@/types/dex-adapter.interface";
+import { IDexAdapter } from "@/types/dex-adapter.interface";
 import {
   CreatePositionResult,
   CreatePositionParams,
@@ -204,29 +204,10 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
 
   async getPosition(
     positionAddress: string,
-    context?: PositionContext
+    poolAddress: string
   ): Promise<UnifiedPosition> {
     try {
-      const userAddress = context?.userAddress;
-      const poolAddress = context?.poolAddress;
-
-      console.log({ positionAddress, userAddress, poolAddress });
-
-      if (poolAddress) {
-        return await this.getPositionForPool(
-          positionAddress,
-          poolAddress,
-          context?.userAddress
-        );
-      }
-
-      if (userAddress) {
-        return await this.getPositionForUser(positionAddress, userAddress);
-      }
-
-      throw new Error(
-        "userAddress or poolAddress is required to fetch position details from Meteora"
-      );
+      return await this.getPositionForPool(positionAddress, poolAddress);
     } catch (error) {
       return this.handleError(error, "getPosition");
     }
@@ -286,8 +267,7 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
 
   private async getPositionForPool(
     positionAddress: string,
-    poolAddress: string,
-    userAddress?: string
+    poolAddress: string
   ): Promise<UnifiedPosition> {
     const { lbPair, lbPosition } = await this.dlmm.getPositionOnChain(
       positionAddress,
@@ -314,7 +294,6 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
         binStep: Number(lbPair.binStep ?? 0),
       },
       metadataExtras: {
-        userAddress,
         lbVersion: lbPosition.version,
       },
     });
