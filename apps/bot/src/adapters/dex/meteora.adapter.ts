@@ -28,6 +28,11 @@ import Decimal from "decimal.js";
 import { StrategyType } from "@meteora-ag/dlmm";
 import { DEFAULT_BIN_RANGE } from "@/domain";
 import { JupiterService } from "@/services/jupiter.service";
+import {
+  assertNever,
+  strategyRegistry,
+  toMeteoraStrategyType,
+} from "@/domain/strategies";
 
 export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
   readonly dexType: DexType = "meteora";
@@ -279,8 +284,23 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     params: CreatePositionParams
   ): Promise<CreatePositionResult> {
     try {
-      const strategy = this.mapStrategy(params.strategy);
-      const rangeInterval = Number(params?.rangeInterval ?? DEFAULT_BIN_RANGE);
+      // Use strategy registry to get strategy and convert to Meteora type
+      const lpStrategy = strategyRegistry.getOrDefault(params.strategy);
+      
+      // Validate that the strategy supports this DEX
+      if (!lpStrategy.supportsDex(this.dexType)) {
+        throw new Error(
+          `Strategy "${lpStrategy.metadata.name}" does not support ${this.dexType}`
+        );
+      }
+
+      // Convert strategy name to Meteora SDK type
+      const meteoraStrategyType = toMeteoraStrategyType(
+        lpStrategy.metadata.name
+      );
+      const strategy = this.mapStrategyToSDK(meteoraStrategyType);
+      
+      const rangeInterval = Number(params?.rangeInterval ?? lpStrategy.metadata.defaultRangeInterval);
       const positionKp = Keypair.generate();
 
       const res = await this.dlmm.buildCreatePositionIxs(
@@ -424,6 +444,10 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     }
   }
 
+  /**
+   * @deprecated Use strategyRegistry and toMeteoraStrategyType instead
+   * Kept for backward compatibility
+   */
   private mapStrategy(strategy?: string): StrategyType {
     const s = (strategy || "spot").toLowerCase();
     switch (s) {
@@ -436,6 +460,20 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
         return StrategyType.BidAsk as unknown as StrategyType;
       default:
         return StrategyType.Spot as unknown as StrategyType;
+    }
+  }
+
+  /**
+   * Map string strategy type to Meteora SDK StrategyType enum
+   */
+  private mapStrategyToSDK(strategyType: "Spot" | "Curve" | "BidAsk"): StrategyType {
+    switch (strategyType) {
+      case "Spot":
+        return StrategyType.Spot as unknown as StrategyType;
+      case "Curve":
+        return StrategyType.Curve as unknown as StrategyType;
+      case "BidAsk":
+        return StrategyType.BidAsk as unknown as StrategyType;
     }
   }
 }
