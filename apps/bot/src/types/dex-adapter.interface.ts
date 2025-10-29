@@ -56,6 +56,11 @@ export interface IDexAdapter {
   }>;
 
   // Portfolio operations
+  /**
+   * @deprecated Deprecated - use getUserPositions() instead.
+   * Portfolio enrichment with prices should happen at service layer, not adapter layer.
+   * UnifiedPosition no longer contains USD/PnL fields - those are calculated separately.
+   */
   getUserPortfolio(userAddress: string): Promise<UnifiedPortfolio>;
 
   // URL parsing

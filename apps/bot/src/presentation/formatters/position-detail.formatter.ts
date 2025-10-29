@@ -54,7 +54,7 @@ export class PositionDetailFormatter {
     const currentValueUsd = tokenAUi * tokenAPrice + tokenBUi * tokenBPrice;
     const initialValueUsd = position.getInitialValue().toNumber();
     const claimedFeesUsd = position.getClaimedFees().toNumber();
-    const unclaimedFeesUsd = onchain?.unclaimedFeesUsd ?? 0;
+    const unclaimedFeesUsd = 0; // Raw on-chain position no longer includes USD fees
 
     const netProfitUsd =
       currentValueUsd + claimedFeesUsd + unclaimedFeesUsd - initialValueUsd;

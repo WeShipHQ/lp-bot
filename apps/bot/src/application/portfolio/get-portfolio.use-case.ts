@@ -83,7 +83,7 @@ export class GetPortfolioUseCase {
               const up = byAddress.get(p.positionAddress);
               if (!up) continue;
 
-              // Update current token amounts and USD value
+              // Update current token amounts (raw on-chain data)
               const xAmount = TokenAmount.fromUi(
                 p.tokenX.symbol,
                 parseFloat(up.tokenAAmount),
@@ -95,7 +95,8 @@ export class GetPortfolioUseCase {
                 p.tokenY.decimals
               );
               p.updateTokenAmounts(xAmount, yAmount);
-              p.updateCurrentValue(Money.usd(up.currentValueUsd));
+              // Note: USD value calculation moved to enrichment layer
+              // Position entity only tracks token amounts now
             }
           } catch (e) {
             // Log and continue; portfolio can still be built with DB values

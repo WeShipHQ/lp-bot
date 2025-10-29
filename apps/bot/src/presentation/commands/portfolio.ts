@@ -35,23 +35,8 @@ export function portfolioCommand(bot: Telegraf<BotContext>) {
       const walletAddress = ctx.user.walletAddress;
       const feesByAddress: Record<string, number> = {};
       if (walletAddress) {
-        try {
-          const registry = container.get<
-            typeof import("@/services/dex-registry.service").dexRegistry
-          >(DI_TOKENS.DexRegistry);
-          const active = portfolio.getActivePositions();
-          const dexes = Array.from(new Set(active.map((p) => p.dex)));
-          for (const dex of dexes) {
-            try {
-              const adapter = registry.get(dex as any);
-              const unified = await adapter.getUserPositions(walletAddress);
-              for (const up of unified) {
-                feesByAddress[up.address] =
-                  (feesByAddress[up.address] || 0) + (up.unclaimedFeesUsd || 0);
-              }
-            } catch {}
-          }
-        } catch {}
+        // UnifiedPosition no longer includes USD-denominated fee data.
+        // Fee enrichment should happen in a dedicated service.
       }
 
       const overviewPayload = PortfolioFormatter.createDomainOverviewPayload(

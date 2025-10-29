@@ -23,17 +23,6 @@ export interface UnifiedPosition {
   tokenAAmount: string;
   tokenBAmount: string;
 
-  currentValueUsd: number;
-  initialValueUsd: number;
-
-  unclaimedFeesUsd: number;
-  claimedFeesUsd: number;
-  unclaimedRewardsUsd?: number;
-  claimedRewardsUsd?: number;
-
-  pnlUsd: number;
-  pnlPercentage: number;
-
   inRange: boolean;
   isActive: boolean;
 
@@ -41,6 +30,20 @@ export interface UnifiedPosition {
   updatedAt: Date;
 
   metadata?: Record<string, any>;
+}
+
+export interface PositionWithPrices extends UnifiedPosition {
+  currentValueUsd: number;
+  unclaimedFeesUsd: number;
+  claimedFeesUsd: number;
+  unclaimedRewardsUsd?: number;
+  claimedRewardsUsd?: number;
+}
+
+export interface UserPosition extends PositionWithPrices {
+  initialValueUsd: number;
+  pnlUsd: number;
+  pnlPercentage: number;
 }
 
 export interface CreatePositionParams {

@@ -63,50 +63,14 @@ export abstract class BaseDexAdapter implements IDexAdapter {
   abstract parsePoolUrl(url: string): UrlParseResult | null;
 
   async getUserPortfolio(userAddress: string): Promise<UnifiedPortfolio> {
-    try {
-      const positions = await this.getUserPositions(userAddress);
-
-      const totalValueUsd = positions.reduce(
-        (sum, pos) => sum + pos.currentValueUsd,
-        0
-      );
-
-      const totalPnlUsd = positions.reduce((sum, pos) => sum + pos.pnlUsd, 0);
-
-      const totalFeesUsd = positions.reduce(
-        (sum, pos) => sum + pos.claimedFeesUsd + pos.unclaimedFeesUsd,
-        0
-      );
-
-      const totalRewardsUsd = positions.reduce(
-        (sum, pos) =>
-          sum + (pos.claimedRewardsUsd || 0) + (pos.unclaimedRewardsUsd || 0),
-        0
-      );
-
-      return {
-        userAddress,
-        positions,
-        totalValueUsd,
-        totalPnlUsd,
-        totalFeesUsd,
-        totalRewardsUsd,
-        dexBreakdown: {
-          [this.dexType]: {
-            positions: positions.length,
-            valueUsd: totalValueUsd,
-            pnlUsd: totalPnlUsd,
-          },
-        } as any,
-      };
-    } catch (error) {
-      throw new DexAdapterError(
-        `Failed to get portfolio for ${this.dexType}`,
-        this.dexType,
-        "PORTFOLIO_ERROR",
-        error as Error
-      );
-    }
+    // Note: This base implementation is deprecated and should not be used directly.
+    // Portfolio enrichment with prices should happen at the service layer.
+    // Individual adapters should only return raw positions via getUserPositions().
+    throw new DexAdapterError(
+      `getUserPortfolio is deprecated - use getUserPositions() and enrich at service layer`,
+      this.dexType,
+      "NOT_IMPLEMENTED"
+    );
   }
 
   isValidPoolUrl(url: string): boolean {
