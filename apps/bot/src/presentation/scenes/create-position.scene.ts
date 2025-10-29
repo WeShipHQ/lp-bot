@@ -3,7 +3,6 @@ import { BotContext } from "@/types/bot.types";
 import { SCENE_IDS } from "../config/scenes";
 import { MeteoraCreatePositionStrategy } from "@/types/meteora.types";
 import { message } from "telegraf/filters";
-import { Token } from "@/types/token.types";
 import { getSolscanLink } from "@/utils/link";
 import { CreatePositionUseCase } from "@/application/position/create-position.use-case";
 import { container } from "@/infrastructure/di/container";
@@ -12,7 +11,7 @@ import { GetBalanceUseCase } from "@/application/wallet/get-balance.use-case";
 import { GetTokenBalanceUseCase } from "@/application/wallet/get-token-balance.use-case";
 import { CalculateBalancedDistributionUseCase } from "@/application/position/calculate-balanced-distribution.use-case";
 import { GetPriceRangeUseCase } from "@/application/position/get-price-range.use-case";
-import { DexType, UnifiedPool } from "@/types/core.types";
+import { DexType, Token, UnifiedPool } from "@/types/core.types";
 import {
   generateProgressMessage,
   generatePositionSummary,
@@ -520,13 +519,16 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
     }
 
     try {
-      logger.info({
-        userId: ctx.user.id,
-        poolAddress: poolData.address,
-        strategy,
-        tokenAAmount: state.tokenAAmountCalculated,
-        tokenBAmount: state.tokenBAmountCalculated,
-      }, "Creating position with context");
+      logger.info(
+        {
+          userId: ctx.user.id,
+          poolAddress: poolData.address,
+          strategy,
+          tokenAAmount: state.tokenAAmountCalculated,
+          tokenBAmount: state.tokenBAmountCalculated,
+        },
+        "Creating position with context"
+      );
 
       const createUC = container.get(CreatePositionUseCase);
       const result = await createUC.execute({
@@ -558,10 +560,13 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
       });
 
       if (!result.success || !result.signature) {
-        logger.error({
-          error: result.error,
-          userId: ctx.user.id,
-        }, "Position creation failed");
+        logger.error(
+          {
+            error: result.error,
+            userId: ctx.user.id,
+          },
+          "Position creation failed"
+        );
 
         await ctx.editMessageText(
           `❌ *Failed to create position*\n\n${result.error || "Unknown error"}\n\nPlease try again.`,
@@ -570,11 +575,14 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         return ctx.scene.leave();
       }
 
-      logger.info({
-        signature: result.signature,
-        positionAddress: result.positionAddress,
-        userId: ctx.user.id,
-      }, "Position transaction submitted");
+      logger.info(
+        {
+          signature: result.signature,
+          positionAddress: result.positionAddress,
+          userId: ctx.user.id,
+        },
+        "Position transaction submitted"
+      );
 
       const solScanLink = link(
         "View Transaction",
@@ -589,11 +597,14 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         { parse_mode: "Markdown", ...DISABLE_LINK_PREVIEW }
       );
     } catch (error) {
-      logger.error({
-        error,
-        userId: ctx.user.id,
-        poolAddress: poolData?.address,
-      }, "Error creating position via use case");
+      logger.error(
+        {
+          error,
+          userId: ctx.user.id,
+          poolAddress: poolData?.address,
+        },
+        "Error creating position via use case"
+      );
 
       console.error("Error creating position via use case", {
         error,

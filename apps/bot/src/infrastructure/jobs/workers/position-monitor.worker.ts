@@ -26,7 +26,10 @@ export class PositionMonitorWorker implements IWorker<PositionMonitorJobData> {
   ) {}
 
   async process(job: Job<PositionMonitorJobData>) {
-    logger.info({ jobId: job.id }, "[PositionMonitorWorker] Processing job");
+    logger.info(
+      { jobId: job.id, positionId: job.data.positionId },
+      "[PositionMonitorWorker] Processing job"
+    );
 
     const start = Date.now();
     const { userId, positionId } = job.data;
@@ -34,6 +37,11 @@ export class PositionMonitorWorker implements IWorker<PositionMonitorJobData> {
 
     try {
       const res = await this.getPositionUseCase.execute({ positionId });
+      logger.info(
+        { positionId, position: res.onchain?.inRange },
+        "[PositionMonitorWorker] Get position result"
+      );
+
       if (!res.success || !res.position)
         return { success: false, reason: res.error || "not_found" };
 

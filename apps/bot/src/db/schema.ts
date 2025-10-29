@@ -11,7 +11,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import { relations, sql } from "drizzle-orm";
-import { Token } from "@/types/token.types";
+import { Token } from "@/types/core.types";
 
 // Enums
 export const strategyTypeEnum = pgEnum("strategy_type", [

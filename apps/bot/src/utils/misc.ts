@@ -172,6 +172,6 @@ export function bold(text: string | number): string {
   return `*${str}*`;
 }
 
-export function divider(char: string = "─", length: number = 20): string {
+export function divider(char: string = "─", length: number = 30): string {
   return char.repeat(length);
 }

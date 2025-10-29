@@ -1,6 +1,5 @@
 import {
   JupiterToken,
-  JupiterTokenInfo,
   JupiterTokenSearchResponse,
 } from "@/types/jupiter.types";
 import {
@@ -15,6 +14,7 @@ import { getCacheService } from "@/infrastructure/cache/cache.service";
 import { CacheKeys } from "@/infrastructure/cache/cache-keys";
 import { CircuitBreaker } from "@/infrastructure/resilience/circuit-breaker";
 import { retry } from "@/infrastructure/resilience/retry";
+import { Token } from "@/types/core.types";
 
 export class JupiterService {
   private readonly baseUrl = "https://lite-api.jup.ag";
@@ -27,28 +27,26 @@ export class JupiterService {
     timeoutMs: 15000,
   });
 
-  private mapJupiterTokenToTokenInfo(
-    jupiterToken: JupiterToken
-  ): JupiterTokenInfo {
+  private mapJupiterTokenToTokenInfo(jupiterToken: JupiterToken): Token {
     return {
-      id: jupiterToken.id,
+      address: jupiterToken.id,
       name: jupiterToken.name,
       symbol: jupiterToken.symbol,
-      icon: jupiterToken.icon,
+      logoUri: jupiterToken.icon,
       decimals: jupiterToken.decimals,
-      price: jupiterToken.usdPrice || 0,
-      priceChange24h: jupiterToken.stats24h?.priceChange || 0,
-      marketCap: jupiterToken.mcap || 0,
-      volume24h:
-        (jupiterToken.stats24h?.buyVolume || 0) +
-        (jupiterToken.stats24h?.sellVolume || 0),
-      liquidity: jupiterToken.liquidity || 0,
-      isVerified: jupiterToken.isVerified || false,
-      source: "jupiter",
+      // price: jupiterToken.usdPrice || 0,
+      // priceChange24h: jupiterToken.stats24h?.priceChange || 0,
+      // marketCap: jupiterToken.mcap || 0,
+      // volume24h:
+      //   (jupiterToken.stats24h?.buyVolume || 0) +
+      //   (jupiterToken.stats24h?.sellVolume || 0),
+      // liquidity: jupiterToken.liquidity || 0,
+      // isVerified: jupiterToken.isVerified || false,
+      // source: "jupiter",
     };
   }
 
-  async getTokenInfo(mintAddress: string): Promise<JupiterTokenInfo | null> {
+  async getTokenInfo(mintAddress: string): Promise<Token | null> {
     try {
       console.log(`[Jupiter] Fetching token info for: ${mintAddress}`);
 
@@ -58,7 +56,6 @@ export class JupiterService {
             `${this.tokenBaseUrl}/search?query=${mintAddress}`
           ),
         async () => {
-          // fallback: try cached price if available and return minimal info
           const price = await this.cache.get<number>(
             CacheKeys.tokenPriceKey(mintAddress)
           );
@@ -89,6 +86,7 @@ export class JupiterService {
       const token =
         response.find((t) => t.id === mintAddress) ||
         (response[0] as JupiterToken);
+
       return this.mapJupiterTokenToTokenInfo(token);
     } catch (error) {
       console.error(
@@ -103,8 +101,8 @@ export class JupiterService {
     tokenXAddress: string,
     tokenYAddress: string
   ): Promise<{
-    tokenX: JupiterTokenInfo;
-    tokenY: JupiterTokenInfo;
+    tokenX: Token;
+    tokenY: Token;
   }> {
     try {
       console.log(
@@ -145,91 +143,70 @@ export class JupiterService {
     }
   }
 
-  async searchTokens(query: string): Promise<JupiterTokenInfo[]> {
+  async searchTokens(query: string): Promise<Token[]> {
     try {
       console.log(`[Jupiter] Searching tokens for: ${query}`);
 
-      const response = await api.getWithRetry<JupiterTokenInfo[]>(
+      const response = await api.getWithRetry<JupiterTokenSearchResponse>(
         `${this.tokenBaseUrl}/search?query=${query}`
       );
 
-      return response;
+      return response.map(this.mapJupiterTokenToTokenInfo);
     } catch (error) {
       console.error(`[Jupiter] Error searching tokens for ${query}:`, error);
       return [];
     }
   }
 
-  async getTokenPrice(tokenAddress: string): Promise<number | null> {
-    try {
-      const key = CacheKeys.tokenPriceKey(tokenAddress);
-      const cached = await this.cache.get<number>(key);
-      if (typeof cached === "number") return cached;
+  // async getTokenPrices(
+  //   tokenAddresses: string[]
+  // ): Promise<Record<string, number>> {
+  //   console.log(
+  //     `[Jupiter] Fetching prices for ${tokenAddresses.length} tokens`
+  //   );
 
-      const tokenInfo = await this.getTokenInfo(tokenAddress);
-      const price = tokenInfo?.price || null;
-      if (price != null) {
-        await this.cache.set(key, price, 60); // 1-minute TTL
-      }
-      return price;
-    } catch (error) {
-      console.error(
-        `[Jupiter] Error fetching price for ${tokenAddress}:`,
-        error
-      );
-      return null;
-    }
-  }
+  //   const prices: Record<string, number> = {};
 
-  async getTokenPrices(
-    tokenAddresses: string[]
-  ): Promise<Record<string, number>> {
-    console.log(
-      `[Jupiter] Fetching prices for ${tokenAddresses.length} tokens`
-    );
+  //   // First, try cache for each
+  //   const misses: string[] = [];
+  //   for (const address of tokenAddresses) {
+  //     const key = CacheKeys.tokenPriceKey(address);
+  //     const cached = await this.cache.get<number>(key);
+  //     if (typeof cached === "number") {
+  //       prices[address] = cached;
+  //     } else {
+  //       misses.push(address);
+  //     }
+  //   }
 
-    const prices: Record<string, number> = {};
+  //   // Process remaining tokens in batches
+  //   const batchSize = 5;
+  //   for (let i = 0; i < misses.length; i += batchSize) {
+  //     const batch = misses.slice(i, i + batchSize);
 
-    // First, try cache for each
-    const misses: string[] = [];
-    for (const address of tokenAddresses) {
-      const key = CacheKeys.tokenPriceKey(address);
-      const cached = await this.cache.get<number>(key);
-      if (typeof cached === "number") {
-        prices[address] = cached;
-      } else {
-        misses.push(address);
-      }
-    }
+  //     const batchPromises = batch.map(async (address) => {
+  //       try {
+  //         const price = await this.getTokenPrice(address);
+  //         if (price !== null) {
+  //           prices[address] = price;
+  //         }
+  //       } catch (error) {
+  //         console.error(
+  //           `[Jupiter] Error fetching price for ${address}:`,
+  //           error
+  //         );
+  //       }
+  //     });
 
-    // Process remaining tokens in batches
-    const batchSize = 5;
-    for (let i = 0; i < misses.length; i += batchSize) {
-      const batch = misses.slice(i, i + batchSize);
+  //     await Promise.all(batchPromises);
 
-      const batchPromises = batch.map(async (address) => {
-        try {
-          const price = await this.getTokenPrice(address);
-          if (price !== null) {
-            prices[address] = price;
-          }
-        } catch (error) {
-          console.error(
-            `[Jupiter] Error fetching price for ${address}:`,
-            error
-          );
-        }
-      });
+  //     if (i + batchSize < misses.length) {
+  //       await new Promise((resolve) => setTimeout(resolve, 500));
+  //     }
+  //   }
 
-      await Promise.all(batchPromises);
-
-      if (i + batchSize < misses.length) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
-    }
-
-    return prices;
-  }
+  //   return prices;
+  // }
 
   // async validateToken(tokenAddress: string): Promise<boolean> {
   //   try {

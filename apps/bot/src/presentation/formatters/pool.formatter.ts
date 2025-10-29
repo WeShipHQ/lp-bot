@@ -26,7 +26,6 @@ export class PoolFormatter {
   }
 
   static formatPoolDetails(pool: UnifiedPool): string {
-    console.log(pool);
     const tokenPair = pool.name;
     const poolLink = link(
       pool.dex.toUpperCase(),

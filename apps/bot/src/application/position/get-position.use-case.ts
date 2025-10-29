@@ -2,8 +2,12 @@ import { IPositionRepository } from "@/domain/position/position.repository";
 import type { Position } from "@/domain/position/position.entity";
 import { IUserRepository } from "@/domain/user/user.repository";
 import { Money, TokenAmount } from "@/domain/shared/value-objects";
-import { DexType, UnifiedPool, UnifiedPosition } from "@/types/core.types";
-import type { TokenPrice } from "@/types/token.types";
+import {
+  DexType,
+  UnifiedPool,
+  UnifiedPosition,
+  TokenPrice,
+} from "@/types/core.types";
 import { IDexAdapter } from "@/types/dex-adapter.interface";
 import { logger } from "@/utils/logger";
 import { getTokenPriceService } from "@/services/token-price.service";
@@ -109,7 +113,6 @@ export class GetPositionUseCase {
           );
         }
       }
-
       let prices: Record<string, TokenPrice | undefined> | undefined;
       if (command.includePrices) {
         try {

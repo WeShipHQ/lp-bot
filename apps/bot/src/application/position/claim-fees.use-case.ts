@@ -3,6 +3,7 @@ import { validateWalletAddress } from "@/domain/position/position.validators";
 import {
   DexType,
   ClaimFeesResult as ClaimFeesResultType,
+  Token,
 } from "@/types/core.types";
 import { IDexAdapter } from "@/types/dex-adapter.interface";
 import { logger } from "@/utils/logger";
@@ -11,7 +12,6 @@ import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 import { JOB_TX_CONFIRM } from "@/infrastructure/jobs/job-definitions";
 import { DexRegistryLike } from "./create-position.use-case";
 import { WalletService } from "@/services/wallet.service";
-import { Token } from "@/types/token.types";
 
 export interface ClaimFeesCommand {
   positionId: string;
@@ -85,7 +85,10 @@ export class ClaimFeesUseCase {
         );
         estimatedUnclaimedFeesUsd = Number(onchain.unclaimedFeesUsd || 0);
       } catch (error) {
-        logger.warn({ error, positionId: position.id }, "Failed to fetch on-chain position prior to claim");
+        logger.warn(
+          { error, positionId: position.id },
+          "Failed to fetch on-chain position prior to claim"
+        );
       }
 
       let txResult: ClaimFeesResultType;
@@ -96,10 +99,13 @@ export class ClaimFeesUseCase {
           positionAddress: position.positionAddress,
         });
       } catch (error) {
-        logger.error({
-          error,
-          positionAddress: position.positionAddress,
-        }, "adapter.claimFees failed");
+        logger.error(
+          {
+            error,
+            positionAddress: position.positionAddress,
+          },
+          "adapter.claimFees failed"
+        );
         return {
           success: false,
           error:
@@ -120,9 +126,12 @@ export class ClaimFeesUseCase {
         !Array.isArray(txResult.instructions) ||
         txResult.instructions.length === 0
       ) {
-        logger.error({
-          positionAddress: position.positionAddress,
-        }, "No instructions returned from adapter.claimFees");
+        logger.error(
+          {
+            positionAddress: position.positionAddress,
+          },
+          "No instructions returned from adapter.claimFees"
+        );
         return {
           success: false,
           error: "No claim instructions returned by DEX adapter",
@@ -155,9 +164,6 @@ export class ClaimFeesUseCase {
           error: "Transaction signature missing after submission attempt",
         };
       }
-
-      // const tokenXData = position.tokenX;
-      // const tokenYData = position.tokenY;
 
       const context: ClaimFeesContext = {
         userId: command.userId,
@@ -204,10 +210,13 @@ export class ClaimFeesUseCase {
           maxRetries: 3,
         });
       } catch (error) {
-        logger.error({
-          error,
-          signature,
-        }, "Failed to insert pending transaction (claim fees)");
+        logger.error(
+          {
+            error,
+            signature,
+          },
+          "Failed to insert pending transaction (claim fees)"
+        );
         return {
           success: false,
           error: "Failed to persist pending transaction for processing",
@@ -229,10 +238,13 @@ export class ClaimFeesUseCase {
           { delay: 500 }
         );
       } catch (error) {
-        logger.error({
-          error,
-          signature,
-        }, "Failed to enqueue transaction confirmation job (claim)");
+        logger.error(
+          {
+            error,
+            signature,
+          },
+          "Failed to enqueue transaction confirmation job (claim)"
+        );
       }
 
       return {

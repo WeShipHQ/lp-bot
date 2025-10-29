@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { IPositionRepository } from "@/domain/position/position.repository";
 import { validateWalletAddress } from "@/domain/position/position.validators";
-import { DexType } from "@/types/core.types";
+import { DexType, Token } from "@/types/core.types";
 import { IDexAdapter } from "@/types/dex-adapter.interface";
 import { logger } from "@/utils/logger";
 import { db, pendingTransactions, users } from "@/db";
@@ -11,7 +11,6 @@ import { DexRegistryLike } from "./create-position.use-case";
 import { WalletService } from "@/services/wallet.service";
 import { eq } from "drizzle-orm";
 import { RebalanceSessionMetadata } from "@/types/rebalance.types";
-import { Token } from "@/types/token.types";
 
 export interface RebalancePositionCommand {
   userId: string;

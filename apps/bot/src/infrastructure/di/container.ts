@@ -37,8 +37,6 @@ import { GetPoolTokenBalancesUseCase } from "@/application/wallet/get-pool-token
 import { ConnectWalletUseCase } from "@/application/wallet/connect-wallet.use-case";
 import { SendTokensUseCase } from "@/application/wallet/send-tokens.use-case";
 import { GetTopTokenBalancesUseCase } from "@/application/wallet/get-top-token-balances.use-case";
-// import { SettingsService } from "@/services/settings.service";
-// import { SettingsIntegrationService } from "@/services/settings-integration.service";
 import { UserRebalanceScheduleService } from "@/services/user-rebalance-schedule.service";
 
 import { GetTrendingPoolsUseCase } from "@/application/trending/get-trending-pools.use-case";
@@ -56,7 +54,7 @@ import { UpdateUserSettingUseCase } from "@/application/settings/update-user-set
 
 // Adapters
 import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
-import { JupiterAdapter } from "@/adapters/external-api/jupiter.adapter";
+// import { JupiterAdapter } from "@/adapters/external-api/jupiter.adapter";
 import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
 import { SarosAdapter } from "@/services/saros/saros.adapter";
 
@@ -67,6 +65,7 @@ import {
   DexRegistryService,
 } from "@/services/dex-registry.service";
 import { SwapService } from "@/services/swap.service";
+import { JupiterService } from "@/services/jupiter.service";
 
 // DB
 import { db } from "@/db";
@@ -131,10 +130,10 @@ function registerBase() {
     .bind(SolanaAdapter)
     .toDynamicValue(() => new SolanaAdapter())
     .inSingletonScope();
-  container
-    .bind(JupiterAdapter)
-    .toDynamicValue(() => new JupiterAdapter())
-    .inSingletonScope();
+  // container
+  //   .bind(JupiterAdapter)
+  //   .toDynamicValue(() => new JupiterAdapter())
+  //   .inSingletonScope();
   container
     .bind(MeteoraAdapter)
     .toDynamicValue(() => new MeteoraAdapter())
@@ -153,6 +152,11 @@ function registerBase() {
   container
     .bind(SwapService)
     .toDynamicValue(() => new SwapService())
+    .inSingletonScope();
+
+  container
+    .bind(JupiterService)
+    .toDynamicValue(() => new JupiterService())
     .inSingletonScope();
 
   // Use-cases (transient by default)
@@ -198,18 +202,24 @@ function registerBase() {
         )
     );
 
-  container.bind(RebalancePositionUseCase).toDynamicValue(
-    (c) =>
-      new RebalancePositionUseCase(
-        c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
-        c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry)
-        // c.container.get(SettingsIntegrationService)
-      )
-  );
+  container
+    .bind(RebalancePositionUseCase)
+    .toDynamicValue(
+      (c) =>
+        new RebalancePositionUseCase(
+          c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
+          c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry)
+        )
+    );
 
   container
     .bind(CalculateBalancedDistributionUseCase)
-    .toDynamicValue(() => new CalculateBalancedDistributionUseCase());
+    .toDynamicValue(
+      (c) =>
+        new CalculateBalancedDistributionUseCase(
+          c.container.get(JupiterService)
+        )
+    );
 
   container
     .bind(GetPriceRangeUseCase)
@@ -303,17 +313,6 @@ function registerBase() {
   container
     .bind(UpdateUserUseCase)
     .toDynamicValue(() => new UpdateUserUseCase());
-  // container
-  //   .bind(GetUserByTelegramIdUseCase)
-  //   .toDynamicValue(() => new GetUserByTelegramIdUseCase());
-
-  // Additional services
-  // container.bind(SettingsService).toDynamicValue(() => new SettingsService());
-  // container
-  //   .bind(SettingsIntegrationService)
-  //   .toDynamicValue(
-  //     () => new SettingsIntegrationService(container.get(SettingsService))
-  // );
   container
     .bind(UserRebalanceScheduleService)
     .toDynamicValue(() => new UserRebalanceScheduleService());

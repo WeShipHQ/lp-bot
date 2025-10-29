@@ -3,6 +3,7 @@ import { validateWalletAddress } from "@/domain/position/position.validators";
 import {
   DexType,
   ClosePositionResult as ClosePositionResultType,
+  Token,
 } from "@/types/core.types";
 import { IDexAdapter } from "@/types/dex-adapter.interface";
 import { logger } from "@/utils/logger";
@@ -10,6 +11,12 @@ import { db, pendingTransactions } from "@/db";
 import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 import { JOB_TX_CONFIRM } from "@/infrastructure/jobs/job-definitions";
 import { DexRegistryLike } from "./create-position.use-case";
+import {
+  getCacheService,
+  ICacheService,
+} from "@/infrastructure/cache/cache.service";
+import { CachePatterns } from "@/infrastructure/cache/cache-keys";
+import { WalletService } from "@/services/wallet.service";
 
 export interface ClosePositionCommand {
   // Required to identify ownership and for pending tx record
@@ -42,14 +49,6 @@ export interface ClosePositionUCResult {
   error?: string;
 }
 
-import {
-  getCacheService,
-  ICacheService,
-} from "@/infrastructure/cache/cache.service";
-import { CachePatterns } from "@/infrastructure/cache/cache-keys";
-import { WalletService } from "@/services/wallet.service";
-import { Token } from "@/types/token.types";
-
 export class ClosePositionUseCase {
   private readonly cache: ICacheService;
   constructor(
@@ -70,7 +69,6 @@ export class ClosePositionUseCase {
       }
       validateWalletAddress(command.userAddress);
 
-      // Load position from repository to resolve dex and position address
       const position = await this.positionRepository.findById(
         command.positionId
       );
@@ -181,10 +179,8 @@ export class ClosePositionUseCase {
         };
       }
 
-      // Optimistically mark position as closed at application level
       try {
         position.close();
-        // Note: we are not able to set closure signature via domain mapping yet
         await this.positionRepository.update(position);
       } catch (err) {
         logger.error({ err }, "Failed to update position status to CLOSED");
@@ -206,11 +202,13 @@ export class ClosePositionUseCase {
           { delay: 500 }
         );
       } catch (err) {
-        logger.error({ err }, "Failed to enqueue transaction confirmation job (close)");
+        logger.error(
+          { err },
+          "Failed to enqueue transaction confirmation job (close)"
+        );
       }
 
       try {
-        // Invalidate caches: portfolio for user and this position
         await this.cache.invalidate(
           CachePatterns.portfolioPattern(command.userId)
         );

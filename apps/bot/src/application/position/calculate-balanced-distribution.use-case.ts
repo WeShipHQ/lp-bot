@@ -1,11 +1,7 @@
 import { OPEN_POSITION_FEE, SOL_MINT } from "@/config/constants";
-import { JupiterAdapter } from "@/adapters/external-api/jupiter.adapter";
+import { JupiterService } from "@/services/jupiter.service";
 import { UnifiedPool } from "@/types/core.types";
-import {
-  lamportsToSol,
-  rawToUiAmount,
-  solToLamports,
-} from "@/utils/number-utils";
+import { rawToUiAmount, solToLamports } from "@/utils/number-utils";
 import Decimal from "decimal.js";
 
 export interface CalculateBalancedDistributionInput {
@@ -18,14 +14,8 @@ export interface CalculateBalancedDistributionResult {
   tokenBAmount: number;
 }
 
-/**
- * Calculate a 50/50 balanced distribution for a SOL auto-convert deposit.
- * - Deducts OPEN_POSITION_FEE from the entered SOL amount
- * - Splits the remaining SOL 50/50
- * - Converts each half into tokenA/tokenB when needed using Jupiter quotes
- */
 export class CalculateBalancedDistributionUseCase {
-  constructor(private readonly jupiter = new JupiterAdapter()) {}
+  constructor(private readonly jupiter: JupiterService) {}
 
   async execute(
     input: CalculateBalancedDistributionInput
@@ -60,7 +50,7 @@ export class CalculateBalancedDistributionUseCase {
       return amount;
     }
 
-    const route = await this.jupiter.getSwapRoute({
+    const route = await this.jupiter.getOrder({
       inputMint: SOL_MINT,
       outputMint,
       amount: String(solToLamports(amount)),

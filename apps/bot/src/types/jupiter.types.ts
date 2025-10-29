@@ -57,20 +57,20 @@ export interface JupiterToken {
 
 export type JupiterTokenSearchResponse = Array<JupiterToken>;
 
-export interface JupiterTokenInfo {
-  id: string;
-  name: string;
-  symbol: string;
-  icon?: string;
-  decimals: number;
-  price: number;
-  priceChange24h: number;
-  marketCap: number;
-  volume24h: number;
-  liquidity: number;
-  isVerified: boolean;
-  source: "jupiter" | "meteora";
-}
+// export interface JupiterTokenInfo {
+//   id: string;
+//   name: string;
+//   symbol: string;
+//   icon?: string;
+//   decimals: number;
+//   price: number;
+//   priceChange24h: number;
+//   marketCap: number;
+//   volume24h: number;
+//   liquidity: number;
+//   isVerified: boolean;
+//   source: "jupiter" | "meteora";
+// }
 
 export interface JupiterOrderRequest {
   inputMint: string;

@@ -26,8 +26,8 @@ export class GetPoolDetailsUseCase {
     }
 
     const cacheKey = CacheKeys.poolKey(dex, poolAddress);
-    // const cached = await this.cache.get<UnifiedPool>(cacheKey);
-    // if (cached) return cached;
+    const cached = await this.cache.get<UnifiedPool>(cacheKey);
+    if (cached) return cached;
 
     const adapter = dexRegistry.get(dex);
     const pool = await adapter.getPool(poolAddress);

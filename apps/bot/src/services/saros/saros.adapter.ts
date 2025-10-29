@@ -1,5 +1,4 @@
 import type { PoolDex, PoolType } from "@/types/pool.types";
-import type { Token } from "@/types/token.types";
 import type {
   SarosDlmmPool,
   SarosDlmmPoolDetail,
@@ -16,6 +15,7 @@ import {
   UnifiedPosition,
   UrlParseResult,
   CreatePositionResult,
+  Token
 } from "@/types/core.types";
 import { SarosPoolService } from "./pool.service";
 import { TRENDING_CONSTANTS } from "@/config/constants";

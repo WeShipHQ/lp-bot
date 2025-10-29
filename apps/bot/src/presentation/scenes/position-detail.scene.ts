@@ -16,12 +16,11 @@ import {
   PositionDetailCallbackPatterns,
 } from "../keyboards/position-detail.actions";
 import { DISABLE_LINK_PREVIEW } from "../constants/base.constants";
-import { loading } from "@/utils/misc";
+import { divider, loading } from "@/utils/misc";
 import { ClosePositionUseCase } from "@/application/position/close-position.use-case";
 import { ClaimFeesUseCase } from "@/application/position/claim-fees.use-case";
 import { RebalancePositionUseCase } from "@/application/position/rebalance-position.use-case";
 import { getSolscanLink } from "@/utils/link";
-import { formatCurrency } from "../formatters/base.formatter";
 import type { PositionStatus } from "@/domain/position/position.entity";
 
 interface SceneState {
@@ -249,18 +248,25 @@ positionDetailScene.action(
       return ctx.scene.leave();
     }
 
-    const pairLabel = state.pairLabel ?? "this position";
-    const addressLine = state.positionAddress
-      ? `Position address: \`${state.positionAddress}\`\n\n`
-      : "\n";
+    // const pairLabel = state.pairLabel ?? "this position";
+    // const addressLine = state.positionAddress
+    //   ? `Position address: \`${state.positionAddress}\`\n\n`
+    //   : "\n";
 
-    const confirmationMessage =
-      `🔍 *Confirm Position Closure*\n\n` +
-      `Are you sure you want to close position "${pairLabel}"?\n` +
-      addressLine +
-      `This action cannot be undone.`;
+    // const confirmationMessage =
+    //   `🔍 *Confirm Position Closure*\n\n` +
+    //   `Are you sure you want to close position "${pairLabel}"?\n` +
+    //   addressLine +
+    //   `This action cannot be undone.`;
 
-    await ctx.reply(confirmationMessage, {
+    const lines = [
+      "❌ Close Position",
+      divider(),
+      "⚠️ WARNING: This action cannot be undone\n",
+      "Are you sure you want to close this position?",
+    ];
+
+    await ctx.reply(lines.join("\n"), {
       parse_mode: "Markdown",
       reply_markup: getPositionCloseConfirmKeyboard(),
     });
@@ -291,7 +297,7 @@ positionDetailScene.action(
       console.warn("Could not delete confirmation message", error);
     }
 
-    const loadingMsg = await ctx.reply("⏳ *Closing position...*", {
+    const loadingMsg = await ctx.reply("⏳ Closing position...", {
       parse_mode: "Markdown",
     });
 
@@ -377,18 +383,24 @@ positionDetailScene.action(
       return ctx.scene.leave();
     }
 
-    const pairLabel = state.pairLabel ?? "this position";
-    const addressLine = state.positionAddress
-      ? `Position address: \`${state.positionAddress}\`\n\n`
-      : "\n";
+    // const pairLabel = state.pairLabel ?? "this position";
+    // const addressLine = state.positionAddress
+    //   ? `Position address: \`${state.positionAddress}\`\n\n`
+    //   : "\n";
 
-    const confirmationMessage =
-      `💰 *Claim LP Fees*\n\n` +
-      `Claim all available fees for "${pairLabel}" and swap to SOL?\n` +
-      addressLine +
-      `This action will claim all available fees and convert them to SOL.`;
+    // const confirmationMessage =
+    //   `💰 *Claim LP Fees*\n\n` +
+    //   `Claim all available fees for "${pairLabel}" and swap to SOL?\n` +
+    //   addressLine +
+    //   `This action will claim all available fees and convert them to SOL.`;
 
-    await ctx.reply(confirmationMessage, {
+    const lines = [
+      "*💸 Claim Position Fees*",
+      divider(),
+      "This action will claim all available fees and convert them to SOL.",
+    ];
+
+    await ctx.reply(lines.join("\n"), {
       parse_mode: "Markdown",
       reply_markup: getClaimFeesConfirmKeyboard(state.positionId),
     });
@@ -422,27 +434,12 @@ positionDetailScene.action(
 
     try {
       const uc = container.get(ClaimFeesUseCase);
-      // const res = await uc.execute({
-      //   userId: ctx.user.id,
-      //   positionId,
-      //   walletAddress: ctx.user.walletAddress,
-      //   walletId: ctx.user.walletId,
-      // });
-
-      const res = {
-        success: true,
-        signature:
-          "4JBYLcKF98y5WghpML8W5hJYKFipwXSLBuG7S3D2qsrHPAFJcB4SU6ebRCxtvkx5UwqBBTNCM7gxgc7ypWsJbuUw",
-        claimedFeesUsd: 1000,
-        error: "Some error occurred",
-      };
-
-      //       export interface ClaimFeesResult {
-      //   success: boolean;
-      //   signature?: string;
-      //   claimedFeesUsd?: number;
-      //   error?: string;
-      // }
+      const res = await uc.execute({
+        userId: ctx.user.id,
+        positionId,
+        walletAddress: ctx.user.walletAddress,
+        walletId: ctx.user.walletId,
+      });
 
       if (!res.success) {
         await ctx.telegram.editMessageText(
@@ -455,18 +452,8 @@ positionDetailScene.action(
         return;
       }
 
-      const claimedLine =
-        typeof res.claimedFeesUsd === "number" && res.claimedFeesUsd > 0
-          ? `• Claimed Fees (est): ${formatCurrency(res.claimedFeesUsd, { maxDecimals: 2 })}\n`
-          : "";
-
-      const conversionLine =
-        "• Conversion: Fees will be automatically swapped to SOL after confirmation.\n";
-
       const successMessage =
-        `✅ *Fees Claimed Successfully*\n\n` +
-        claimedLine +
-        conversionLine +
+        `✅ *Fees claimed!*\n\n` +
         `Transaction: [View on Solscan](${getSolscanLink("tx", res.signature ?? "")})`;
 
       await ctx.telegram.editMessageText(
@@ -522,18 +509,21 @@ positionDetailScene.action(
       return ctx.scene.leave();
     }
 
-    const pairLabel = state.pairLabel ?? "this position";
-    const addressLine = state.positionAddress
-      ? `Position address: \`${state.positionAddress}\`\n\n`
-      : "\n";
+    const lines = [
+      "⚖️ *Rebalance Position*",
+      divider("-", 50),
+      "Rebalancing Plan:",
+      "• Close current position",
+      "• Claim fees",
+      "• Create new position centered at current price\n",
+      "Expected Benefit:",
+      "• Return to optimal range",
+      "• Resume fee earnings",
+      "• Minimize impermanent loss\n",
+      "⚠️ Position will be inactive briefly during rebalancing",
+    ];
 
-    const confirmationMessage =
-      `⚖️ *Rebalance Position*\n\n` +
-      `Rebalance "${pairLabel}" now?\n` +
-      addressLine +
-      `This action will rebalance liquidity distribution.`;
-
-    await ctx.reply(confirmationMessage, {
+    await ctx.reply(lines.join("\n"), {
       parse_mode: "Markdown",
       reply_markup: getRebalanceConfirmKeyboard(state.positionId),
     });
@@ -589,13 +579,8 @@ positionDetailScene.action(
         return;
       }
 
-      const newAddressLine = res.newPositionAddress
-        ? `New position address: \`${res.newPositionAddress}\`\n\n`
-        : "";
-
       const successMessage =
         `✅ *Position Rebalance Initiated*\n\n` +
-        `${newAddressLine}` +
         `Transaction: [View on Solscan](${getSolscanLink("tx", res.signature ?? "")})\n\n` +
         `⏳ You'll receive a notification once rebalance completes.`;
 

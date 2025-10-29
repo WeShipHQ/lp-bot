@@ -1,5 +1,4 @@
-import { Token } from "@/types/token.types";
-import { DexType } from "@/types/core.types";
+import { DexType, Token } from "@/types/core.types";
 
 export type RebalanceStage = "close" | "creating" | "completed";
 

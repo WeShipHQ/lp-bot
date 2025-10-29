@@ -24,9 +24,8 @@ import {
   MeteoraDlmmInstruction,
 } from "@/utils/tx-parser";
 import { ClaimFeesContext, PositionClosureContext } from "@/application";
-import Decimal from "decimal.js";
-import { Token } from "@/types/token.types";
 import {
+  formatNumber,
   formatPercentage,
   formatPrice,
 } from "@/presentation/formatters/base.formatter";
@@ -47,10 +46,12 @@ import {
   uiToRawAmount,
 } from "@/utils/number-utils";
 import { dexRegistry } from "@/services/dex-registry.service";
-import { CreatePositionParams } from "@/types/core.types";
+import { CreatePositionParams, Token } from "@/types/core.types";
 import { WalletService } from "@/services/wallet.service";
 import { getPositionDeeplink, link } from "@/utils/misc";
 import { getSolscanLink } from "@/utils/link";
+import Decimal from "decimal.js";
+import { CONFIG } from "@/config";
 
 type ExtractedClosePositionIxsData = {
   positionAddress?: string;
@@ -562,9 +563,6 @@ export class TransactionConfirmWorker
         claimContext.tokenB
       );
 
-      console.log("claimedFeesTokenA", claimedFeesTokenA);
-      console.log("claimedFeesTokenB", claimedFeesTokenB);
-
       if (onChainPositionAddress) {
         positionAddress = onChainPositionAddress;
       }
@@ -584,14 +582,9 @@ export class TransactionConfirmWorker
       const tokenBPriceUsd = priceData[claimContext.tokenB.address]?.price ?? 0;
       const solPriceUsd = priceData[SOL_MINT]?.price ?? 0;
 
-      console.log("tokenAPriceUsd", tokenAPriceUsd);
-      console.log("tokenBPriceUsd", tokenBPriceUsd);
-      console.log("solPriceUsd", solPriceUsd);
-
       const claimedUsdValue = new Decimal(claimedFeesTokenA)
         .mul(tokenAPriceUsd)
         .add(new Decimal(claimedFeesTokenB).mul(tokenBPriceUsd));
-      console.log("claimedUsdValue", claimedUsdValue);
 
       let solReceivedDecimal = new Decimal(0);
 
@@ -604,116 +597,6 @@ export class TransactionConfirmWorker
       }
 
       if (shouldConvertToSol && userRecord) {
-        // const claimedFeesTokenALamports = uiToRawAmount(
-        //   claimedFeesTokenA,
-        //   claimContext.tokenA.decimals
-        // );
-        // const claimedFeesTokenBLamports = uiToRawAmount(
-        //   claimedFeesTokenB,
-        //   claimContext.tokenB.decimals
-        // );
-
-        // // Swap token A fees to SOL if not already SOL and amount > 0
-        // if (
-        //   claimedFeesTokenALamports > BigInt(0) &&
-        //   claimContext.tokenA.address !== SOL_MINT
-        // ) {
-        //   try {
-        //     const swapResultA = await this.swapService.swapTokenToSol(
-        //       userRecord,
-        //       claimContext.tokenA.address,
-        //       claimedFeesTokenALamports.toString()
-        //     );
-        //     if (swapResultA.result.success) {
-        //       solReceivedDecimal = solReceivedDecimal.add(
-        //         swapResultA.solReceived
-        //       );
-        //       logger.info("[TxConfirmWorker] Swapped token A fees to SOL", {
-        //         signature,
-        //         tokenA: claimContext.tokenA.address,
-        //         amount: claimedFeesTokenALamports.toString(),
-        //         solReceived: swapResultA.solReceived.toString(),
-        //       });
-        //     } else {
-        //       logger.warn(
-        //         "[TxConfirmWorker] Failed to swap token A fees to SOL",
-        //         {
-        //           signature,
-        //           tokenA: claimContext.tokenA.address,
-        //           error: swapResultA.result.error,
-        //         }
-        //       );
-        //     }
-        //   } catch (error) {
-        //     logger.error(
-        //       "[TxConfirmWorker] Error swapping token A fees to SOL",
-        //       {
-        //         signature,
-        //         tokenA: claimContext.tokenA.address,
-        //         error,
-        //       }
-        //     );
-        //   }
-        // } else if (
-        //   claimedFeesTokenALamports > BigInt(0) &&
-        //   claimContext.tokenA.address === SOL_MINT
-        // ) {
-        //   // Token A is already SOL, just add to total
-        //   solReceivedDecimal = solReceivedDecimal.add(
-        //     lamportsToSol(claimedFeesTokenALamports)
-        //   );
-        // }
-
-        // // Swap token B fees to SOL if not already SOL and amount > 0
-        // if (
-        //   claimedFeesTokenBLamports > BigInt(0) &&
-        //   claimContext.tokenB.address !== SOL_MINT
-        // ) {
-        //   try {
-        //     const swapResultB = await this.swapService.swapTokenToSol(
-        //       userRecord,
-        //       claimContext.tokenB.address,
-        //       claimedFeesTokenBLamports.toString()
-        //     );
-        //     if (swapResultB.result.success) {
-        //       solReceivedDecimal = solReceivedDecimal.add(
-        //         swapResultB.solReceived
-        //       );
-        //       logger.info("[TxConfirmWorker] Swapped token B fees to SOL", {
-        //         signature,
-        //         tokenB: claimContext.tokenB.address,
-        //         amount: claimedFeesTokenBLamports.toString(),
-        //         solReceived: swapResultB.solReceived.toString(),
-        //       });
-        //     } else {
-        //       logger.warn(
-        //         "[TxConfirmWorker] Failed to swap token B fees to SOL",
-        //         {
-        //           signature,
-        //           tokenB: claimContext.tokenB.address,
-        //           error: swapResultB.result.error,
-        //         }
-        //       );
-        //     }
-        //   } catch (error) {
-        //     logger.error(
-        //       "[TxConfirmWorker] Error swapping token B fees to SOL",
-        //       {
-        //         signature,
-        //         tokenB: claimContext.tokenB.address,
-        //         error,
-        //       }
-        //     );
-        //   }
-        // } else if (
-        //   claimedFeesTokenBLamports > BigInt(0) &&
-        //   claimContext.tokenB.address === SOL_MINT
-        // ) {
-        //   // Token B is already SOL, just add to total
-        //   solReceivedDecimal = solReceivedDecimal.add(
-        //     lamportsToSol(claimedFeesTokenBLamports)
-        //   );
-        // }
         solReceivedDecimal = await this.swapClaimedTokensToSOL(
           userRecord,
           claimedFeesTokenA,
@@ -758,8 +641,6 @@ export class TransactionConfirmWorker
             effectivePositionAddress,
             claimContext.poolAddress
           );
-
-          // console.log("onchainPosition", onchainPosition);
 
           if (onchainPosition) {
             snapshotData = {
@@ -819,18 +700,16 @@ export class TransactionConfirmWorker
         const jobQueue = new JobQueueService({ producerOnly: true });
         const usdLabel = finalClaimedUsdValue.isZero()
           ? "$0.00"
-          : `${finalClaimedUsdValue.toFixed(2)}`;
+          : `${formatPrice(finalClaimedUsdValue.toNumber(), { maxDecimals: 2 })}`;
         const solLabel = solReceivedStr
-          ? `${solReceivedDecimal
-              .toDecimalPlaces(6, Decimal.ROUND_DOWN)
-              .toString()} SOL`
+          ? `${formatNumber(solReceivedDecimal.toNumber(), { maxDecimals: 9 })} SOL`
           : "0 SOL";
 
         await jobQueue.enqueue(JOB_NOTIFICATION, {
           userId: effectiveUserId,
           notification: {
             type: "general",
-            title: "Fees Claimed",
+            title: "✅ *Fees claimed!*",
             message: `Claim confirmed: ~${usdLabel} converted to ${solLabel}.`,
           },
         });
@@ -1327,12 +1206,20 @@ export class TransactionConfirmWorker
       );
     }
 
+    const successMessage = [
+      "✅ Rebalancing complete!",
+      "",
+      `${link("View Position", getPositionDeeplink(CONFIG.TELEGRAM.BOT_USERNAME, metadata.dex, effectivePositionAddress))}`,
+      "",
+      "Your position is now active and earning fees!",
+    ].join("\n");
+
     await jobQueue.enqueue(JOB_NOTIFICATION, {
       userId,
       notification: {
         type: "rebalance",
         title: "Position Rebalanced",
-        message: `Your position has been rebalanced successfully. New position address: \`${effectivePositionAddress}\`.`,
+        message: successMessage,
         parseMode: "Markdown",
       },
     });
@@ -1541,8 +1428,6 @@ export class TransactionConfirmWorker
           prices,
         });
 
-      console.log("persistenceResult", persistenceResult);
-
       await this.cache.invalidate(CachePatterns.portfolioPattern(targetUserId));
       await this.cache.invalidate(
         CachePatterns.positionPattern(effectivePositionId)
@@ -1587,7 +1472,7 @@ export class TransactionConfirmWorker
 
     const formattedPnLUsd = formatPrice(pnlUsd, { maxDecimals: 2 });
     const formattedPnlPercentage = formatPercentage(pnlPercentage);
-    const solscanUrl = `https://solscan.io/tx/${signature}`;
+    const solscanUrl = getSolscanLink("tx", signature);
 
     const primaryMessage = [
       "✅ Position Closed",

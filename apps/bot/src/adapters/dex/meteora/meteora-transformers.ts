@@ -1,22 +1,20 @@
-import { Token } from "@/types/token.types";
 import {
   UnifiedPool,
   UnifiedPosition,
   DexType,
   PoolType,
+  Token,
 } from "@/types/core.types";
 import {
   MeteoraDlmmPoolResponse,
   MeteoraDammV1PoolResponse,
   MeteoraDammV2PoolResponse,
 } from "@/types/meteora.types";
-import { PublicKey } from "@solana/web3.js";
 import {
   TokenPriceService,
   getTokenPriceService,
 } from "@/services/token-price.service";
 import { JupiterService } from "@/services/jupiter.service";
-import { JupiterToken, JupiterTokenInfo } from "@/types/jupiter.types";
 
 /**
  * Context required for transforming on-chain position data
@@ -119,13 +117,8 @@ export class MeteoraTransformers {
    * @returns Unified pool structure with normalized fields
    */
   async toUnifiedPool(data: MeteoraDlmmPoolResponse): Promise<UnifiedPool> {
-    const { tokenX, tokenY } = await this.jupiter.getTokenPairInfo(
-      data.mint_x,
-      data.mint_y
-    );
-
-    const tokenA = this.transformToken(tokenX);
-    const tokenB = this.transformToken(tokenY);
+    const { tokenX: tokenA, tokenY: tokenB } =
+      await this.jupiter.getTokenPairInfo(data.mint_x, data.mint_y);
 
     const volume24h = this.toNumeric(data.trade_volume_24h) ?? 0;
     const fees24h = this.toNumeric(data.fees_24h) ?? 0;
@@ -210,13 +203,8 @@ export class MeteoraTransformers {
     const mintA = tokenMints[0] || "";
     const mintB = tokenMints[1] || "";
 
-    const { tokenX, tokenY } = await this.jupiter.getTokenPairInfo(
-      mintA,
-      mintB
-    );
-
-    const tokenA = this.transformToken(tokenX);
-    const tokenB = this.transformToken(tokenY);
+    const { tokenX: tokenA, tokenY: tokenB } =
+      await this.jupiter.getTokenPairInfo(mintA, mintB);
 
     // Parse APY components (all in string percentage format like "12.5")
     const baseApy = parseFloat(data.daily_base_apy || "0");
@@ -317,13 +305,8 @@ export class MeteoraTransformers {
   ): Promise<UnifiedPool> {
     const data = response.data;
 
-    const { tokenX, tokenY } = await this.jupiter.getTokenPairInfo(
-      data.token_a_mint,
-      data.token_b_mint
-    );
-
-    const tokenA = this.transformToken(tokenX);
-    const tokenB = this.transformToken(tokenY);
+    const { tokenX: tokenA, tokenY: tokenB } =
+      await this.jupiter.getTokenPairInfo(data.token_a_mint, data.token_b_mint);
 
     return {
       id: data.pool_address,
@@ -432,18 +415,18 @@ export class MeteoraTransformers {
     //   tokenAAmountUi * tokenAPrice + tokenBAmountUi * tokenBPrice;
 
     // Extract fee amounts
-    const feeXRaw =
-      positionData.feeXExcludeTransferFee ?? positionData.feeX ?? 0;
-    const feeYRaw =
-      positionData.feeYExcludeTransferFee ?? positionData.feeY ?? 0;
+    // const feeXRaw =
+    //   positionData.feeXExcludeTransferFee ?? positionData.feeX ?? 0;
+    // const feeYRaw =
+    //   positionData.feeYExcludeTransferFee ?? positionData.feeY ?? 0;
 
     // const unclaimedFeesUsd =
     //   this.fromRawAmount(feeXRaw, tokenA.decimals) * tokenAPrice +
     //   this.fromRawAmount(feeYRaw, tokenB.decimals) * tokenBPrice;
 
     // Extract claimed fees (if available)
-    const claimedFeeXRaw = positionData.totalClaimedFeeXAmount ?? 0;
-    const claimedFeeYRaw = positionData.totalClaimedFeeYAmount ?? 0;
+    // const claimedFeeXRaw = positionData.totalClaimedFeeXAmount ?? 0;
+    // const claimedFeeYRaw = positionData.totalClaimedFeeYAmount ?? 0;
     // const claimedFeesUsd =
     //   this.fromRawAmount(claimedFeeXRaw, tokenA.decimals) * tokenAPrice +
     //   this.fromRawAmount(claimedFeeYRaw, tokenB.decimals) * tokenBPrice;
@@ -538,35 +521,6 @@ export class MeteoraTransformers {
   // ============================================================================
   // Helper Methods
   // ============================================================================
-
-  /**
-   * Transform Jupiter token metadata to Token type
-   *
-   * **Data Source:** Jupiter token list or price API
-   *
-   * **Assumptions:**
-   * - `id` field contains the token mint address
-   * - `decimals` is accurate for on-chain representation
-   * - `symbol` and `name` may be empty for unknown tokens
-   *
-   * **Fallbacks:**
-   * - Missing symbol: Uses first 4 characters of address
-   * - Missing name: Uses full address
-   * - Missing decimals: Defaults to 9 (SOL standard)
-   * - Missing logoUri: Undefined (no placeholder)
-   *
-   * @param tokenInfo - Token metadata from Jupiter
-   * @returns Normalized Token object
-   */
-  transformToken(tokenInfo: JupiterTokenInfo): Token {
-    return {
-      address: tokenInfo.id,
-      symbol: tokenInfo.symbol || tokenInfo.id?.slice(0, 4) || "UNKNOWN",
-      name: tokenInfo.name || tokenInfo.id || "Unknown Token",
-      decimals: tokenInfo.decimals ?? 9,
-      logoUri: tokenInfo.icon,
-    };
-  }
 
   /**
    * Calculate APY from pool data

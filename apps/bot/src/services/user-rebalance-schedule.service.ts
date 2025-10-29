@@ -67,8 +67,7 @@ export class UserRebalanceScheduleService {
 
       // Note: In a real implementation, you'd want to track job IDs per user
       // For now, we'll clean up all rebalance schedule jobs
-      await jobQueueService.cleanQueue("position_monitor", 1000, "completed");
-      await jobQueueService.cleanQueue("position_monitor", 1000, "failed");
+      await jobQueueService.cleanQueue("position-monitor", 1000);
 
       logger.info(`Removed existing rebalance jobs for user ${userId}`);
     } catch (error) {

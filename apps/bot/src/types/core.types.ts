@@ -1,4 +1,3 @@
-import { Token } from "@/types/token.types";
 import { Keypair, TransactionInstruction } from "@solana/web3.js";
 
 export type DexType = "meteora" | "saros" | "orca" | "raydium";
@@ -195,4 +194,22 @@ export interface ClaimFeesResult {
   success: boolean;
   instructions: TransactionInstruction[];
   error?: string;
+}
+
+// tokens
+export interface Token {
+  address: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  logoUri?: string;
+}
+
+export interface TokenPrice {
+  id: string;
+  timestamp: number;
+  price: number;
+  blockId: number;
+  decimals: number;
+  priceChange24h: number;
 }

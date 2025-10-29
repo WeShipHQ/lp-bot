@@ -1,13 +1,17 @@
 import type { Position } from "@/domain/position/position.entity";
-import type { UnifiedPool, UnifiedPosition } from "@/types/core.types";
-import type { TokenPrice } from "@/types/token.types";
-// import { divider } from "@/bot/utils/text-formatters";
+import type {
+  TokenPrice,
+  UnifiedPool,
+  UnifiedPosition,
+} from "@/types/core.types";
 import {
   formatCurrency,
   formatNumber,
   formatPercentage,
+  formatPrice,
 } from "./base.formatter";
 import { divider } from "@/utils/misc";
+import Decimal from "decimal.js";
 
 interface FormatParams {
   position: Position;
@@ -47,8 +51,7 @@ export class PositionDetailFormatter {
     const tokenAUsd = tokenAUi * tokenAPrice;
     const tokenBUsd = tokenBUi * tokenBPrice;
 
-    const currentValueUsd =
-      onchain?.currentValueUsd ?? position.getCurrentValue().toNumber();
+    const currentValueUsd = tokenAUi * tokenAPrice + tokenBUi * tokenBPrice;
     const initialValueUsd = position.getInitialValue().toNumber();
     const claimedFeesUsd = position.getClaimedFees().toNumber();
     const unclaimedFeesUsd = onchain?.unclaimedFeesUsd ?? 0;
@@ -85,6 +88,9 @@ export class PositionDetailFormatter {
     })();
 
     const metadata = (onchain?.metadata ?? {}) as Record<string, unknown>;
+    const lowerBinPrice = metadata.lowerBinPrice as string | undefined;
+    const upperBinPrice = metadata.upperBinPrice as string | undefined;
+
     const lowerBinId =
       typeof metadata.lowerBinId === "number" ? metadata.lowerBinId : undefined;
     const upperBinId =
@@ -122,14 +128,24 @@ export class PositionDetailFormatter {
 
     lines.push(`*Status*`);
     lines.push(`• ${statusLabel}`);
-    if (typeof lowerBinId === "number" && typeof upperBinId === "number") {
+
+    if (upperBinPrice && lowerBinPrice) {
+      lines.push(
+        `• Price Range: ${formatNumber(Number(lowerBinPrice), { maxDecimals: 6 })} – ${formatNumber(Number(upperBinPrice), { maxDecimals: 6 })} ${tokenB.symbol}/${tokenA.symbol}`
+      );
+    } else if (
+      typeof lowerBinId === "number" &&
+      typeof upperBinId === "number"
+    ) {
       const activeSuffix =
         typeof activeId === "number" ? ` (active: ${activeId})` : "";
-      lines.push(`• Bin Range: ${lowerBinId} – ${upperBinId}${activeSuffix}`);
+      lines.push(
+        `• Bin Range: ${lowerBinId?.toString()} – ${upperBinId?.toString()}${activeSuffix}`
+      );
     }
     if (pool?.currentPrice != null) {
       lines.push(
-        `• Pool Price: ${formatNumber(pool.currentPrice, { maxDecimals: 6 })} ${pool.tokenA.symbol}/${pool.tokenB.symbol}`
+        `• Pool Price: ${formatNumber(pool.currentPrice, { maxDecimals: 6 })} ${pool.tokenB.symbol}/${pool.tokenA.symbol}`
       );
     }
     lines.push("");

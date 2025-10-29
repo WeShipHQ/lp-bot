@@ -5,8 +5,6 @@ import {
   CreatePositionParams,
   DexType,
   PaginatedTrendingPools,
-  RebalanceParams,
-  TransactionResult,
   TrendingParams,
   UnifiedPool,
   UnifiedPosition,
@@ -15,6 +13,7 @@ import {
   ClosePositionParams,
   ClaimFeesParams,
   ClaimFeesResult,
+  Token,
 } from "@/types/core.types";
 import {
   MeteoraApiClient,
@@ -22,25 +21,14 @@ import {
   MeteoraTransformers,
   meteoraTransformers,
 } from "./meteora";
-import { Token } from "@/types/token.types";
-import {
-  TokenPriceService,
-  getTokenPriceService,
-} from "@/services/token-price.service";
+import { TokenPriceService } from "@/services/token-price.service";
 import { meteoraDlmmService, MeteoraDlmmService } from "@/adapters/dex/meteora";
 import { Keypair, PublicKey } from "@solana/web3.js";
 import Decimal from "decimal.js";
-import { MeteoraDlmmPoolResponse } from "@/types/meteora.types";
 import { StrategyType } from "@meteora-ag/dlmm";
 import { DEFAULT_BIN_RANGE } from "@/domain";
 import { JupiterService } from "@/services/jupiter.service";
 
-/**
- * MeteoraAdapter
- * Implements IDexAdapter for Meteora DLMM pools.
- * - Transforms Meteora API and DLMM SDK responses into UnifiedPool/UnifiedPosition
- * - Builds transactions (create/close/claim/rebalance) via Meteora SDK
- */
 export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
   readonly dexType: DexType = "meteora";
   readonly name: string = "Meteora";
@@ -49,7 +37,6 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
   private readonly api: MeteoraApiClient;
   private readonly transformers: MeteoraTransformers;
   private readonly jupiterService: JupiterService;
-  // private readonly prices: TokenPriceService;
 
   private readonly urlPatterns = {
     dlmm: /^https:\/\/(?:www\.)?meteora\.ag\/dlmm\/([1-9A-HJ-NP-Za-km-z]{32,44})(?:\?.*)?$/,
@@ -161,16 +148,8 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
         const xMint = info.lbPair.tokenXMint.toBase58();
         const yMint = info.lbPair.tokenYMint.toBase58();
 
-        const xDecimals = Number((info as any).tokenX?.mint?.decimals ?? 0);
-        const yDecimals = Number((info as any).tokenY?.mint?.decimals ?? 0);
-
-        const tokenA: Token = this.transformers.transformToken(
-          tokens.find((token) => token.id === xMint)!
-        );
-
-        const tokenB: Token = this.transformers.transformToken(
-          tokens.find((token) => token.id === yMint)!
-        );
+        const tokenA: Token = tokens.find((token) => token.address === xMint)!;
+        const tokenB: Token = tokens.find((token) => token.address === yMint)!;
 
         const activeId = Number(info.lbPair.activeId);
         const binStepBps = Number(info.lbPair.binStep);
@@ -250,8 +229,8 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     return this.transformers.onChainToUnifiedPosition({
       poolAddress: positionInfo.publicKey.toBase58(),
       positionAddress,
-      tokenA: this.transformers.transformToken(tokenX),
-      tokenB: this.transformers.transformToken(tokenY),
+      tokenA: tokenX,
+      tokenB: tokenY,
       positionData:
         positionInfo.lbPairPositionsData.find(
           (pos) => pos.publicKey.toBase58() === positionAddress
@@ -269,10 +248,8 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     positionAddress: string,
     poolAddress: string
   ): Promise<UnifiedPosition> {
-    const { lbPair, lbPosition } = await this.dlmm.getPositionOnChain(
-      positionAddress,
-      poolAddress
-    );
+    const { lbPair, lbPosition, lowerBinPrice, upperBinPrice } =
+      await this.dlmm.getPositionOnChain(positionAddress, poolAddress);
     if (!lbPosition) {
       throw new Error("Position not found");
     }
@@ -285,8 +262,8 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     return this.transformers.onChainToUnifiedPosition({
       poolAddress,
       positionAddress,
-      tokenA: this.transformers.transformToken(tokenX),
-      tokenB: this.transformers.transformToken(tokenY),
+      tokenA: tokenX,
+      tokenB: tokenY,
       positionData: lbPosition.positionData ?? {},
       priceMap: {},
       lbPairInfo: {
@@ -295,6 +272,8 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
       },
       metadataExtras: {
         lbVersion: lbPosition.version,
+        lowerBinPrice,
+        upperBinPrice,
       },
     });
   }

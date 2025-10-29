@@ -47,7 +47,6 @@ interface RecordClaimParams {
 
 export class ClaimFeesPersistenceService {
   async recordClaim(params: RecordClaimParams): Promise<void> {
-    console.log("recordClaim params", params);
     const { signature, context, claimed, prices, snapshot } = params;
     const claimType = params.claimType ?? "manual";
 

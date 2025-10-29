@@ -1,4 +1,4 @@
-import { DeepLink, UnsupportedDeepLinkError } from '../../domain/start';
+import { DeepLink, UnsupportedDeepLinkError } from "../../domain/start";
 
 export interface RouteDeepLinkRequest {
   deepLink: DeepLink;
@@ -19,18 +19,13 @@ export interface SceneIds {
 }
 
 export class RouteDeepLinkUseCase {
-  constructor(
-    private readonly sceneIds: SceneIds
-  ) {}
+  constructor(private readonly sceneIds: SceneIds) {}
 
   async execute(request: RouteDeepLinkRequest): Promise<RouteDeepLinkResponse> {
     const { deepLink } = request;
 
-    console.log(`Processing deep link:`, deepLink.toData());
-
     switch (deepLink.type) {
       case "legacy_position":
-        console.log(`Navigating to legacy position: ${deepLink.positionAddress}`);
         return {
           shouldEnterScene: true,
           sceneId: this.sceneIds.POSITION_DETAIL_SCENE,
@@ -42,7 +37,6 @@ export class RouteDeepLinkUseCase {
         };
 
       case "legacy_pool":
-        console.log(`Navigating to legacy pool: ${deepLink.poolAddress}`);
         return {
           shouldEnterScene: true,
           sceneId: this.sceneIds.POOL_DETAIL_SCENE,
@@ -54,20 +48,15 @@ export class RouteDeepLinkUseCase {
         };
 
       case "token_detail":
-        console.log(
-          `Token detail requested for: ${deepLink.tokenAddress} with referral: ${deepLink.referralCode}`
-        );
         return {
           shouldEnterScene: false,
           shouldShowUnsupportedMessage: true,
-          unsupportedMessage: "🚧 Token detail view is coming soon...\n\nFor now, you can paste the token address in chat to get basic information.",
+          unsupportedMessage:
+            "🚧 Token detail view is coming soon...\n\nFor now, you can paste the token address in chat to get basic information.",
           shouldContinueToWelcome: true,
         };
 
       case "pool_detail":
-        console.log(
-          `Pool detail requested for: ${deepLink.poolAddress} on ${deepLink.dexCode} with referral: ${deepLink.referralCode}`
-        );
         if (deepLink.isSupportedDex()) {
           return {
             shouldEnterScene: true,
@@ -89,9 +78,6 @@ export class RouteDeepLinkUseCase {
         }
 
       case "position_detail":
-        console.log(
-          `Position detail requested for: ${deepLink.positionAddress} on ${deepLink.dexCode} with referral: ${deepLink.referralCode}`
-        );
         if (deepLink.isSupportedDex()) {
           return {
             shouldEnterScene: true,

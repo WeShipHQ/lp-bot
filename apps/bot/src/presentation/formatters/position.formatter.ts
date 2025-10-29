@@ -1,5 +1,4 @@
-import { UnifiedPool } from "@/types/core.types";
-import { Token } from "@/types/token.types";
+import { Token, UnifiedPool } from "@/types/core.types";
 import { formatNumber, formatPercentage } from "./base.formatter";
 import { divider } from "@/utils/misc";
 
@@ -104,11 +103,19 @@ export function generatePositionSummary(
     tokenBAmount: number;
   }
 ): string {
-  const { strategy, depositMethod, selectedToken, amount, percentage, autoRebalancing } = state;
+  const {
+    strategy,
+    depositMethod,
+    selectedToken,
+    amount,
+    percentage,
+    autoRebalancing,
+  } = state;
 
   const verifiedEmoji = poolData?.isVerified ? "✅" : "⚠️";
 
-  let message = `*Position Summary*\n\n` + `Pool: *${poolData?.name}* ${verifiedEmoji}\n`;
+  let message =
+    `*Position Summary*\n\n` + `Pool: *${poolData?.name}* ${verifiedEmoji}\n`;
 
   message += `Strategy: *${(strategy || "").toUpperCase()}*\n`;
 

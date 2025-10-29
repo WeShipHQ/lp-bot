@@ -278,6 +278,8 @@ export class MeteoraDlmmService {
   ): Promise<{
     lbPair: LbPair;
     lbPosition: LbPosition;
+    lowerBinPrice: string;
+    upperBinPrice: string;
   }> {
     const dlmmPool = await this.createInstance(poolAddress);
 
@@ -287,9 +289,21 @@ export class MeteoraDlmmService {
         : positionAddress
     );
 
+    const lowerBinPrice = getPriceOfBinByBinId(
+      lbPosition.positionData.lowerBinId,
+      dlmmPool.lbPair.binStep
+    );
+
+    const upperBinPrice = getPriceOfBinByBinId(
+      lbPosition.positionData.upperBinId,
+      dlmmPool.lbPair.binStep
+    );
+
     return {
       lbPair: dlmmPool.lbPair,
       lbPosition,
+      lowerBinPrice: dlmmPool.fromPricePerLamport(lowerBinPrice.toNumber()),
+      upperBinPrice: dlmmPool.fromPricePerLamport(upperBinPrice.toNumber()),
     };
   }
 

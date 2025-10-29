@@ -3,17 +3,10 @@ import {
   parseMeteoraInstructions,
   MeteoraDlmmInstruction,
 } from "@/utils/tx-parser";
-// import {
-//   TransactionMetadata,
-//   parseTransactionMetadata,
-//   isCreatePositionMetadata,
-//   isClaimFeesMetadata,
-//   isClosePositionMetadata,
-// } from "@/types/transaction-metadata.types";
 import { logger } from "@/utils/logger";
 import { rawToUiAmount } from "@/utils/number-utils";
-import { Token } from "@/types/token.types";
 import Decimal from "decimal.js";
+import { Token } from "@/types/core.types";
 
 export class TransactionParserService {
   constructor(private readonly connection: Connection) {}
