@@ -49,7 +49,8 @@ export class SyncPortfolioUseCase {
           const x = TokenAmount.fromUi(p.tokenX.symbol, parseFloat(u.tokenAAmount), p.tokenX.decimals);
           const y = TokenAmount.fromUi(p.tokenY.symbol, parseFloat(u.tokenBAmount), p.tokenY.decimals);
           p.updateTokenAmounts(x, y);
-          p.updateCurrentValue(Money.usd(u.currentValueUsd));
+          // Note: currentValueUsd calculation moved to enrichment layer
+          // Position entity tracks token amounts; USD values calculated on-demand
           await this.positionRepository.update(p);
           // invalidate per-position cache
           await this.cache.invalidate(CachePatterns.positionPattern(p.id));

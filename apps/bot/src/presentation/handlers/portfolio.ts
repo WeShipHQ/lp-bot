@@ -101,25 +101,7 @@ async function buildPortfolioOverviewPayload(
 
   const feesByAddress: Record<string, number> = {};
   if (walletAddress) {
-    try {
-      const registry = container.get<
-        typeof import("@/services/dex-registry.service").dexRegistry
-      >(DI_TOKENS.DexRegistry);
-      const active = portfolio.getActivePositions();
-      const dexes = Array.from(new Set(active.map((p) => p.dex)));
-      for (const dex of dexes) {
-        try {
-          const adapter = registry.get(dex as any);
-          const unified = await adapter.getUserPositions(walletAddress);
-          for (const up of unified) {
-            feesByAddress[up.address] =
-              (feesByAddress[up.address] || 0) + (up.unclaimedFeesUsd || 0);
-          }
-        } catch (e) {
-          // Ignore individual dex failures; keep partial data
-        }
-      }
-    } catch {}
+    // UnifiedPosition no longer provides USD-denominated fee data; enrichment is TBD.
   }
 
   return PortfolioFormatter.createDomainOverviewPayload(portfolio, {

@@ -32,7 +32,7 @@ export class PortfolioFormatter {
     return msg;
   }
 
-  static formatPositionList(positions: UnifiedPosition[]): string {
+  static formatPositionList(positions: UnifiedPosition[] | import("@/types/core.types").UserPosition[]): string {
     return positions
       .map((pos, i) => {
         const amountA =

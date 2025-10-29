@@ -44,6 +44,10 @@ export interface UnifiedPool {
   metadata?: Record<string, any>;
 }
 
+/**
+ * UnifiedPosition - Raw position data without price/USD/PnL calculations
+ * Returned directly from DEX adapters with only on-chain state
+ */
 export interface UnifiedPosition {
   id: string;
   address: string;
@@ -55,23 +59,9 @@ export interface UnifiedPosition {
   tokenA: Token;
   tokenB: Token;
 
-  // Position amounts
+  // Position amounts (raw, in UI units)
   tokenAAmount: string;
   tokenBAmount: string;
-
-  // USD values
-  currentValueUsd: number;
-  initialValueUsd: number;
-
-  // Fees and rewards
-  unclaimedFeesUsd: number;
-  claimedFeesUsd: number;
-  unclaimedRewardsUsd?: number;
-  claimedRewardsUsd?: number;
-
-  // PnL
-  pnlUsd: number;
-  pnlPercentage: number;
 
   // Position status
   inRange: boolean;
@@ -83,6 +73,34 @@ export interface UnifiedPosition {
 
   // DEX-specific metadata
   metadata?: Record<string, any>;
+}
+
+/**
+ * PositionWithPrices - Enriched position with calculated USD values
+ * Created by adding price data to a raw UnifiedPosition
+ */
+export interface PositionWithPrices extends UnifiedPosition {
+  // Current USD values (calculated from current token amounts + prices)
+  currentValueUsd: number;
+  
+  // Fee values in USD (calculated from on-chain fee amounts + prices)
+  unclaimedFeesUsd: number;
+  claimedFeesUsd: number;
+  unclaimedRewardsUsd?: number;
+  claimedRewardsUsd?: number;
+}
+
+/**
+ * UserPosition - Complete position view with historical context
+ * Combines on-chain position data with database history for PnL calculation
+ */
+export interface UserPosition extends PositionWithPrices {
+  // Historical values from database
+  initialValueUsd: number;
+  
+  // Calculated PnL (requires initial value from DB)
+  pnlUsd: number;
+  pnlPercentage: number;
 }
 
 export interface TransactionResult {
@@ -137,9 +155,13 @@ export interface PaginatedTrendingPools {
   sortBy: TrendingPoolsSortCriteria;
 }
 
+/**
+ * UnifiedPortfolio - User's portfolio with enriched positions
+ * Uses UserPosition which includes both on-chain data and historical context
+ */
 export interface UnifiedPortfolio {
   userAddress: string;
-  positions: UnifiedPosition[];
+  positions: UserPosition[];
   totalValueUsd: number;
   totalPnlUsd: number;
   totalFeesUsd: number;

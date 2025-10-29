@@ -254,9 +254,6 @@ export class SarosAdapter extends BaseDexAdapter {
     const tokenAAmount = sarosPosition.reserveX.toString();
     const tokenBAmount = sarosPosition.reserveY.toString();
 
-    const currentValueUsd = 0;
-    const initialValueUsd = 0;
-
     const positionId = `${sarosPosition.pair}-${sarosPosition.postions.map((p) => p.position).join("-")}`;
     const positionAddress =
       sarosPosition.postions[0]?.position || sarosPosition.pair;
@@ -276,21 +273,7 @@ export class SarosAdapter extends BaseDexAdapter {
       tokenAAmount,
       tokenBAmount,
 
-      // USD values (using defaults for now)
-      currentValueUsd,
-      initialValueUsd,
-
-      // Fees and rewards (using defaults)
-      unclaimedFeesUsd: 0,
-      claimedFeesUsd: 0,
-      unclaimedRewardsUsd: 0,
-      claimedRewardsUsd: 0,
-
-      // PnL (using defaults)
-      pnlUsd: 0,
-      pnlPercentage: 0,
-
-      // Position status (using defaults)
+      // Position status
       inRange: true, // TODO: Calculate based on current price and position range
       isActive: true,
 

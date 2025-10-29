@@ -71,8 +71,8 @@ export class GetPositionUseCase {
         );
 
         if (onchain) {
-          position.updateCurrentValue(Money.usd(onchain.currentValueUsd));
-
+          // Note: UnifiedPosition now only has raw token amounts, no USD values
+          // USD calculation happens in the formatter layer with prices
           const tokenXAmount = TokenAmount.fromUi(
             position.tokenX.symbol,
             parseFloat(onchain.tokenAAmount),

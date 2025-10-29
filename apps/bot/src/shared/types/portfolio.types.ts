@@ -1,5 +1,5 @@
 import { DexType } from './dex.types';
-import { UnifiedPosition } from './position.types';
+import { UserPosition } from './position.types';
 
 export interface DexBreakdown {
   positions: number;
@@ -9,7 +9,7 @@ export interface DexBreakdown {
 
 export interface UnifiedPortfolio {
   userAddress: string;
-  positions: UnifiedPosition[];
+  positions: UserPosition[];
   totalValueUsd: number;
   totalPnlUsd: number;
   totalFeesUsd: number;
@@ -26,6 +26,6 @@ export interface PortfolioMetrics {
   totalPnlPercentage: number;
   totalFeesEarned: number;
   averagePositionValue: number;
-  bestPerformingPosition?: UnifiedPosition;
-  worstPerformingPosition?: UnifiedPosition;
+  bestPerformingPosition?: UserPosition;
+  worstPerformingPosition?: UserPosition;
 }

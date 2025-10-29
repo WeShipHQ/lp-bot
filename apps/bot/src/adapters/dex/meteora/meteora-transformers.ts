@@ -460,20 +460,6 @@ export class MeteoraTransformers {
       tokenAAmount: tokenAAmountUi.toString(),
       tokenBAmount: tokenBAmountUi.toString(),
 
-      // USD values
-      currentValueUsd: 0,
-      initialValueUsd: 0, // Unknown here, should be updated from DB
-
-      // Fees and rewards (USD)
-      unclaimedFeesUsd: 0,
-      claimedFeesUsd: 0,
-      unclaimedRewardsUsd: 0, // DLMM positions may not have rewards
-      claimedRewardsUsd: 0,
-
-      // PnL (requires historical data, set to 0 here)
-      pnlUsd: 0,
-      pnlPercentage: 0,
-
       // Position status
       inRange,
       isActive: true,
