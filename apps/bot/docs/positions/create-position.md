@@ -1,46 +1,78 @@
-# Position Creation Flow — Current State Audit (Jan 2025)
+# Position Creation Flow — Version 2.0 (Flow State Machine Architecture)
 
 ## Overview
 
-The position creation experience guides a user from pool selection to an active Meteora DLMM position. The flow combines a multi-step Telegram wizard, application-layer orchestration, BullMQ-powered background jobs, and persistence services that materialise on-chain state into the database. This document reflects the **current implementation** (commit HEAD on `chore/baseline-position-flow-audit-docs-adrs`) and flags the gaps that must be addressed before Phase 2.
+The position creation experience guides a user from pool selection to an active Meteora/Saros DLMM position. The flow combines a multi-step Telegram wizard, application-layer orchestration, Flow State Machine for transaction safety, BullMQ-powered background jobs, and persistence services that materialise on-chain state into the database. This document reflects the **Version 2.0 implementation** with Flow State Machine architecture providing idempotency, recovery, and observability guarantees.
 
-## High-Level Flow
+## High-Level Flow (with State Machine)
 
 ```mermaid
 sequenceDiagram
     participant User
     participant Scene as create-position.scene.ts
-    participant Strategy as Strategy Helpers (spot only)
+    participant Strategy as Strategy Registry
     participant UC as CreatePositionUseCase
-    participant Adapter as MeteoraAdapter
+    participant Flow as FlowService
+    participant FSM as FlowStateMachine
+    participant Adapter as DEX Adapter
     participant Wallet as WalletService
-    participant Jobs as JobQueueService
-    participant Pending as pendingTransactions
-    participant Worker as transaction-confirm.worker.ts
-    participant Persist as position-persistence.service.ts
+    participant Worker as FlowRunnerWorker
+    participant TxWorker as TransactionConfirmWorker
+    participant Persist as PositionPersistenceService
 
     User->>Scene: enter CREATE_POSITION_SCENE with pool context
-    Scene->>Scene: Wizard steps (strategy → deposit → amount → summary)
-    Scene->>Strategy: CalculateBalancedDistribution + GetPriceRange
-    Scene->>UC: execute(command)
-    UC->>Adapter: createPositionIxs()
-    Adapter-->>UC: { instructions, positionKp }
-    UC->>Wallet: signAndSendViaGateway(...)
-    Wallet-->>UC: signature
-    UC->>Pending: insert CREATE_POSITION row (status=PENDING)
-    UC->>Jobs: enqueue JOB_TX_CONFIRM
-    Scene-->>User: "Position submitted" + Solscan link
+    Scene->>Scene: Wizard steps (strategy → config → amount → summary)
+    Scene->>Strategy: validate config & calculate distribution
+    Strategy-->>Scene: { tokenAAmount, tokenBAmount, priceRange }
+    Scene->>UC: execute(CreatePositionCommand)
+    
+    UC->>Flow: startCreatePositionFlow(params)
+    Flow->>Flow: Check idempotency key
+    alt Flow already exists
+        Flow-->>UC: Return existing flow
+    else New flow
+        Flow->>FSM: Create flow in INITIATED state
+        FSM->>DB: Insert pending_transactions with flow_state
+        Flow->>Worker: Enqueue JOB_FLOW_RUNNER
+    end
+    UC-->>Scene: { flowId, status: "INITIATED" }
+    Scene-->>User: "Creating position..." + Progress indicator
 
-    Jobs->>Worker: process signature
-    Worker->>Solana RPC: getParsedTransaction(signature)
-    Worker->>Persist: createPosition(context, parsedInstructions)
-    Persist->>DB: insert positions/segments/snapshots
-    Worker->>Jobs: enqueue JOB_POSITION_MONITOR (if auto rebalance)
-    Worker->>Cache: invalidate portfolio cache
-    Worker->>Jobs: enqueue JOB_NOTIFICATION (position created)
+    Worker->>FSM: Execute flow steps
+    FSM->>FSM: INITIATED → VALIDATING
+    FSM->>Strategy: Validate strategy config
+    FSM->>FSM: VALIDATING → CALCULATING_DISTRIBUTION
+    FSM->>Strategy: Calculate token distribution
+    FSM->>FSM: CALCULATING → DETERMINING_PRICE_RANGE
+    FSM->>Strategy: Determine price range
+    FSM->>FSM: DETERMINING → BUILDING_TX
+    FSM->>Adapter: buildCreatePositionInstructions()
+    Adapter-->>FSM: { instructions, positionAddress }
+    FSM->>FSM: Update checkpoint with context
+    FSM->>FSM: BUILDING_TX → TX_SUBMITTED
+    FSM->>Wallet: signAndSendViaGateway()
+    Wallet-->>FSM: signature
+    FSM->>FSM: Update checkpoint with signature
+    FSM->>FSM: TX_SUBMITTED → TX_CONFIRMING
+    FSM->>DB: Save checkpoint
+    Worker-->>Worker: Async wait for confirmation
+
+    TxWorker->>Solana: Monitor transaction confirmation
+    TxWorker->>TxWorker: Poll signature status
+    Solana-->>TxWorker: Transaction confirmed
+    TxWorker->>Flow: trigger(flowId, TX_CONFIRMED, { signature })
+    Flow->>FSM: Transition to TX_CONFIRMED
+    FSM->>FSM: TX_CONFIRMED → PERSISTING
+    FSM->>Persist: createPosition(context, parsed data)
+    Persist->>DB: Insert position, segment, snapshot
+    FSM->>FSM: PERSISTING → COMPLETED
+    FSM->>DB: Mark flow as COMPLETED
+    FSM->>Worker: Enqueue JOB_POSITION_MONITOR
+    FSM->>Worker: Enqueue JOB_NOTIFICATION
+    Scene-->>User: "✅ Position created!" + Details
 ```
 
-> **Note:** The SOL auto-convert path diverges by enqueueing two `JOB_SWAP_EXECUTION` jobs **before** the adapter call. The feature is scaffolded but not yet production-ready (see Known Issues).
+> **Note:** The Flow State Machine provides idempotency, recovery, and error handling throughout. If any step fails, the flow can be resumed from the last checkpoint.
 
 ## Implementation Snapshot
 

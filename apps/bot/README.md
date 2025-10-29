@@ -101,9 +101,29 @@ export class SarosDLMMService {
 
 - **Layered Architecture**: Clean separation of concerns with service, repository, and adapter patterns
 - **Scene-Based Flow Management**: Complex user interactions handled through Telegraf scenes
+- **Flow State Machine**: Transaction safety with idempotency, recovery checkpoints, and automatic cleanup
 - **Worker Processes**: Background monitoring and rebalancing with job queues
 - **Dependency Injection**: Modular design for easy testing and maintenance
 - **Error Handling**: Comprehensive error management with user-friendly messages
+
+### 📚 Developer Documentation
+
+For comprehensive guides on the architecture, troubleshooting, and extending the bot, see:
+
+- **[Developer Guides](/docs/developer/)** - Main documentation index
+  - [Flow State Machine Guide](/docs/developer/flow-state-machine-guide.md) - Transaction safety architecture
+  - [Adding DEX Adapters](/docs/developer/adding-dex-adapters.md) - Integrate new DEX protocols
+  - [Adding LP Strategies](/docs/developer/adding-lp-strategies.md) - Implement new strategies
+  - [Troubleshooting Manual](/docs/developer/troubleshooting.md) - Top 5 failure scenarios
+  - [Monitoring Guide](/docs/developer/monitoring-guide.md) - Production monitoring
+- **[Position Flows](./docs/positions/)** - Detailed flow documentation
+  - [Create Position Flow](./docs/positions/create-position.md)
+  - [Claim Fees Flow](./docs/positions/claim-fees.md)
+  - [Close Position Flow](./docs/positions/close-position.md)
+  - [Rebalance Flow](./docs/positions/rebalance.md)
+- **[System Design](./docs/SystemDesign.md)** - Complete technical architecture
+- **[PRD](./docs/PRD.md)** - Product requirements
+- **[ADRs](./docs/adrs/)** - Architecture Decision Records
 
 ## 🚀 Getting Started
 
