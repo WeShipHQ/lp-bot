@@ -262,6 +262,24 @@ export function generateIdempotencyKey(params: IdempotencyKeyParams): string {
 }
 
 // ==================== FLOW RESULT ====================
+export interface FlowStep {
+  name: string;
+  state: FlowState;
+  handler?: (context: FlowContext<any>) => Promise<FlowResult>;
+  compensation?: (context: FlowContext<any>) => Promise<FlowResult>;
+  asyncWait?: boolean;
+  on?: Partial<Record<FlowEvent, FlowState>>;
+}
+
+export interface FlowDefinition {
+  flowType: FlowType;
+  maxRetries?: number;
+  timeoutMs?: number;
+  steps: FlowStep[];
+  transitions?: Record<FlowState, Partial<Record<FlowEvent, FlowState>>>;
+  initialContext?: Record<string, any>;
+}
+
 export interface FlowResult<T = any> {
   success: boolean;
   flowId?: string;
