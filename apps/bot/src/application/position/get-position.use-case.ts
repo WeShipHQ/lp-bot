@@ -7,10 +7,13 @@ import {
   UnifiedPool,
   UnifiedPosition,
   TokenPrice,
+  PositionWithPrices,
+  UserPosition,
 } from "@/types/core.types";
 import { IDexAdapter } from "@/types/dex-adapter.interface";
 import { logger } from "@/utils/logger";
 import { getTokenPriceService } from "@/services/token-price.service";
+import { PriceEnrichmentService } from "@/services/price-enrichment.service";
 import { DexRegistryLike } from "./create-position.use-case";
 
 export interface GetPositionCommand {
@@ -32,12 +35,25 @@ export interface GetPositionResult {
   error?: string;
 }
 
+export interface GetPositionEnrichedResult {
+  success: boolean;
+  position?: UserPosition;
+  pool?: UnifiedPool;
+  userAddress?: string;
+  error?: string;
+}
+
 export class GetPositionUseCase {
+  private readonly enrichmentService: PriceEnrichmentService;
+
   constructor(
     private readonly positionRepository: IPositionRepository,
     private readonly dexRegistry: DexRegistryLike,
-    private readonly userRepository: IUserRepository
-  ) {}
+    private readonly userRepository: IUserRepository,
+    enrichmentService?: PriceEnrichmentService
+  ) {
+    this.enrichmentService = enrichmentService ?? new PriceEnrichmentService();
+  }
 
   async execute(command: GetPositionCommand): Promise<GetPositionResult> {
     try {
@@ -71,8 +87,7 @@ export class GetPositionUseCase {
         );
 
         if (onchain) {
-          // Note: UnifiedPosition now only has raw token amounts, no USD values
-          // USD calculation happens in the formatter layer with prices
+          // Update domain entity with latest on-chain token amounts
           const tokenXAmount = TokenAmount.fromUi(
             position.tokenX.symbol,
             parseFloat(onchain.tokenAAmount),
@@ -142,6 +157,55 @@ export class GetPositionUseCase {
       };
     } catch (error) {
       logger.error({ error }, "GetPositionUseCase.execute unexpected error");
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      };
+    }
+  }
+
+  /**
+   * New enriched execution that returns a fully priced position
+   */
+  async executeEnriched(command: GetPositionCommand): Promise<GetPositionEnrichedResult> {
+    const result = await this.execute({ ...command, includePrices: true });
+
+    if (!result.success || !result.position) {
+      return {
+        success: false,
+        error: result.error ?? "Failed to fetch position",
+      };
+    }
+
+    try {
+      const prices = result.prices
+        ? (Object.entries(result.prices).reduce((acc, [key, value]) => {
+            if (value) acc[key] = value;
+            return acc;
+          }, {} as Record<string, TokenPrice>))
+        : await getTokenPriceService().getPrices([
+            result.position.tokenX.address,
+            result.position.tokenY.address,
+          ]);
+
+      const enrichedOnchain = result.onchain
+        ? await this.enrichmentService.enrichPosition(result.onchain, prices)
+        : undefined;
+
+      const userPosition = await this.enrichmentService.enrichDomainPosition(
+        result.position,
+        enrichedOnchain,
+        prices
+      );
+
+      return {
+        success: true,
+        position: userPosition,
+        pool: result.pool,
+        userAddress: result.userAddress,
+      };
+    } catch (error) {
+      logger.error({ error }, "GetPositionUseCase.executeEnriched failed");
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
