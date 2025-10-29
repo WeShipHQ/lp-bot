@@ -324,6 +324,81 @@ export class MeteoraAdapter extends BaseDexAdapter implements IDexAdapter {
     }
   }
 
+  /**
+   * V2 method: Builds a complete position creation transaction with preview data.
+   * Returns a VersionedTransaction ready for signing and submission.
+   * 
+   * This method supports:
+   * - Strategy-based bin range calculation
+   * - Optional SOL auto-convert via Jupiter
+   * - Compute budget optimization
+   * - Preview data for UI display
+   * 
+   * @param params - Position creation parameters with optional SOL conversion
+   * @returns TransactionResult with transaction, signers, and preview metadata
+   */
+  async createPosition(
+    params: CreatePositionParams & {
+      solAutoConvert?: {
+        solAmount: number;
+        jupiterQuotes?: {
+          tokenX: {
+            inputAmount: string;
+            outputAmount: string;
+            swapInstructions: any[];
+          };
+          tokenY: {
+            inputAmount: string;
+            outputAmount: string;
+            swapInstructions: any[];
+          };
+        };
+      };
+      priorityFee?: number;
+    }
+  ): Promise<import("@/types/core.types").TransactionResult> {
+    try {
+      // Use strategy registry to get strategy and convert to Meteora type
+      const lpStrategy = strategyRegistry.getOrDefault(params.strategy);
+      
+      // Validate that the strategy supports this DEX
+      if (!lpStrategy.supportsDex(this.dexType)) {
+        throw new Error(
+          `Strategy "${lpStrategy.metadata.name}" does not support ${this.dexType}`
+        );
+      }
+
+      // Convert strategy name to Meteora SDK type
+      const meteoraStrategyType = toMeteoraStrategyType(
+        lpStrategy.metadata.name
+      );
+      const strategy = this.mapStrategyToSDK(meteoraStrategyType);
+      
+      const rangeInterval = Number(params?.rangeInterval ?? lpStrategy.metadata.defaultRangeInterval);
+
+      // Call the new transaction builder
+      const result = await this.dlmm.buildCreatePositionTransaction({
+        poolAddress: params.poolAddress,
+        userPublicKey: new PublicKey(params.userAddress),
+        tokenXAmount: new Decimal(params.tokenAAmount),
+        tokenYAmount: new Decimal(params.tokenBAmount),
+        strategy,
+        rangeInterval,
+        solAutoConvert: params.solAutoConvert,
+        slippage: params.slippage,
+        priorityFee: params.priorityFee,
+      });
+
+      return result;
+    } catch (error) {
+      console.log("createPosition failed", { error, params });
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Create position failed",
+      };
+    }
+  }
+
   async closePositionIxs(
     params: ClosePositionParams
   ): Promise<ClosePositionResult> {

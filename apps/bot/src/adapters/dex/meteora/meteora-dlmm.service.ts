@@ -4,11 +4,20 @@ import DLMM, {
   PositionInfo,
   LbPosition,
 } from "@meteora-ag/dlmm";
-import { Connection, PublicKey, TransactionInstruction } from "@solana/web3.js";
+import { 
+  Connection, 
+  PublicKey, 
+  TransactionInstruction, 
+  Keypair,
+  VersionedTransaction,
+  TransactionMessage,
+  ComputeBudgetProgram
+} from "@solana/web3.js";
 import BN from "bn.js";
 import { CONFIG } from "@/config";
 import Decimal from "decimal.js";
 import { LbPair } from "@/types/meteora.types";
+import { TransactionResult } from "@/types/core.types";
 
 /**
  * Calculation result for deposit amounts required for position creation
@@ -567,6 +576,236 @@ export class MeteoraDlmmService {
       price: activeBin.price.toString(),
       pricePerToken: activeBin.pricePerToken.toString(),
     };
+  }
+
+  // ============================================
+  // V2 Transaction Building
+  // ============================================
+
+  /**
+   * Builds a complete create position transaction with optional SOL auto-convert.
+   * 
+   * This method:
+   * 1. Calculates bin ranges based on strategy (spot, curve, bid-ask)
+   * 2. Optionally splits SOL input and generates Jupiter swap instructions
+   * 3. Generates initialize + add-liquidity instructions using precise BN math
+   * 4. Bundles everything into a single VersionedTransaction with compute budget
+   * 5. Returns preview data for UI display
+   * 
+   * @param params - Position creation parameters
+   * @returns TransactionResult with transaction, signers, and preview metadata
+   */
+  async buildCreatePositionTransaction(params: {
+    poolAddress: string | PublicKey;
+    userPublicKey: PublicKey;
+    tokenXAmount: Decimal;
+    tokenYAmount: Decimal;
+    strategy: StrategyType;
+    rangeInterval: number;
+    solAutoConvert?: {
+      solAmount: number; // Total SOL to split
+      jupiterQuotes?: {
+        tokenX: {
+          inputAmount: string;
+          outputAmount: string;
+          swapInstructions: TransactionInstruction[];
+        };
+        tokenY: {
+          inputAmount: string;
+          outputAmount: string;
+          swapInstructions: TransactionInstruction[];
+        };
+      };
+    };
+    slippage?: number;
+    priorityFee?: number;
+  }): Promise<TransactionResult> {
+    try {
+      const dlmmPool = await this.createInstance(params.poolAddress);
+      const activeBin = await dlmmPool.getActiveBin();
+      
+      // Calculate bin range based on strategy
+      const minBinId = activeBin.binId - params.rangeInterval;
+      const maxBinId = activeBin.binId + params.rangeInterval;
+
+      // Validate amounts
+      if (params.tokenXAmount.isZero() && params.tokenYAmount.isZero()) {
+        return {
+          success: false,
+          error: "Invalid amounts: both tokenX and tokenY cannot be zero",
+        };
+      }
+
+      // Generate position keypair
+      const positionKp = Keypair.generate();
+
+      // Build position creation instructions
+      const createPositionTx =
+        await dlmmPool.initializePositionAndAddLiquidityByStrategy({
+          positionPubKey: positionKp.publicKey,
+          user: params.userPublicKey,
+          totalXAmount: new BN(params.tokenXAmount.toString()),
+          totalYAmount: new BN(params.tokenYAmount.toString()),
+          strategy: {
+            maxBinId,
+            minBinId,
+            strategyType: params.strategy,
+          },
+        });
+
+      // Collect all instructions
+      const allInstructions: TransactionInstruction[] = [];
+
+      // Add compute budget instructions first
+      const computeUnits = params.solAutoConvert ? 400_000 : 200_000;
+      const priorityFee = params.priorityFee ?? 1000; // microlamports
+
+      allInstructions.push(
+        ComputeBudgetProgram.setComputeUnitLimit({
+          units: computeUnits,
+        })
+      );
+
+      allInstructions.push(
+        ComputeBudgetProgram.setComputeUnitPrice({
+          microLamports: priorityFee,
+        })
+      );
+
+      // Add swap instructions if SOL auto-convert
+      if (params.solAutoConvert?.jupiterQuotes) {
+        allInstructions.push(
+          ...params.solAutoConvert.jupiterQuotes.tokenX.swapInstructions
+        );
+        allInstructions.push(
+          ...params.solAutoConvert.jupiterQuotes.tokenY.swapInstructions
+        );
+      }
+
+      // Add position creation instructions
+      allInstructions.push(...createPositionTx.instructions);
+
+      // Build versioned transaction
+      const connection = new Connection(CONFIG.SOLANA.RPC_URL, "confirmed");
+      const { blockhash } = await connection.getLatestBlockhash();
+
+      const messageV0 = new TransactionMessage({
+        payerKey: params.userPublicKey,
+        recentBlockhash: blockhash,
+        instructions: allInstructions,
+      }).compileToV0Message();
+
+      const versionedTx = new VersionedTransaction(messageV0);
+
+      // Calculate price range for preview
+      const fromPriceLamport = getPriceOfBinByBinId(
+        minBinId,
+        dlmmPool.lbPair.binStep
+      );
+      const toPriceLamport = getPriceOfBinByBinId(
+        maxBinId,
+        dlmmPool.lbPair.binStep
+      );
+
+      const fromPrice = dlmmPool.fromPricePerLamport(Number(fromPriceLamport));
+      const toPrice = dlmmPool.fromPricePerLamport(Number(toPriceLamport));
+      const currentPrice = dlmmPool.fromPricePerLamport(
+        activeBin.pricePerToken.toNumber()
+      );
+
+      // Calculate fees
+      const networkFee = 5000; // 0.000005 SOL base fee
+      const priorityFeeCost = (computeUnits * priorityFee) / 1_000_000;
+      const swapFee = params.solAutoConvert ? 0.0001 * 2 : 0; // Estimated swap fees
+      const totalFee = (networkFee / 1e9) + priorityFeeCost + swapFee;
+
+      // Build preview data
+      const tokenXDecimals = dlmmPool.tokenX?.mint?.decimals ?? 0;
+      const tokenYDecimals = dlmmPool.tokenY?.mint?.decimals ?? 0;
+
+      const tokenXUiAmount = params.tokenXAmount
+        .dividedBy(new Decimal(10).pow(tokenXDecimals))
+        .toString();
+      const tokenYUiAmount = params.tokenYAmount
+        .dividedBy(new Decimal(10).pow(tokenYDecimals))
+        .toString();
+
+      const LAMPORTS_PER_SOL = 1_000_000_000;
+      const networkFeeSol = networkFee / LAMPORTS_PER_SOL;
+      const priorityFeeLamports = (computeUnits * priorityFee) / 1_000_000;
+      const priorityFeeSol = priorityFeeLamports / LAMPORTS_PER_SOL;
+      const swapFeeSol = params.solAutoConvert ? 0.0002 : 0; // Approx 0.0001 SOL per swap
+      const totalFeeSol = networkFeeSol + priorityFeeSol + swapFeeSol;
+
+      const preview = {
+        tokenAAmount: tokenXUiAmount,
+        tokenBAmount: tokenYUiAmount,
+        tokenASymbol: dlmmPool.tokenX.symbol || dlmmPool.lbPair.tokenXMint.toBase58(),
+        tokenBSymbol: dlmmPool.tokenY.symbol || dlmmPool.lbPair.tokenYMint.toBase58(),
+        priceRange: {
+          min: fromPrice,
+          max: toPrice,
+          current: currentPrice,
+        },
+        fees: {
+          network: networkFeeSol.toFixed(9),
+          swap: swapFeeSol ? swapFeeSol.toFixed(9) : undefined,
+          total: totalFeeSol.toFixed(9),
+        },
+        strategy: {
+          type: this.strategyTypeToString(params.strategy),
+          minBinId,
+          maxBinId,
+          activeBinId: activeBin.binId,
+          rangeInterval: params.rangeInterval,
+        },
+        slippage: params.slippage,
+      };
+
+      return {
+        success: true,
+        transaction: versionedTx,
+        signers: [positionKp],
+        preview,
+        metadata: {
+          positionAddress: positionKp.publicKey.toBase58(),
+          poolAddress:
+            typeof params.poolAddress === "string"
+              ? params.poolAddress
+              : params.poolAddress.toBase58(),
+          strategy: this.strategyTypeToString(params.strategy),
+          rangeInterval: params.rangeInterval,
+          binRange: {
+            min: minBinId,
+            max: maxBinId,
+            active: activeBin.binId,
+          },
+        },
+      };
+    } catch (error) {
+      console.error("[DLMM] buildCreatePositionTransaction failed:", error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Transaction build failed",
+      };
+    }
+  }
+
+  /**
+   * Converts StrategyType enum to string representation
+   */
+  private strategyTypeToString(strategy: StrategyType): string {
+    // StrategyType is an enum with numeric values: Spot = 0, Curve = 1, BidAsk = 2
+    switch (strategy as unknown as number) {
+      case 0:
+        return "spot";
+      case 1:
+        return "curve";
+      case 2:
+        return "bid-ask";
+      default:
+        return "spot";
+    }
   }
 }
 

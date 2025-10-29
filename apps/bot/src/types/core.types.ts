@@ -1,4 +1,4 @@
-import { Keypair, TransactionInstruction } from "@solana/web3.js";
+import { Keypair, TransactionInstruction, VersionedTransaction } from "@solana/web3.js";
 
 export type DexType = "meteora" | "saros" | "orca" | "raydium";
 export type PoolType = "DLMM" | "DAMM" | "CLMM" | "AMM";
@@ -108,6 +108,46 @@ export interface TransactionResult {
   signature?: string;
   error?: string;
   metadata?: Record<string, any>;
+  
+  // V2 transaction building support
+  transaction?: VersionedTransaction;
+  signers?: Keypair[]; // Additional signers beyond the fee payer
+  
+  // Preview data for UI display before execution
+  preview?: {
+    // Token amounts and composition
+    tokenAAmount?: string;
+    tokenBAmount?: string;
+    tokenASymbol?: string;
+    tokenBSymbol?: string;
+    
+    // Price range information
+    priceRange?: {
+      min: string;
+      max: string;
+      current: string;
+    };
+    
+    // Cost breakdown
+    fees?: {
+      network?: string; // SOL
+      swap?: string; // SOL
+      total?: string; // SOL
+    };
+    
+    // Strategy metadata
+    strategy?: {
+      type: string;
+      minBinId: number;
+      maxBinId: number;
+      activeBinId: number;
+      rangeInterval: number;
+    };
+    
+    // Additional metadata
+    estimatedValueUsd?: string;
+    slippage?: number;
+  };
 }
 
 export interface CreatePositionResult {
