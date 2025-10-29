@@ -1,7 +1,7 @@
 import { IPositionRepository } from "@/domain/position/position.repository";
 import { Position } from "@/domain/position/position.entity";
 import { Portfolio } from "@/domain/portfolio/portfolio.entity";
-import { DexType, UnifiedPosition } from "@/types/core.types";
+import { DexType, UnifiedPosition, UnifiedPortfolio, PositionWithPrices } from "@/types/core.types";
 import { IDexAdapter } from "@/types/dex-adapter.interface";
 import {
   getCacheService,
@@ -10,6 +10,7 @@ import {
 import { CacheKeys } from "@/infrastructure/cache/cache-keys";
 import { findUserById } from "@/db/queries";
 import { Money, TokenAmount } from "@/domain/shared/value-objects";
+import { getPriceEnrichmentService, PriceEnrichmentService } from "@/services/price-enrichment.service";
 
 export interface DexRegistryLike {
   get(dexType: DexType): IDexAdapter;
@@ -17,13 +18,16 @@ export interface DexRegistryLike {
 
 export class GetPortfolioUseCase {
   private readonly cache: ICacheService;
+  private readonly enrichmentService: PriceEnrichmentService;
 
   constructor(
     private readonly positionRepository: IPositionRepository,
     private readonly dexRegistry: DexRegistryLike,
-    cacheService?: ICacheService
+    cacheService?: ICacheService,
+    enrichmentService?: PriceEnrichmentService
   ) {
     this.cache = cacheService ?? getCacheService();
+    this.enrichmentService = enrichmentService ?? getPriceEnrichmentService();
   }
 
   /**
@@ -31,6 +35,7 @@ export class GetPortfolioUseCase {
    * - check cache unless forceRefresh
    * - load DB positions
    * - enrich from chain (grouped by DEX for batching)
+   * - enrich with prices via PriceEnrichmentService
    * - return Portfolio aggregate and cache for 5 minutes
    */
   async execute(userId: string, forceRefresh = false): Promise<Portfolio> {
@@ -95,7 +100,7 @@ export class GetPortfolioUseCase {
                 p.tokenY.decimals
               );
               p.updateTokenAmounts(xAmount, yAmount);
-              // Note: USD value calculation moved to enrichment layer
+              // Note: USD value calculation happens in enrichment layer
               // Position entity only tracks token amounts now
             }
           } catch (e) {
@@ -167,5 +172,118 @@ export class GetPortfolioUseCase {
       logger.debug({ userId, dur }, "[GetPortfolioUseCase] total timing");
     } catch {}
     return portfolio;
+  }
+
+  /**
+   * Build enriched UnifiedPortfolio with price data and P&L calculations
+   * This is the new preferred method for getting portfolio with monetary figures
+   */
+  async executeEnriched(userId: string, forceRefresh = false): Promise<UnifiedPortfolio> {
+    const tStart = Date.now();
+    const cacheKey = CacheKeys.portfolioKey(userId);
+
+    if (!forceRefresh) {
+      const cached = await this.cache.get<UnifiedPortfolio>(cacheKey + ":enriched");
+      if (cached) {
+        return cached;
+      }
+    }
+
+    const dbPositions = await this.positionRepository.findByUser(userId);
+    const user = await findUserById(userId);
+    if(!user) throw new Error("User not found");
+
+    const userAddress = user.walletAddress;
+
+    // Map to store enriched on-chain position data
+    const onchainEnrichedMap = new Map<string, PositionWithPrices>();
+
+    if (userAddress) {
+      // Group positions by DEX for batch fetching
+      const byDex = new Map<DexType, Position[]>();
+      for (const pos of dbPositions) {
+        const arr = byDex.get(pos.dex) ?? [];
+        arr.push(pos);
+        byDex.set(pos.dex, arr);
+      }
+
+      // For each DEX, fetch and enrich user's positions
+      await Promise.all(
+        Array.from(byDex.entries()).map(async ([dex, positions]) => {
+          const t0 = Date.now();
+          try {
+            const adapter = this.dexRegistry.get(dex);
+            const unifiedPositions: UnifiedPosition[] =
+              await adapter.getUserPositions(userAddress);
+
+            // Enrich positions with prices
+            const enrichedPositions = await this.enrichmentService.enrichPositions(unifiedPositions);
+
+            // Index by address for quick lookup
+            for (const enriched of enrichedPositions) {
+              onchainEnrichedMap.set(enriched.address, enriched);
+            }
+
+            // Update domain entities with on-chain token amounts
+            for (const p of positions) {
+              const enriched = onchainEnrichedMap.get(p.positionAddress);
+              if (!enriched) continue;
+
+              const xAmount = TokenAmount.fromUi(
+                p.tokenX.symbol,
+                parseFloat(enriched.tokenAAmount),
+                p.tokenX.decimals
+              );
+              const yAmount = TokenAmount.fromUi(
+                p.tokenY.symbol,
+                parseFloat(enriched.tokenBAmount),
+                p.tokenY.decimals
+              );
+              p.updateTokenAmounts(xAmount, yAmount);
+            }
+          } catch (e) {
+            console.warn(
+              `[GetPortfolioUseCase] Enrichment failed for ${dex}:`,
+              e
+            );
+          } finally {
+            const duration = Date.now() - t0;
+            try {
+              const { logger } = await import("@/utils/logger");
+              logger.debug(
+                { dex, duration },
+                "[GetPortfolioUseCase] enrichment timing"
+              );
+            } catch {}
+          }
+        })
+      );
+    }
+
+    // Build enriched portfolio via PriceEnrichmentService
+    const enrichedPortfolio = await this.enrichmentService.buildPortfolio(
+      userAddress,
+      dbPositions,
+      onchainEnrichedMap
+    );
+
+    // Cache enriched portfolio for 5 minutes
+    try {
+      await this.cache.set(
+        cacheKey + ":enriched",
+        enrichedPortfolio,
+        300
+      );
+    } catch (e) {
+      console.warn("[GetPortfolioUseCase] Cache set failed:", e);
+    }
+
+    try {
+      const { logger } = await import("@/utils/logger");
+      const dur = Date.now() - tStart;
+      logger.debug({ userId, dur }, "[GetPortfolioUseCase] executeEnriched timing");
+    } catch {}
+
+    return enrichedPortfolio;
   }
 }
