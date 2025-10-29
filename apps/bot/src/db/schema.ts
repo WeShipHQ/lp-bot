@@ -545,6 +545,15 @@ export const pendingTransactions = pgTable("pending_transactions", {
   maxRetries: integer("max_retries").notNull().default(3),
   lastProcessedAt: timestamp("last_processed_at", { withTimezone: true }),
   errorMessage: text("error_message"),
+  idempotencyKey: text("idempotency_key").unique(),
+  flowState: text("flow_state").notNull().default("INITIATED"),
+  flowStatus: text("flow_status").notNull().default("PENDING"),
+  flowCheckpoint: jsonb("flow_checkpoint"),
+  flowStartedAt: timestamp("flow_started_at", { withTimezone: true }),
+  flowLastTransitionAt: timestamp("flow_last_transition_at", { withTimezone: true }),
+  flowCompletedAt: timestamp("flow_completed_at", { withTimezone: true }),
+  flowExpiresAt: timestamp("flow_expires_at", { withTimezone: true }),
+  flowTimeoutMs: integer("flow_timeout_ms"),
   ...timestamps,
 });
 
