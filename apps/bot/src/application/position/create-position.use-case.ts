@@ -27,6 +27,15 @@ import { CachePatterns } from "@/infrastructure/cache/cache-keys";
 import { WalletService } from "@/services/wallet.service";
 import { uiToRawAmount } from "@/utils/number-utils";
 import { SOL_MINT, OPEN_POSITION_FEE } from "@/config/constants";
+import {
+  InvalidPositionAmountError,
+  InvalidPoolError,
+  AdapterError,
+  SignatureRejectedError,
+  InternalPositionError,
+  PositionPersistenceError,
+  PositionError,
+} from "@/domain/position";
 
 export interface DexRegistryLike {
   get(dexType: DexType): IDexAdapter;
@@ -153,20 +162,22 @@ export class CreatePositionUseCase {
   ): Promise<CreatePositionUCResult> {
     try {
       if (!command?.walletId || !command?.walletAddress) {
-        return {
-          success: false,
-          error: "WalletId and WalletAddress are required",
-        };
+        throw new InternalPositionError("WalletId and WalletAddress are required");
       }
 
-      validatePoolAddress(command.poolAddress);
+      try {
+        validatePoolAddress(command.poolAddress);
+      } catch (error) {
+        throw new InvalidPoolError(command.poolAddress, command.dex);
+      }
+
       validateWalletAddress(command.walletAddress);
 
       if (!command.tokenAAmount || parseFloat(command.tokenAAmount) <= 0) {
-        return { success: false, error: "tokenAAmount must be greater than 0" };
+        throw new InvalidPositionAmountError(parseFloat(command.tokenAAmount || "0"), 0.000001);
       }
       if (!command.tokenBAmount || parseFloat(command.tokenBAmount) <= 0) {
-        return { success: false, error: "tokenBAmount must be greater than 0" };
+        throw new InvalidPositionAmountError(parseFloat(command.tokenBAmount || "0"), 0.000001);
       }
 
       const adapter = this.dexRegistry.get(command.dex);
@@ -188,9 +199,6 @@ export class CreatePositionUseCase {
           command.tokenB.decimals
         ).toString(),
         strategy: command.strategy,
-        // slippage: await this.settingsIntegration.getSlippageTolerance(
-        //   command.userId
-        // ),
       };
 
       let txResult: CreatePositionResult;
@@ -198,21 +206,16 @@ export class CreatePositionUseCase {
         txResult = await adapter.createPositionIxs(adapterParams);
       } catch (error) {
         logger.error({ error, command }, "Adapter.createPositionIx failed");
-        console.log("Adapter.createPositionIx failed", { error, command });
-        return {
-          success: false,
-          error:
-            error instanceof Error
-              ? error.message
-              : "Failed to create position transaction",
-        };
+        throw new AdapterError(command.dex, "createPosition", error instanceof Error ? error : new Error(String(error)));
       }
 
       if (!txResult?.success) {
-        return {
-          success: false,
-          error: txResult?.error || "Create position failed",
-        };
+        throw new AdapterError(
+          command.dex,
+          "createPosition",
+          new Error(txResult?.error || "Create position failed"),
+          false
+        );
       }
 
       let signature = "" as string | undefined;
@@ -224,15 +227,17 @@ export class CreatePositionUseCase {
           [txResult.positionKp]
         );
       } catch (err) {
-        console.log("Transaction submission failed", { err, command });
         logger.error({ err, command }, "Transaction submission failed");
+        if (err instanceof Error && err.message?.includes("rejected")) {
+          throw new SignatureRejectedError(command.walletAddress);
+        }
+        throw new InternalPositionError("Failed to submit transaction", {
+          originalError: err instanceof Error ? err.message : String(err),
+        });
       }
 
       if (!signature) {
-        return {
-          success: false,
-          error: "Transaction signature missing after submission attempt",
-        };
+        throw new InternalPositionError("Transaction signature missing after submission attempt");
       }
 
       const adapterPositionAddress = txResult.positionKp.publicKey.toBase58();
@@ -256,9 +261,6 @@ export class CreatePositionUseCase {
         tokenBAmount: command.tokenBAmount,
 
         autoRebalance: command.autoRebalance ?? false,
-        // slippage: await this.settingsIntegration.getSlippageTolerance(
-        //   command.userId
-        // ),
 
         positionAddress: adapterPositionAddress,
         priceRange: command.priceRange,
@@ -297,10 +299,10 @@ export class CreatePositionUseCase {
           },
           "Failed to insert pending transaction"
         );
-        return {
-          success: false,
-          error: "Failed to persist pending transaction for processing",
-        };
+        throw new PositionPersistenceError(
+          "insert_pending_transaction",
+          err instanceof Error ? err : new Error(String(err))
+        );
       }
 
       try {
@@ -325,6 +327,7 @@ export class CreatePositionUseCase {
           },
           "Failed to enqueue transaction confirmation job"
         );
+        // Non-fatal
       }
 
       try {
@@ -353,8 +356,16 @@ export class CreatePositionUseCase {
           error,
           command,
         },
-        "CreatePositionUseCase.execute unexpected error"
+        "CreatePositionUseCase.execute error"
       );
+
+      if (error instanceof PositionError) {
+        return {
+          success: false,
+          error: error.userMessage,
+        };
+      }
+
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
