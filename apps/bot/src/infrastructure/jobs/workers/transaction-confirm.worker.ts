@@ -405,7 +405,7 @@ export class TransactionConfirmWorker
           {
             repeat: {
               // every: 60 * 60 * 1000,
-              every: 30 * 1000,
+              every: 60 * 30 * 1000,
             },
           }
         );
@@ -646,12 +646,8 @@ export class TransactionConfirmWorker
             snapshotData = {
               tokenXAmount: onchainPosition.tokenAAmount ?? "0",
               tokenYAmount: onchainPosition.tokenBAmount ?? "0",
-              currentValueUsd: new Decimal(
-                onchainPosition.currentValueUsd ?? 0
-              ).toFixed(6),
-              unclaimedFeesUsd: new Decimal(
-                onchainPosition.unclaimedFeesUsd ?? 0
-              ).toFixed(2),
+              currentValueUsd: new Decimal(0).toFixed(6),
+              unclaimedFeesUsd: new Decimal(0).toFixed(2),
               unclaimedFeesX: "0",
               unclaimedFeesY: "0",
             };
@@ -1020,7 +1016,7 @@ export class TransactionConfirmWorker
       tokenBAmount: tokenBUi,
       strategy: session.strategy,
       autoRebalance: session.autoRebalance,
-      solAmount: totalTokensInSolLamports.toString(),
+      solAmount: totalTokensInSolLamports.toNumber(),
       // FIXME dynamic value
       depositMethod: "sol_auto_convert",
       rebalanceSession: {
@@ -1156,7 +1152,7 @@ export class TransactionConfirmWorker
         },
         {
           repeat: {
-            every: 60 * 60 * 1000,
+            every: 60 * 60 * 60 * 1000,
           },
         }
       );

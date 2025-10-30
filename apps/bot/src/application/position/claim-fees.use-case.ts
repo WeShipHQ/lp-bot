@@ -12,6 +12,8 @@ import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 import { JOB_TX_CONFIRM } from "@/infrastructure/jobs/job-definitions";
 import { DexRegistryLike } from "./create-position.use-case";
 import { WalletService } from "@/services/wallet.service";
+import { container } from "@/infrastructure/di/container";
+import { GetPositionUseCase } from "./get-position.use-case";
 
 export interface ClaimFeesCommand {
   positionId: string;
@@ -61,48 +63,50 @@ export class ClaimFeesUseCase {
 
       validateWalletAddress(command.walletAddress);
 
-      const position = await this.positionRepository.findById(
+      const dbPosition = await this.positionRepository.findById(
         command.positionId
       );
-      if (!position) {
+      if (!dbPosition) {
         return { success: false, error: "Position not found" };
       }
-      if (position.userId !== command.userId) {
+      if (dbPosition.userId !== command.userId) {
         return {
           success: false,
           error: "Unauthorized: position does not belong to user",
         };
       }
 
+      const getPositionUseCase = container.get(GetPositionUseCase);
+      const result = await getPositionUseCase.execute({
+        positionId: command.positionId,
+        // positionAddress: dbPosition.positionAddress,
+        // userId: command.userId,
+        // userAddress: command.walletAddress ?? undefined,
+        // includePool: true,
+        // includePrices: true,
+      });
+
+      if (!result.success || !result.position) {
+        throw new Error(result.error ?? "Position not found");
+      }
+
+      const position = result.position;
+
       const dexType: DexType = position.dex;
       const adapter: IDexAdapter = this.dexRegistry.get(dexType);
-
-      let estimatedUnclaimedFeesUsd = 0;
-      try {
-        const onchain = await adapter.getPosition(
-          position.positionAddress,
-          position.poolAddress
-        );
-        estimatedUnclaimedFeesUsd = Number(onchain.unclaimedFeesUsd || 0);
-      } catch (error) {
-        logger.warn(
-          { error, positionId: position.id },
-          "Failed to fetch on-chain position prior to claim"
-        );
-      }
 
       let txResult: ClaimFeesResultType;
       try {
         txResult = await adapter.claimFeesIxs({
           poolAddress: position.poolAddress,
           userAddress: command.walletAddress,
-          positionAddress: position.positionAddress,
+          positionAddress: position.address,
         });
       } catch (error) {
         logger.error(
           {
             error,
-            positionAddress: position.positionAddress,
+            positionAddress: position.address,
           },
           "adapter.claimFees failed"
         );
@@ -128,7 +132,7 @@ export class ClaimFeesUseCase {
       ) {
         logger.error(
           {
-            positionAddress: position.positionAddress,
+            positionAddress: position.address,
           },
           "No instructions returned from adapter.claimFees"
         );
@@ -168,24 +172,14 @@ export class ClaimFeesUseCase {
       const context: ClaimFeesContext = {
         userId: command.userId,
         positionId: position.id,
-        positionAddress: position.positionAddress,
+        positionAddress: position.address,
         poolAddress: position.poolAddress,
         userAddress: command.walletAddress,
         dex: dexType,
-        tokenA: {
-          address: position.tokenX.address,
-          symbol: position.tokenX.symbol,
-          name: position.tokenX.symbol,
-          decimals: position.tokenX.decimals,
-        },
-        tokenB: {
-          address: position.tokenY.address,
-          symbol: position.tokenY.symbol,
-          name: position.tokenY.symbol,
-          decimals: position.tokenY.decimals,
-        },
+        tokenA: position.tokenA,
+        tokenB: position.tokenB,
         convertToSol: true,
-        estimatedFeesUsd: estimatedUnclaimedFeesUsd,
+        estimatedFeesUsd: position.claimedFeesUsd,
       };
 
       const metadata = {
@@ -232,7 +226,7 @@ export class ClaimFeesUseCase {
             operationType: "CLAIM_FEES",
             userId: command.userId,
             positionId: position.id,
-            positionAddress: position.positionAddress,
+            positionAddress: position.address,
             submittedAt: Date.now(),
           },
           { delay: 500 }
@@ -250,7 +244,7 @@ export class ClaimFeesUseCase {
       return {
         success: true,
         signature,
-        claimedFeesUsd: estimatedUnclaimedFeesUsd,
+        claimedFeesUsd: position.claimedFeesUsd,
       };
     } catch (error) {
       logger.error({ error }, "ClaimFeesUseCase.execute unexpected error");

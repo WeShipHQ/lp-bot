@@ -92,18 +92,15 @@ export class GetPositionUseCase {
         );
       }
 
-      // Enrich domain position to UserPosition with prices and PnL
       const enrichedPosition =
         await this.enrichmentService.enrichDomainPosition(
           position,
           onchainPosition
         );
 
-      // Calculate aggregated metrics
       const durationDays = this.calculateDurationDays(position.createdAt);
       const rebalanceCount = await this.getRebalanceCount(position.id);
 
-      // Compose final UserPosition with all aggregated metrics
       const userPosition: UserPosition = {
         ...enrichedPosition,
         metadata: {

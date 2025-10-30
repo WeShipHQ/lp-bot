@@ -130,14 +130,14 @@ export class MeteoraDlmmService {
     totalXAmount: Decimal,
     totalYAmount: Decimal,
     strategy: StrategyType,
-    rangeInterval: number
+    _rangeInterval: number
   ): Promise<{
     instructions: TransactionInstruction[];
   }> {
     const dlmmPool = await this.createInstance(poolAddress);
 
     const activeBin = await dlmmPool.getActiveBin();
-
+    const rangeInterval = 5;
     const minBinId = activeBin.binId - rangeInterval;
     const maxBinId = activeBin.binId + rangeInterval;
 

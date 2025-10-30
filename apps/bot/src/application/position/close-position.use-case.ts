@@ -17,19 +17,14 @@ import {
 } from "@/infrastructure/cache/cache.service";
 import { CachePatterns } from "@/infrastructure/cache/cache-keys";
 import { WalletService } from "@/services/wallet.service";
+import { container } from "@/infrastructure/di/container";
+import { GetPositionUseCase } from "./get-position.use-case";
 
 export interface ClosePositionCommand {
-  // Required to identify ownership and for pending tx record
   userId: string;
-
-  // Source of truth for which position to close
   positionId: string;
-
-  // Execution context for submission (if adapter does not submit)
-  userAddress: string; // wallet public key (base58)
-  walletId: string; // Privy wallet id for signing transactions
-
-  // Closure reason
+  userAddress: string;
+  walletId: string;
   closureReason?: "user_close" | "stop_loss" | "take_profit";
 }
 
@@ -69,23 +64,38 @@ export class ClosePositionUseCase {
       }
       validateWalletAddress(command.userAddress);
 
-      const position = await this.positionRepository.findById(
+      const dbPosition = await this.positionRepository.findById(
         command.positionId
       );
-      if (!position) {
+      if (!dbPosition) {
         return { success: false, error: "Position not found" };
       }
-      if (position.userId !== command.userId) {
+      if (dbPosition.userId !== command.userId) {
         return {
           success: false,
           error: "Unauthorized: position does not belong to user",
         };
       }
 
-      const dexType: DexType = position.dex;
-      const positionAddress = position.positionAddress;
+      const getPositionUseCase = container.get(GetPositionUseCase);
+      const result = await getPositionUseCase.execute({
+        positionId: command.positionId,
+        // positionAddress: dbPosition.positionAddress,
+        // userId: command.userId,
+        // userAddress: command.userAddress,
+        // includePool: true,
+        // includePrices: true,
+      });
 
-      // Resolve adapter and build/execute close transaction
+      if (!result.success || !result.position) {
+        throw new Error(result.error ?? "Position not found");
+      }
+
+      const position = result.position;
+
+      const dexType: DexType = position.dex;
+      const positionAddress = position.address;
+
       const adapter: IDexAdapter = this.dexRegistry.get(dexType);
 
       let txResult: ClosePositionResultType;
@@ -143,11 +153,11 @@ export class ClosePositionUseCase {
         const closeContext: PositionClosureContext = {
           userId: command.userId,
           positionId: command.positionId,
-          positionAddress: position.positionAddress,
+          positionAddress: positionAddress,
           poolAddress: position.poolAddress,
           closureReason: command.closureReason ?? "user_close",
-          tokenA: position.tokenX as Token,
-          tokenB: position.tokenY as Token,
+          tokenA: position.tokenA,
+          tokenB: position.tokenB,
         };
 
         const metadata = {
@@ -180,8 +190,8 @@ export class ClosePositionUseCase {
       }
 
       try {
-        position.close();
-        await this.positionRepository.update(position);
+        dbPosition.close();
+        await this.positionRepository.update(dbPosition);
       } catch (err) {
         logger.error({ err }, "Failed to update position status to CLOSED");
         // Do not fail the overall flow; background processor may reconcile later

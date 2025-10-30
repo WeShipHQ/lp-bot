@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { IPositionRepository } from "@/domain/position/position.repository";
 import { validateWalletAddress } from "@/domain/position/position.validators";
-import { DexType, Token } from "@/types/core.types";
+import { DexType } from "@/types/core.types";
 import { IDexAdapter } from "@/types/dex-adapter.interface";
 import { logger } from "@/utils/logger";
 import { db, pendingTransactions, users } from "@/db";
@@ -11,13 +11,14 @@ import { DexRegistryLike } from "./create-position.use-case";
 import { WalletService } from "@/services/wallet.service";
 import { eq } from "drizzle-orm";
 import { RebalanceSessionMetadata } from "@/types/rebalance.types";
+import { container } from "@/infrastructure/di/container";
+import { GetPositionUseCase } from "./get-position.use-case";
 
 export interface RebalancePositionCommand {
   userId: string;
   positionId: string;
   userAddress: string;
   walletId?: string;
-  // Optional execution params
   newStrategy?: string;
   slippage?: number;
   metadata?: Record<string, any>;
@@ -56,13 +57,13 @@ export class RebalancePositionUseCase {
       }
       validateWalletAddress(command.userAddress);
 
-      const position = await this.positionRepository.findById(
+      const dbPosition = await this.positionRepository.findById(
         command.positionId
       );
-      if (!position) {
+      if (!dbPosition) {
         return { success: false, error: "Position not found" };
       }
-      if (position.userId !== command.userId) {
+      if (dbPosition.userId !== command.userId) {
         return {
           success: false,
           error: "Unauthorized: position does not belong to user",
@@ -82,6 +83,21 @@ export class RebalancePositionUseCase {
         };
       }
 
+      const getPositionUseCase = container.get(GetPositionUseCase);
+      const result = await getPositionUseCase.execute({
+        positionId: command.positionId,
+        // positionAddress: dbPosition.positionAddress,
+        // userId: command.userId,
+        // userAddress: command.userAddress,
+        // includePool: true,
+        // includePrices: true,
+      });
+
+      if (!result.success || !result.position) {
+        throw new Error(result.error ?? "Position not found");
+      }
+
+      const position = result.position;
       const dexType: DexType = position.dex;
       const adapter: IDexAdapter = this.dexRegistry.get(dexType);
 
@@ -90,7 +106,7 @@ export class RebalancePositionUseCase {
         closeTx = await adapter.closePositionIxs({
           userAddress: command.userAddress,
           poolAddress: position.poolAddress,
-          positionAddress: position.positionAddress,
+          positionAddress: position.address,
         });
       } catch (error) {
         logger.error({ error }, "Failed to build close position instructions");
@@ -147,9 +163,9 @@ export class RebalancePositionUseCase {
         positionId: command.positionId,
         poolAddress: position.poolAddress,
         dex: dexType,
-        oldPositionAddress: position.positionAddress,
-        tokenA: position.tokenX as Token,
-        tokenB: position.tokenY as Token,
+        oldPositionAddress: position.address,
+        tokenA: position.tokenA,
+        tokenB: position.tokenA,
         strategy,
         rangeInterval,
         autoRebalance: (position as any)?.isRebalancingEnabled ?? false,
@@ -172,7 +188,7 @@ export class RebalancePositionUseCase {
               userId: command.userId,
               dex: dexType,
               poolAddress: position.poolAddress,
-              oldPositionAddress: position.positionAddress,
+              oldPositionAddress: position.address,
             },
             rebalanceSession,
           },
@@ -180,7 +196,10 @@ export class RebalancePositionUseCase {
           maxRetries: 3,
         });
       } catch (error) {
-        logger.error({ error }, "Failed to record pending rebalance transaction");
+        logger.error(
+          { error },
+          "Failed to record pending rebalance transaction"
+        );
         return {
           success: false,
           error: "Failed to persist pending transaction for processing",
@@ -188,10 +207,13 @@ export class RebalancePositionUseCase {
       }
 
       try {
-        position.startRebalancing();
-        await this.positionRepository.update(position);
+        dbPosition.startRebalancing();
+        await this.positionRepository.update(dbPosition);
       } catch (error) {
-        logger.warn({ error }, "Failed to update position status to REBALANCING");
+        logger.warn(
+          { error },
+          "Failed to update position status to REBALANCING"
+        );
       }
 
       try {
@@ -224,12 +246,18 @@ export class RebalancePositionUseCase {
           CachePatterns.positionPattern(command.positionId)
         );
       } catch (error) {
-        logger.debug({ error }, "Failed to invalidate cache after rebalance submission");
+        logger.debug(
+          { error },
+          "Failed to invalidate cache after rebalance submission"
+        );
       }
 
       return { success: true, signature };
     } catch (error) {
-      logger.error({ error }, "RebalancePositionUseCase.execute unexpected error");
+      logger.error(
+        { error },
+        "RebalancePositionUseCase.execute unexpected error"
+      );
       return {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
