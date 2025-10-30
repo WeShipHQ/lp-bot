@@ -1,6 +1,5 @@
 import {
   JupiterToken,
-  JupiterTokenInfo,
   JupiterTokenSearchResponse,
 } from "@/types/jupiter.types";
 import {
@@ -10,39 +9,74 @@ import {
   JupiterExecuteResponse,
 } from "../types/jupiter.types";
 import { VersionedTransaction } from "@solana/web3.js";
-import { api } from "@/bot/utils/http-client.util";
+import { api } from "@/utils/http-client.util";
+import { getCacheService } from "@/infrastructure/cache/cache.service";
+import { CacheKeys } from "@/infrastructure/cache/cache-keys";
+import { CircuitBreaker } from "@/infrastructure/resilience/circuit-breaker";
+import { retry } from "@/infrastructure/resilience/retry";
+import { Token } from "@/types/core.types";
 
 export class JupiterService {
   private readonly baseUrl = "https://lite-api.jup.ag";
   private readonly tokenBaseUrl = "https://lite-api.jup.ag/tokens/v2";
+  private readonly cache = getCacheService();
+  private readonly breaker = new CircuitBreaker({
+    name: "jupiter",
+    failureThreshold: 5,
+    successThreshold: 2,
+    timeoutMs: 15000,
+  });
 
-  private mapJupiterTokenToTokenInfo(
-    jupiterToken: JupiterToken
-  ): JupiterTokenInfo {
+  private mapJupiterTokenToTokenInfo(jupiterToken: JupiterToken): Token {
     return {
-      id: jupiterToken.id,
+      address: jupiterToken.id,
       name: jupiterToken.name,
       symbol: jupiterToken.symbol,
-      icon: jupiterToken.icon,
+      logoUri: jupiterToken.icon,
       decimals: jupiterToken.decimals,
-      price: jupiterToken.usdPrice || 0,
-      priceChange24h: jupiterToken.stats24h?.priceChange || 0,
-      marketCap: jupiterToken.mcap || 0,
-      volume24h:
-        (jupiterToken.stats24h?.buyVolume || 0) +
-        (jupiterToken.stats24h?.sellVolume || 0),
-      liquidity: jupiterToken.liquidity || 0,
-      isVerified: jupiterToken.isVerified || false,
-      source: "jupiter",
+      // price: jupiterToken.usdPrice || 0,
+      // priceChange24h: jupiterToken.stats24h?.priceChange || 0,
+      // marketCap: jupiterToken.mcap || 0,
+      // volume24h:
+      //   (jupiterToken.stats24h?.buyVolume || 0) +
+      //   (jupiterToken.stats24h?.sellVolume || 0),
+      // liquidity: jupiterToken.liquidity || 0,
+      // isVerified: jupiterToken.isVerified || false,
+      // source: "jupiter",
     };
   }
 
-  async getTokenInfo(mintAddress: string): Promise<JupiterTokenInfo | null> {
+  async getTokenInfo(mintAddress: string): Promise<Token | null> {
     try {
       console.log(`[Jupiter] Fetching token info for: ${mintAddress}`);
 
-      const response = await api.getWithRetry<JupiterTokenSearchResponse>(
-        `${this.tokenBaseUrl}/search?query=${mintAddress}`
+      const response = await this.breaker.execute(
+        () =>
+          api.getWithRetry<JupiterTokenSearchResponse>(
+            `${this.tokenBaseUrl}/search?query=${mintAddress}`
+          ),
+        async () => {
+          const price = await this.cache.get<number>(
+            CacheKeys.tokenPriceKey(mintAddress)
+          );
+          if (price != null) {
+            return [
+              {
+                id: mintAddress,
+                name: mintAddress,
+                symbol: "TOKEN",
+                icon: "",
+                decimals: 9,
+                usdPrice: price,
+                stats24h: undefined,
+                mcap: 0,
+                liquidity: 0,
+                isVerified: false,
+              } as any,
+            ];
+          }
+          return [] as any;
+        }
       );
 
       if (!Array.isArray(response) || response.length === 0) {
@@ -52,6 +86,7 @@ export class JupiterService {
       const token =
         response.find((t) => t.id === mintAddress) ||
         (response[0] as JupiterToken);
+
       return this.mapJupiterTokenToTokenInfo(token);
     } catch (error) {
       console.error(
@@ -66,16 +101,20 @@ export class JupiterService {
     tokenXAddress: string,
     tokenYAddress: string
   ): Promise<{
-    tokenX: JupiterTokenInfo;
-    tokenY: JupiterTokenInfo;
+    tokenX: Token;
+    tokenY: Token;
   }> {
     try {
       console.log(
         `[Jupiter] Fetching token info for: ${tokenXAddress}, ${tokenYAddress}`
       );
 
-      const response = await api.getWithRetry<JupiterTokenSearchResponse>(
-        `${this.tokenBaseUrl}/search?query=${tokenXAddress},${tokenYAddress}`
+      const response = await this.breaker.execute(
+        () =>
+          api.getWithRetry<JupiterTokenSearchResponse>(
+            `${this.tokenBaseUrl}/search?query=${tokenXAddress},${tokenYAddress}`
+          ),
+        async () => [] as any
       );
 
       if (!Array.isArray(response) || response.length < 2) {
@@ -104,71 +143,70 @@ export class JupiterService {
     }
   }
 
-  async searchTokens(query: string): Promise<JupiterTokenInfo[]> {
+  async searchTokens(query: string): Promise<Token[]> {
     try {
       console.log(`[Jupiter] Searching tokens for: ${query}`);
 
-      const response = await api.getWithRetry<JupiterTokenInfo[]>(
+      const response = await api.getWithRetry<JupiterTokenSearchResponse>(
         `${this.tokenBaseUrl}/search?query=${query}`
       );
 
-      return response;
+      return response.map(this.mapJupiterTokenToTokenInfo);
     } catch (error) {
       console.error(`[Jupiter] Error searching tokens for ${query}:`, error);
       return [];
     }
   }
 
-  async getTokenPrice(tokenAddress: string): Promise<number | null> {
-    try {
-      const tokenInfo = await this.getTokenInfo(tokenAddress);
-      return tokenInfo?.price || null;
-    } catch (error) {
-      console.error(
-        `[Jupiter] Error fetching price for ${tokenAddress}:`,
-        error
-      );
-      return null;
-    }
-  }
+  // async getTokenPrices(
+  //   tokenAddresses: string[]
+  // ): Promise<Record<string, number>> {
+  //   console.log(
+  //     `[Jupiter] Fetching prices for ${tokenAddresses.length} tokens`
+  //   );
 
-  async getTokenPrices(
-    tokenAddresses: string[]
-  ): Promise<Record<string, number>> {
-    console.log(
-      `[Jupiter] Fetching prices for ${tokenAddresses.length} tokens`
-    );
+  //   const prices: Record<string, number> = {};
 
-    const prices: Record<string, number> = {};
+  //   // First, try cache for each
+  //   const misses: string[] = [];
+  //   for (const address of tokenAddresses) {
+  //     const key = CacheKeys.tokenPriceKey(address);
+  //     const cached = await this.cache.get<number>(key);
+  //     if (typeof cached === "number") {
+  //       prices[address] = cached;
+  //     } else {
+  //       misses.push(address);
+  //     }
+  //   }
 
-    // Process tokens in batches to avoid overwhelming the API
-    const batchSize = 5;
-    for (let i = 0; i < tokenAddresses.length; i += batchSize) {
-      const batch = tokenAddresses.slice(i, i + batchSize);
+  //   // Process remaining tokens in batches
+  //   const batchSize = 5;
+  //   for (let i = 0; i < misses.length; i += batchSize) {
+  //     const batch = misses.slice(i, i + batchSize);
 
-      const batchPromises = batch.map(async (address) => {
-        try {
-          const price = await this.getTokenPrice(address);
-          if (price !== null) {
-            prices[address] = price;
-          }
-        } catch (error) {
-          console.error(
-            `[Jupiter] Error fetching price for ${address}:`,
-            error
-          );
-        }
-      });
+  //     const batchPromises = batch.map(async (address) => {
+  //       try {
+  //         const price = await this.getTokenPrice(address);
+  //         if (price !== null) {
+  //           prices[address] = price;
+  //         }
+  //       } catch (error) {
+  //         console.error(
+  //           `[Jupiter] Error fetching price for ${address}:`,
+  //           error
+  //         );
+  //       }
+  //     });
 
-      await Promise.all(batchPromises);
+  //     await Promise.all(batchPromises);
 
-      if (i + batchSize < tokenAddresses.length) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
-    }
+  //     if (i + batchSize < misses.length) {
+  //       await new Promise((resolve) => setTimeout(resolve, 500));
+  //     }
+  //   }
 
-    return prices;
-  }
+  //   return prices;
+  // }
 
   // async validateToken(tokenAddress: string): Promise<boolean> {
   //   try {
@@ -222,15 +260,25 @@ export class JupiterService {
         }),
       });
 
-      const response = await fetch(
-        `${this.baseUrl}/ultra/v1/order?${queryParams}`
+      const response = await this.breaker.execute(
+        () =>
+          retry(() => fetch(`${this.baseUrl}/ultra/v1/order?${queryParams}`)),
+        async () => {
+          // No viable fallback for order creation
+          return new Response(null, {
+            status: 503,
+            statusText: "Service Unavailable",
+          });
+        }
       );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!(response as any).ok) {
+        throw new Error(`HTTP error! status: ${(response as any).status}`);
       }
 
-      const orderResponse: JupiterOrderResponse = await response.json();
+      const orderResponse: JupiterOrderResponse = await (
+        response as any
+      ).json();
       console.log(
         `[Jupiter] Order created successfully with requestId: ${orderResponse.requestId}`
       );
@@ -252,19 +300,29 @@ export class JupiterService {
         `[Jupiter] Executing order with requestId: ${executeRequest.requestId}`
       );
 
-      const response = await fetch(`${this.baseUrl}/ultra/v1/execute`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(executeRequest),
-      });
+      const response = await this.breaker.execute(
+        () =>
+          retry(() =>
+            fetch(`${this.baseUrl}/ultra/v1/execute`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(executeRequest),
+            })
+          ),
+        async () =>
+          new Response(
+            JSON.stringify({ status: "Error", error: "Service Unavailable" }),
+            { status: 503 }
+          )
+      );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      if (!(response as any).ok) {
+        throw new Error(`HTTP error! status: ${(response as any).status}`);
       }
 
-      const executeResponse: JupiterExecuteResponse = await response.json();
+      const executeResponse: JupiterExecuteResponse = await (
+        response as any
+      ).json();
 
       if (executeResponse.status === "Success") {
         console.log(

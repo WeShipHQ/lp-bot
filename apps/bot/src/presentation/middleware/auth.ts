@@ -1,0 +1,63 @@
+import { MiddlewareFn } from "telegraf";
+import { FastifyInstance } from "fastify";
+import { BotContext } from "@/types/bot.types";
+import { container, DI_TOKENS } from "@/infrastructure/di/container";
+import { ConnectWalletUseCase } from "@/application/wallet/connect-wallet.use-case";
+import { IUserRepository } from "@/domain";
+
+export function authMiddleware(
+  server: FastifyInstance
+): MiddlewareFn<BotContext> {
+  return async (ctx, next) => {
+    if (!ctx.from) {
+      return;
+    }
+
+    const telegramUserId = ctx.from.id.toString();
+    const username = ctx.from.username ?? `Panda_${telegramUserId}`;
+
+    try {
+      const connectWalletUseCase = container.get(ConnectWalletUseCase);
+      const { userId, privyUserId } = await connectWalletUseCase.execute(
+        telegramUserId,
+        undefined,
+        username
+      );
+
+      const userRepository = container.get<IUserRepository>(DI_TOKENS.UserRepo);
+      const user = await userRepository.findById(userId);
+      if (!user) {
+        throw new Error(
+          `User record not found after wallet sync for telegramId=${telegramUserId}`
+        );
+      }
+
+      ctx.user = user;
+      ctx.privyUserId = privyUserId;
+
+      server.log.debug(
+        { telegramUserId, userId },
+        "Authenticated Telegram user"
+      );
+
+      return next();
+    } catch (error) {
+      server.log.error({ err: error, telegramUserId }, "Auth middleware error");
+
+      try {
+        if (ctx.updateType === "callback_query" && "answerCbQuery" in ctx) {
+          await ctx.answerCbQuery("Authentication failed. Please try again.");
+        } else if (ctx.chat?.id && "reply" in ctx) {
+          await ctx.reply(
+            "❌ Authentication failed. Please try again in a moment."
+          );
+        }
+      } catch (notifyError) {
+        server.log.error(
+          { err: notifyError, telegramUserId },
+          "Failed to notify user about auth error"
+        );
+      }
+    }
+  };
+}

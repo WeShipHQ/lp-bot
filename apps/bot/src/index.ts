@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import Fastify from "fastify";
 import GracefulServer from "@gquittet/graceful-server";
 import { randomUUID } from "node:crypto";

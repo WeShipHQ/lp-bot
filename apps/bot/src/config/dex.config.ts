@@ -12,9 +12,11 @@ export interface DexConfig {
   };
 }
 
+const ENV_SELECTED_DEX = (process.env.BOT_DEX || process.env.DEX)?.toLowerCase() as DexType | undefined;
+
 export const DEX_CONFIGS: Record<DexType, DexConfig> = {
   meteora: {
-    enabled: true,
+    enabled: ENV_SELECTED_DEX ? ENV_SELECTED_DEX === "meteora" : true,
     apiUrl: "https://dlmm-api.meteora.ag",
     timeout: 10000,
     retries: 3,
@@ -24,7 +26,7 @@ export const DEX_CONFIGS: Record<DexType, DexConfig> = {
     },
   },
   saros: {
-    enabled: true,
+    enabled: ENV_SELECTED_DEX ? ENV_SELECTED_DEX === "saros" : false,
     apiUrl: "https://api.saros.xyz/api/dex-v3",
     timeout: 10000,
     retries: 3,
@@ -34,12 +36,12 @@ export const DEX_CONFIGS: Record<DexType, DexConfig> = {
     },
   },
   orca: {
-    enabled: false, // Not implemented yet
+    enabled: ENV_SELECTED_DEX ? ENV_SELECTED_DEX === "orca" : false, // Not implemented yet
     timeout: 10000,
     retries: 3,
   },
   raydium: {
-    enabled: false, // Not implemented yet
+    enabled: ENV_SELECTED_DEX ? ENV_SELECTED_DEX === "raydium" : false, // Not implemented yet
     timeout: 10000,
     retries: 3,
   },

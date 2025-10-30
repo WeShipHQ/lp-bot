@@ -12,6 +12,7 @@ import {
 import { TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { PrivyService } from "./privy.service";
 import { CONFIG } from "../config";
+import { CircuitBreaker } from "@/infrastructure/resilience/circuit-breaker";
 
 export interface WalletInfo {
   address: string;
@@ -36,12 +37,16 @@ export interface TransferTokenParams {
 
 export class SolanaService {
   private connection: Connection;
+  private secondaryConnection: Connection;
+  private breaker = new CircuitBreaker({ name: 'solana-rpc', failureThreshold: 5, successThreshold: 2, timeoutMs: 10000 });
   private maxRetries = 3;
   private retryDelay = 1000;
   private requestTimeout = 10000; 
 
   constructor() {
     this.connection = new Connection(CONFIG.SOLANA.RPC_URL);
+    const secondaryUrl = process.env.SOLANA_SECONDARY_RPC_URL || clusterApiUrl('mainnet-beta');
+    this.secondaryConnection = new Connection(secondaryUrl);
   }
 
   /**
@@ -71,44 +76,35 @@ export class SolanaService {
       throw new Error("Invalid Solana address");
     }
 
-    let lastError: Error | null = null;
+    const publicKey = new PublicKey(address);
 
-    for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
-      try {
-        const publicKey = new PublicKey(address);
-        
-        // Create a timeout promise
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('RPC request timeout')), this.requestTimeout);
-        });
-        
-        // Race between the actual request and timeout
-        const balance = await Promise.race([
-          this.connection.getBalance(publicKey),
-          timeoutPromise
-        ]) as number;
-        
-        return balance / LAMPORTS_PER_SOL;
-      } catch (error) {
-        lastError = error as Error;
-        
-        // Only log first attempt errors or timeout errors
-        if (attempt === 1 || (error instanceof Error && error.message.includes('timeout'))) {
-          console.error(`Balance fetch attempt ${attempt} failed for ${address}:`, 
-            error instanceof Error ? error.message : 'Unknown error');
+    try {
+      const lamports = await this.breaker.execute(
+        async () => {
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('RPC request timeout')), this.requestTimeout);
+          });
+          const res = await Promise.race([
+            this.connection.getBalance(publicKey),
+            timeoutPromise,
+          ]) as number;
+          return res;
+        },
+        async () => {
+          // Fallback to secondary RPC
+          try {
+            const res = await this.secondaryConnection.getBalance(publicKey);
+            return res;
+          } catch {
+            return 0;
+          }
         }
-
-        if (attempt < this.maxRetries) {
-          // Exponential backoff
-          await this.delay(this.retryDelay * Math.pow(2, attempt - 1));
-        }
-      }
+      );
+      return lamports / LAMPORTS_PER_SOL;
+    } catch (error) {
+      console.error(`Failed to fetch balance for ${address}:`, error);
+      return 0;
     }
-
-    // If all attempts fail, return 0 balance instead of throwing error
-    // This is more user-friendly than showing an error
-    console.error(`Failed to fetch balance after ${this.maxRetries} attempts`);
-    return 0;
   }
 
   /**
@@ -185,49 +181,23 @@ export class SolanaService {
       throw new Error("Invalid wallet or token address");
     }
 
-    // This is a simplified version - in a real implementation, you'd use getAssociatedTokenAddress
-    // from @solana/spl-token, but we're trying to avoid direct dependencies on that package
-    // since we're using Privy for signing
-    
-    // Implement retry with exponential backoff for RPC rate limiting
-    let lastError: Error | null = null;
-    const maxRetries = 5;
-    let baseDelay = 500; // Start with 500ms delay
-    
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        // Query the token accounts owned by this wallet
-        const accounts = await this.connection.getParsedTokenAccountsByOwner(
-          new PublicKey(walletAddress),
-          { mint: new PublicKey(tokenAddress) }
-        );
+    const owner = new PublicKey(walletAddress);
+    const mint = new PublicKey(tokenAddress);
 
-        // Return the first account if found
-        if (accounts.value.length > 0) {
-          return accounts.value[0].pubkey.toString();
-        }
-        
-        throw new Error("Token account not found");
-      } catch (error: any) {
-        lastError = error;
-        
-        // Check if it's a rate limit error
-        const isRateLimit = 
-          error.message?.includes("429") || 
-          error.message?.includes("Too Many Requests");
-          
-        if (isRateLimit && attempt < maxRetries - 1) {
-          const delay = baseDelay * Math.pow(2, attempt);
+    try {
+      const accounts = await this.breaker.execute(
+        () => this.connection.getParsedTokenAccountsByOwner(owner, { mint }),
+        async () => this.secondaryConnection.getParsedTokenAccountsByOwner(owner, { mint })
+      );
 
-          await new Promise(resolve => setTimeout(resolve, delay));
-          continue;
-        }
-        console.error("Error getting token account address:", error);
-        throw new Error(`Failed to get token account: ${error instanceof Error ? error.message : "Unknown error"}`);
+      if (accounts.value.length > 0) {
+        return accounts.value[0].pubkey.toString();
       }
+      throw new Error("Token account not found");
+    } catch (error: any) {
+      console.error("Error getting token account address:", error);
+      throw new Error(`Failed to get token account: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
-    
-    throw lastError || new Error("Failed to get token account after multiple retries");
   }
 
   /**
@@ -241,47 +211,28 @@ export class SolanaService {
       throw new Error("Invalid wallet or token address");
     }
 
-    let lastError: Error | null = null;
-    const maxRetries = 5;
-    let baseDelay = 500;
-    
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        // Query the token accounts owned by this wallet
-        const accounts = await this.connection.getParsedTokenAccountsByOwner(
-          new PublicKey(walletAddress),
-          { mint: new PublicKey(tokenAddress) }
-        );
+    const owner = new PublicKey(walletAddress);
+    const mint = new PublicKey(tokenAddress);
 
-        // If no accounts found, return 0 balance
-        if (accounts.value.length === 0) {
-          return { balance: 0, decimals: 0 };
-        }
+    try {
+      const accounts = await this.breaker.execute(
+        () => this.connection.getParsedTokenAccountsByOwner(owner, { mint }),
+        async () => this.secondaryConnection.getParsedTokenAccountsByOwner(owner, { mint })
+      );
 
-        // Get the token account data
-        const accountInfo = accounts.value[0].account.data.parsed;
-        const balance = accountInfo.info.tokenAmount.uiAmount;
-        const decimals = accountInfo.info.tokenAmount.decimals;
-
-        return { balance, decimals };
-      } catch (error: any) {
-        lastError = error;
-        
-        const isRateLimit = 
-          error.message?.includes("429") || 
-          error.message?.includes("Too Many Requests");
-          
-        if (isRateLimit && attempt < maxRetries - 1) {
-          const delay = baseDelay * Math.pow(2, attempt);
-
-          await new Promise(resolve => setTimeout(resolve, delay));
-          continue;
-        }
-        console.error("Error getting token balance:", error);
-        throw new Error(`Failed to get token balance: ${error instanceof Error ? error.message : "Unknown error"}`);
+      if (accounts.value.length === 0) {
+        return { balance: 0, decimals: 0 };
       }
+
+      const accountInfo = accounts.value[0].account.data.parsed;
+      const balance = accountInfo.info.tokenAmount.uiAmount;
+      const decimals = accountInfo.info.tokenAmount.decimals;
+
+      return { balance, decimals };
+    } catch (error: any) {
+      console.error("Error getting token balance:", error);
+      throw new Error(`Failed to get token balance: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
-    throw lastError || new Error("Failed to get token balance after multiple retries");
   }
 
   /**

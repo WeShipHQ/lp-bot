@@ -10,6 +10,7 @@ export const CONFIG = {
 
   TELEGRAM: {
     BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || "",
+    BOT_USERNAME: process.env.TELEGRAM_BOT_USERNAME || "",
     WEBHOOK_URL: process.env.TELEGRAM_WEBHOOK_URL || "",
   },
 
@@ -26,6 +27,15 @@ export const CONFIG = {
     HELIUS_API_KEY: process.env.HELIUS_API_KEY || "",
   },
 
+  SANCTUM: {
+    API_KEY: process.env.SANCTUM_API_KEY || "",
+    ENABLED: process.env.SANCTUM_ENABLED === "true",
+  },
+
+  OPENAI: {
+    OPEN_ROUTER_API_KEY: process.env.OPEN_ROUTER_API_KEY || "",
+  },
+
   REDIS: {
     URL: process.env.REDIS_URL || "redis://localhost:6379",
   },
@@ -39,6 +49,7 @@ export const {
   DATABASE_URL,
   TELEGRAM,
   SOLANA,
+  SANCTUM,
   REDIS,
   LOG_LEVEL,
 } = CONFIG;

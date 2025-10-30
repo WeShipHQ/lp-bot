@@ -1,6 +1,7 @@
 import fp from "fastify-plugin";
 import { FastifyInstance, FastifyPluginAsync } from "fastify";
-import { JobQueueService } from "../services/job-queue.service";
+import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
+import { container, DI_TOKENS } from '@/infrastructure/di/container';
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -15,10 +16,11 @@ export async function registerJobQueuePlugin(app: FastifyInstance) {
 const jobQueuePlugin: FastifyPluginAsync = fp(async (server, _options) => {
   server.log.info("Initializing job queue service...");
 
-  const jobQueueService = new JobQueueService();
+  // Resolve from DI (initialized in telegraf plugin)
+  const jobQueueService = container.get<JobQueueService>(DI_TOKENS.JobQueue);
   await jobQueueService.setupScheduledJobs();
 
-  server.log.info("Job queue service initialized with scheduled monitoring");
+  server.log.info("Job queue service initialized");
 
   server.decorate("jobQueue", jobQueueService);
 

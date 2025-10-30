@@ -1,0 +1,221 @@
+import type { Position } from "@/domain/position/position.entity";
+import type {
+  TokenPrice,
+  UnifiedPool,
+  UnifiedPosition,
+  UserPosition,
+} from "@/types/core.types";
+import {
+  formatCurrency,
+  formatNumber,
+  formatPercentage,
+  formatPrice,
+} from "./base.formatter";
+import { divider } from "@/utils/misc";
+import Decimal from "decimal.js";
+
+interface FormatParams {
+  position: Position;
+  onchain?: UnifiedPosition;
+  pool?: UnifiedPool;
+  prices?: Record<string, TokenPrice | undefined>;
+}
+
+interface BalanceLine {
+  label: string;
+  amount: string;
+  usd?: string;
+}
+
+export interface PositionDetailView {
+  text: string;
+  pairLabel: string;
+}
+
+export class PositionDetailFormatter {
+  static format(params: FormatParams): PositionDetailView {
+    const { position, onchain, pool, prices } = params;
+
+    const tokenA = position.tokenX;
+    const tokenB = position.tokenY;
+    const pairLabel = pool?.name ?? `${tokenA.symbol}/${tokenB.symbol}`;
+
+    const tokenAPrice = prices?.[tokenA.address]?.price ?? 0;
+    const tokenBPrice = prices?.[tokenB.address]?.price ?? 0;
+
+    const tokenAAmount = position.getCurrentTokenXAmount();
+    const tokenBAmount = position.getCurrentTokenYAmount();
+
+    const tokenAUi = tokenAAmount.toUi();
+    const tokenBUi = tokenBAmount.toUi();
+
+    const tokenAUsd = tokenAUi * tokenAPrice;
+    const tokenBUsd = tokenBUi * tokenBPrice;
+
+    const currentValueUsd = tokenAUi * tokenAPrice + tokenBUi * tokenBPrice;
+    const initialValueUsd = position.getInitialValue().toNumber();
+    const claimedFeesUsd = position.getClaimedFees().toNumber();
+    const unclaimedFeesUsd = 0; // Raw on-chain position no longer includes USD fees
+
+    const netProfitUsd =
+      currentValueUsd + claimedFeesUsd + unclaimedFeesUsd - initialValueUsd;
+    const netProfitPct =
+      initialValueUsd > 0 ? (netProfitUsd / initialValueUsd) * 100 : 0;
+    const pnlEmoji = netProfitUsd > 0 ? "📈" : netProfitUsd < 0 ? "📉" : "➖";
+
+    const balanceLines: BalanceLine[] = [
+      {
+        label: tokenA.symbol,
+        amount: tokenAAmount.toFormattedString(),
+        usd:
+          tokenAPrice > 0
+            ? formatCurrency(tokenAUsd, { maxDecimals: 2 })
+            : undefined,
+      },
+      {
+        label: tokenB.symbol,
+        amount: tokenBAmount.toFormattedString(),
+        usd:
+          tokenBPrice > 0
+            ? formatCurrency(tokenBUsd, { maxDecimals: 2 })
+            : undefined,
+      },
+    ];
+
+    const statusLabel = (() => {
+      if (onchain?.inRange === true) return "🟢 In Range";
+      if (onchain?.inRange === false) return "🔴 Out of Range";
+      return "⚪️ Range Unknown";
+    })();
+
+    const metadata = (onchain?.metadata ?? {}) as Record<string, unknown>;
+    const lowerBinPrice = metadata.lowerBinPrice as string | undefined;
+    const upperBinPrice = metadata.upperBinPrice as string | undefined;
+
+    const lowerBinId =
+      typeof metadata.lowerBinId === "number" ? metadata.lowerBinId : undefined;
+    const upperBinId =
+      typeof metadata.upperBinId === "number" ? metadata.upperBinId : undefined;
+    const activeId =
+      typeof metadata.activeId === "number" ? metadata.activeId : undefined;
+
+    const lines: string[] = [];
+
+    lines.push(`*${pairLabel}* (${position.dex.toUpperCase()})`);
+    lines.push("");
+    lines.push(
+      `${pnlEmoji} *Net PnL:* ${formatCurrency(netProfitUsd, { maxDecimals: 2 })} (${formatPercentage(netProfitPct, { decimals: 2, alwaysShowSign: true })})`
+    );
+    lines.push(divider());
+
+    lines.push(`*Balance*`);
+    balanceLines.forEach((item) => {
+      const usdPart = item.usd ? ` (~${item.usd})` : "";
+      lines.push(`• ${item.label}: ${item.amount}${usdPart}`);
+    });
+    lines.push(
+      `• Total Value: ${formatCurrency(currentValueUsd, { maxDecimals: 2 })}`
+    );
+    lines.push("");
+
+    lines.push(`*Fees*`);
+    lines.push(
+      `• Claimed: ${formatCurrency(claimedFeesUsd, { maxDecimals: 2 })}`
+    );
+    lines.push(
+      `• Unclaimed: ${formatCurrency(unclaimedFeesUsd, { maxDecimals: 2 })}`
+    );
+    lines.push("");
+
+    lines.push(`*Status*`);
+    lines.push(`• ${statusLabel}`);
+
+    if (upperBinPrice && lowerBinPrice) {
+      lines.push(
+        `• Price Range: ${formatNumber(Number(lowerBinPrice), { maxDecimals: 6 })} – ${formatNumber(Number(upperBinPrice), { maxDecimals: 6 })} ${tokenB.symbol}/${tokenA.symbol}`
+      );
+    } else if (
+      typeof lowerBinId === "number" &&
+      typeof upperBinId === "number"
+    ) {
+      const activeSuffix =
+        typeof activeId === "number" ? ` (active: ${activeId})` : "";
+      lines.push(
+        `• Bin Range: ${lowerBinId?.toString()} – ${upperBinId?.toString()}${activeSuffix}`
+      );
+    }
+    if (pool?.currentPrice != null) {
+      lines.push(
+        `• Pool Price: ${formatNumber(pool.currentPrice, { maxDecimals: 6 })} ${pool.tokenB.symbol}/${pool.tokenA.symbol}`
+      );
+    }
+    lines.push("");
+
+    const updatedAt = onchain?.updatedAt ?? position.getUpdatedAt();
+    lines.push(`_Last updated: ${updatedAt.toLocaleString()}_`);
+
+    return {
+      text: lines.join("\n"),
+      pairLabel,
+    };
+  }
+
+  static formatUserPosition(position: UserPosition): PositionDetailView {
+    const tokenA = position.tokenA;
+    const tokenB = position.tokenB;
+    const pairLabel = `${tokenA.symbol}/${tokenB.symbol}`;
+
+    const tokenAUi = parseFloat(position.tokenAAmount);
+    const tokenBUi = parseFloat(position.tokenBAmount);
+
+    const totalCurrentValueUsd = position.currentValueUsd;
+    const claimedFeesUsd = position.claimedFeesUsd;
+    const unclaimedFeesUsd = position.unclaimedFeesUsd;
+    const netProfitUsd = position.metrics.totalPnlUsd;
+    const netProfitPct = position.pnlPercentage;
+    const pnlEmoji = netProfitUsd > 0 ? "📈" : netProfitUsd < 0 ? "📉" : "➖";
+
+    const lines: string[] = [];
+
+    lines.push(`*${pairLabel}* (${position.dex.toUpperCase()})`);
+    lines.push("");
+    lines.push(
+      `${pnlEmoji} *Net PnL:* ${formatCurrency(netProfitUsd, { maxDecimals: 2 })} (${formatPercentage(netProfitPct, { decimals: 2, alwaysShowSign: true })})`
+    );
+    lines.push(divider());
+
+    lines.push(`*Balance*`);
+    lines.push(`• ${tokenA.symbol}: ${formatNumber(tokenAUi, { maxDecimals: 6 })}`);
+    lines.push(`• ${tokenB.symbol}: ${formatNumber(tokenBUi, { maxDecimals: 6 })}`);
+    lines.push(
+      `• Total Value: ${formatCurrency(totalCurrentValueUsd, { maxDecimals: 2 })}`
+    );
+    lines.push("");
+
+    lines.push(`*Fees*`);
+    lines.push(
+      `• Claimed: ${formatCurrency(claimedFeesUsd, { maxDecimals: 2 })}`
+    );
+    lines.push(
+      `• Unclaimed: ${formatCurrency(unclaimedFeesUsd, { maxDecimals: 2 })}`
+    );
+    lines.push("");
+
+    lines.push(`*Status*`);
+    lines.push(`• ${position.inRange ? "🟢 In Range" : "🔴 Out of Range"}`);
+
+    lines.push("");
+    lines.push(
+      `_Duration: ${position.metrics.durationDays.toFixed(2)} days | Rebalances: ${position.metrics.rebalanceCount}_`
+    );
+
+    lines.push(
+      `_Last updated: ${position.updatedAt.toLocaleString()}_`
+    );
+
+    return {
+      text: lines.join("\n"),
+      pairLabel,
+    };
+  }
+}

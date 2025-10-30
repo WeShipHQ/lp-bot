@@ -1,4 +1,4 @@
-import { Token } from "@/types/token.types";
+import { Keypair, TransactionInstruction } from "@solana/web3.js";
 
 export type DexType = "meteora" | "saros" | "orca" | "raydium";
 export type PoolType = "DLMM" | "DAMM" | "CLMM" | "AMM";
@@ -44,6 +44,10 @@ export interface UnifiedPool {
   metadata?: Record<string, any>;
 }
 
+/**
+ * UnifiedPosition - Raw position data without price/USD/PnL calculations
+ * Returned directly from DEX adapters with only on-chain state
+ */
 export interface UnifiedPosition {
   id: string;
   address: string;
@@ -55,23 +59,15 @@ export interface UnifiedPosition {
   tokenA: Token;
   tokenB: Token;
 
-  // Position amounts
+  // Position amounts (raw, in UI units)
   tokenAAmount: string;
   tokenBAmount: string;
 
-  // USD values
-  currentValueUsd: number;
-  initialValueUsd: number;
-
-  // Fees and rewards
-  unclaimedFeesUsd: number;
-  claimedFeesUsd: number;
-  unclaimedRewardsUsd?: number;
-  claimedRewardsUsd?: number;
-
-  // PnL
-  pnlUsd: number;
-  pnlPercentage: number;
+  // fees
+  unclaimedFeesX: string;
+  unclaimedFeesY: string;
+  claimedFeesX: string;
+  claimedFeesY: string;
 
   // Position status
   inRange: boolean;
@@ -85,11 +81,57 @@ export interface UnifiedPosition {
   metadata?: Record<string, any>;
 }
 
+/**
+ * PositionWithPrices - Enriched position with calculated USD values
+ * Created by adding price data to a raw UnifiedPosition
+ */
+export interface PositionWithPrices extends UnifiedPosition {
+  currentValueUsd: number;
+  unclaimedFeesUsd: number;
+  claimedFeesUsd: number;
+}
+
+/**
+ * Aggregated metrics for a user position
+ */
+export interface PositionAggregatedMetrics {
+  claimedFeesUsd: number;
+  totalPnlUsd: number;
+  durationDays: number;
+  rebalanceCount: number;
+}
+
+/**
+ * UserPosition - Complete position view with historical context
+ * Combines on-chain position data with database history for PnL calculation
+ */
+export interface UserPosition extends PositionWithPrices {
+  // Historical values from database
+  initialValueUsd: number;
+
+  // Calculated PnL (requires initial value from DB)
+  pnlUsd: number;
+  pnlPercentage: number;
+
+  // Position status
+  status: "ACTIVE" | "CLOSED" | "REBALANCING";
+
+  // Aggregated metrics payload
+  metrics: PositionAggregatedMetrics;
+}
+
 export interface TransactionResult {
   success: boolean;
   signature?: string;
   error?: string;
   metadata?: Record<string, any>;
+}
+
+export interface CreatePositionResult {
+  success: boolean;
+  instructions: TransactionInstruction[];
+  positionKp: Keypair;
+  error?: string;
 }
 
 export interface CreatePositionParams {
@@ -99,7 +141,7 @@ export interface CreatePositionParams {
   tokenBAmount: string;
   strategy?: string;
   slippage?: number;
-  metadata?: Record<string, any>;
+  rangeInterval?: number;
 }
 
 export interface RebalanceParams {
@@ -130,13 +172,16 @@ export interface PaginatedTrendingPools {
   sortBy: TrendingPoolsSortCriteria;
 }
 
+/**
+ * UnifiedPortfolio - User's portfolio with enriched positions
+ * Uses UserPosition which includes both on-chain data and historical context
+ */
 export interface UnifiedPortfolio {
   userAddress: string;
-  positions: UnifiedPosition[];
+  positions: UserPosition[];
   totalValueUsd: number;
   totalPnlUsd: number;
   totalFeesUsd: number;
-  totalRewardsUsd?: number;
   dexBreakdown: Record<
     DexType,
     {
@@ -163,4 +208,46 @@ export class DexAdapterError extends Error {
     super(message);
     this.name = "DexAdapterError";
   }
+}
+
+export interface ClosePositionParams {
+  poolAddress: string;
+  userAddress: string;
+  positionAddress: string;
+}
+
+export interface ClosePositionResult {
+  success: boolean;
+  instructions: TransactionInstruction[];
+  error?: string;
+}
+
+export interface ClaimFeesParams {
+  poolAddress: string;
+  userAddress: string;
+  positionAddress: string;
+}
+
+export interface ClaimFeesResult {
+  success: boolean;
+  instructions: TransactionInstruction[];
+  error?: string;
+}
+
+// tokens
+export interface Token {
+  address: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  logoUri?: string;
+}
+
+export interface TokenPrice {
+  id: string;
+  timestamp: number;
+  price: number;
+  blockId: number;
+  decimals: number;
+  priceChange24h: number;
 }

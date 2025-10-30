@@ -1,14 +1,20 @@
+import Decimal from "decimal.js";
 import {
   DexType,
   UnifiedPool,
   UnifiedPosition,
   UnifiedPortfolio,
   TransactionResult,
+  CreatePositionResult,
   CreatePositionParams,
   RebalanceParams,
   TrendingParams,
   PaginatedTrendingPools,
   UrlParseResult,
+  ClosePositionResult,
+  ClosePositionParams,
+  ClaimFeesParams,
+  ClaimFeesResult,
 } from "./core.types";
 
 export interface IDexAdapter {
@@ -23,16 +29,38 @@ export interface IDexAdapter {
 
   // Position operations
   getUserPositions(userAddress: string): Promise<UnifiedPosition[]>;
-  getPosition(positionAddress: string): Promise<UnifiedPosition>;
-  createPosition(params: CreatePositionParams): Promise<TransactionResult>;
-  closePosition(positionAddress: string): Promise<TransactionResult>;
-  claimFees(positionAddress: string): Promise<TransactionResult>;
-  rebalancePosition(
+  getPosition(
     positionAddress: string,
-    params: RebalanceParams
-  ): Promise<TransactionResult>;
+    poolAddress: string
+  ): Promise<UnifiedPosition>;
+  getUserPosition(
+    userAddress: string,
+    positionAddress: string
+  ): Promise<UnifiedPosition>;
+
+  createPositionIxs(
+    params: CreatePositionParams
+  ): Promise<CreatePositionResult>;
+  closePositionIxs(params: ClosePositionParams): Promise<ClosePositionResult>;
+  claimFeesIxs(params: ClaimFeesParams): Promise<ClaimFeesResult>;
+
+  getPriceRange(
+    poolAddress: string,
+    rangeInterval: number
+  ): Promise<{
+    fromPrice: Decimal;
+    toPrice: Decimal;
+    activeBinId: number;
+    fromBinId: number;
+    toBinId: number;
+  }>;
 
   // Portfolio operations
+  /**
+   * @deprecated Deprecated - use getUserPositions() instead.
+   * Portfolio enrichment with prices should happen at service layer, not adapter layer.
+   * UnifiedPosition no longer contains USD/PnL fields - those are calculated separately.
+   */
   getUserPortfolio(userAddress: string): Promise<UnifiedPortfolio>;
 
   // URL parsing

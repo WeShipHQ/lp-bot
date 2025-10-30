@@ -1,5 +1,4 @@
 import type { PoolDex, PoolType } from "@/types/pool.types";
-import type { Token } from "@/types/token.types";
 import type {
   SarosDlmmPool,
   SarosDlmmPoolDetail,
@@ -15,12 +14,20 @@ import {
   UnifiedPool,
   UnifiedPosition,
   UrlParseResult,
+  CreatePositionResult,
+  Token
 } from "@/types/core.types";
 import { SarosPoolService } from "./pool.service";
-import { TRENDING_CONSTANTS } from "@/bot/config/constants";
+import { TRENDING_CONSTANTS } from "@/config/constants";
 import { SarosDlmmService } from "./dlmm.service";
 import { BaseDexAdapter } from "@/adapters/base-dex.adapter";
 
+/**
+ * SarosAdapter
+ * Implements IDexAdapter for Saros DLMM pools.
+ * - Transforms Saros API/SDK responses to Unified types
+ * - Provides trending/search/positions endpoints, reusing Saros services
+ */
 export class SarosAdapter extends BaseDexAdapter {
   readonly dexType: DexType = "saros";
   readonly name: string = "Saros";
@@ -93,7 +100,10 @@ export class SarosAdapter extends BaseDexAdapter {
     return unifiedPositions;
   }
 
-  async getPosition(positionAddress: string): Promise<UnifiedPosition> {
+  async getPosition(
+    positionAddress: string,
+    _poolAddress: string
+  ): Promise<UnifiedPosition> {
     // TODO: Implement single position retrieval
     throw new Error("Method not implemented.");
   }
@@ -101,6 +111,13 @@ export class SarosAdapter extends BaseDexAdapter {
   async createPosition(
     params: CreatePositionParams
   ): Promise<TransactionResult> {
+    // TODO: Implement using existing sarosDlmmService.createPositionIx()
+    throw new Error("Method not implemented.");
+  }
+
+  async createPositionIx(
+    params: CreatePositionParams
+  ): Promise<CreatePositionResult> {
     // TODO: Implement using existing sarosDlmmService.createPositionIx()
     throw new Error("Method not implemented.");
   }
@@ -237,9 +254,6 @@ export class SarosAdapter extends BaseDexAdapter {
     const tokenAAmount = sarosPosition.reserveX.toString();
     const tokenBAmount = sarosPosition.reserveY.toString();
 
-    const currentValueUsd = 0;
-    const initialValueUsd = 0;
-
     const positionId = `${sarosPosition.pair}-${sarosPosition.postions.map((p) => p.position).join("-")}`;
     const positionAddress =
       sarosPosition.postions[0]?.position || sarosPosition.pair;
@@ -259,21 +273,7 @@ export class SarosAdapter extends BaseDexAdapter {
       tokenAAmount,
       tokenBAmount,
 
-      // USD values (using defaults for now)
-      currentValueUsd,
-      initialValueUsd,
-
-      // Fees and rewards (using defaults)
-      unclaimedFeesUsd: 0,
-      claimedFeesUsd: 0,
-      unclaimedRewardsUsd: 0,
-      claimedRewardsUsd: 0,
-
-      // PnL (using defaults)
-      pnlUsd: 0,
-      pnlPercentage: 0,
-
-      // Position status (using defaults)
+      // Position status
       inRange: true, // TODO: Calculate based on current price and position range
       isActive: true,
 

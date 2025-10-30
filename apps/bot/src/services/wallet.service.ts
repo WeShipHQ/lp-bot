@@ -1,8 +1,8 @@
 import { generateAuthorizationSignature } from "@privy-io/server-auth/wallet-api";
 import { CONFIG } from "../config";
-import { generateRecipientKeypair } from "../bot/utils/hpke-keygen";
-import { decryptHPKEMessage } from "../bot/utils/hpke-decrypt";
-import { privy } from "./privy.service";
+import { generateRecipientKeypair } from "@/utils/hpke-keygen";
+import { decryptHPKEMessage } from "@/utils/hpke-decrypt";
+import { privy, PrivyService } from "./privy.service";
 import {
   Connection,
   PublicKey,
@@ -11,16 +11,20 @@ import {
   AddressLookupTableAccount,
   Transaction,
   VersionedTransaction,
-  SystemProgram,
+  ComputeBudgetProgram,
 } from "@solana/web3.js";
 import { User } from "@/db";
 import { CreateSmartTransactionOptions } from "@/types/transaction.types";
 import {
   broadcastTransaction,
   createSmartTransaction,
-  createSmartTransactionWithTip,
-  sendSmartTransactionWithTip,
+  createTransactionSender,
+  sendWithRetry,
 } from "@/utils/build-tx";
+import {
+  SanctumGatewayService,
+  SanctumGatewayOptions,
+} from "./sanctum-gateway.service";
 
 export interface WalletExportResult {
   privateKey: string;
@@ -192,14 +196,25 @@ export class WalletService {
     // );
 
     const tipAmount = 1_000_000; // 100k microLamports = 0.0001 SOL
-    const { transaction, blockhash } = await createSmartTransactionWithTip(
+    // const { transaction, blockhash } = await createSmartTransactionWithTip(
+    //   connection,
+    //   instructions,
+    //   payer,
+    //   signers,
+    //   lookupTables,
+    //   tipAmount,
+    //   options
+    // );
+
+    const filteredIxs = instructions.filter(
+      (ix) => !ix.programId.equals(ComputeBudgetProgram.programId)
+    );
+
+    const { transaction, blockhash } = await createTransactionSender(
       connection,
-      instructions,
+      filteredIxs,
       payer,
-      signers,
-      lookupTables,
-      tipAmount,
-      options
+      signers
     );
 
     const { signedTransaction } = await privy.walletApi.solana.signTransaction({
@@ -208,14 +223,60 @@ export class WalletService {
     });
 
     // const result = await broadcastTransaction(connection, signedTransaction);
-    const result = await sendSmartTransactionWithTip(
-      connection,
+    // const result = await sendSmartTransactionWithTip(
+    //   connection,
+    //   signedTransaction,
+    //   blockhash,
+    //   "NY"
+    // );
+
+    const result = await sendWithRetry(
       signedTransaction,
-      blockhash,
-      "NY"
+      connection,
+      blockhash.lastValidBlockHeight
     );
 
     console.log("Sign message result:", result);
+
+    return result;
+  }
+
+  static async signAndSendTransactionWithJitoV2(
+    walletId: string,
+    userWalletAddress: string,
+    instructions: TransactionInstruction[],
+    signers: Signer[] = [],
+    lookupTables: AddressLookupTableAccount[] = [],
+    options: CreateSmartTransactionOptions = {}
+  ): Promise<string> {
+    console.log(
+      `[Wallet] Starting signAndSendTransaction for user ${userWalletAddress}`
+    );
+
+    const connection = new Connection(CONFIG.SOLANA.RPC_URL);
+    const payer = new PublicKey(userWalletAddress);
+
+    const filteredIxs = instructions.filter(
+      (ix) => !ix.programId.equals(ComputeBudgetProgram.programId)
+    );
+
+    const { transaction, blockhash } = await createTransactionSender(
+      connection,
+      filteredIxs,
+      payer,
+      signers
+    );
+
+    const { signedTransaction } = await privy.walletApi.solana.signTransaction({
+      walletId: walletId,
+      transaction: transaction,
+    });
+
+    const result = await sendWithRetry(
+      signedTransaction,
+      connection,
+      blockhash.lastValidBlockHeight
+    );
 
     return result;
   }
@@ -228,5 +289,123 @@ export class WalletService {
       walletId: user.walletId,
       transaction: transaction,
     });
+  }
+
+  static async signAndSendTransactionWithGateway(
+    walletId: string,
+    walletAddress: string,
+    instructions: TransactionInstruction[],
+    signers: Signer[] = [],
+    lookupTables: AddressLookupTableAccount[] = [],
+    options: CreateSmartTransactionOptions = {},
+    gatewayOptions: SanctumGatewayOptions = {}
+  ): Promise<string> {
+    console.log(
+      `[Wallet] Starting signAndSendTransactionWithGateway for user ${walletAddress}`
+    );
+
+    if (!CONFIG.SANCTUM.API_KEY || !CONFIG.SANCTUM.ENABLED) {
+      console.warn(
+        "[Wallet] Sanctum Gateway not configured, falling back to standard method"
+      );
+      return this.signAndSendTransactionWithJitoV2(
+        walletId,
+        walletAddress,
+        instructions,
+        signers,
+        lookupTables,
+        options
+      );
+    }
+
+    const connection = new Connection(CONFIG.SOLANA.RPC_URL);
+    const payer = new PublicKey(walletAddress!);
+
+    try {
+      const { transaction } =
+        await SanctumGatewayService.buildGatewayTransaction(
+          connection,
+          instructions,
+          payer,
+          signers
+          // lookupTables,
+          // options,
+          // gatewayOptions
+        );
+
+      const { signedTransaction } =
+        await privy.walletApi.solana.signTransaction({
+          walletId: walletId,
+          transaction: transaction,
+        });
+
+      const signature =
+        await SanctumGatewayService.sendTransaction(signedTransaction);
+
+      console.log(`[Wallet] Gateway transaction sent: ${signature}`);
+      return signature;
+    } catch (error) {
+      console.error(
+        "[Wallet] Gateway transaction failed, falling back to standard method:",
+        error
+      );
+
+      return this.signAndSendTransactionWithJitoV2(
+        walletId,
+        walletAddress,
+        instructions,
+        signers,
+        lookupTables,
+        options
+      );
+    }
+  }
+
+  static async signAndSendViaGateway(
+    walletId: string,
+    userWalletAddress: string,
+    instructions: TransactionInstruction[],
+    signers: Signer[] = [],
+    _options: SanctumGatewayOptions = {}
+  ): Promise<string> {
+    console.log(
+      `[Wallet] Starting signAndSendViaGateway for user ${userWalletAddress}`
+    );
+    try {
+      const connection = new Connection(CONFIG.SOLANA.RPC_URL);
+
+      const { transaction } =
+        await SanctumGatewayService.buildGatewayTransaction(
+          connection,
+          instructions,
+          new PublicKey(userWalletAddress),
+          signers
+        );
+
+      const signedTransaction = await PrivyService.signSolanaTransaction(
+        walletId,
+        transaction as VersionedTransaction
+      );
+
+      const signature =
+        await SanctumGatewayService.sendTransaction(signedTransaction);
+
+      console.log(`[Wallet] Gateway transaction sent: ${signature}`);
+      return signature;
+    } catch (error) {
+      console.error(
+        "[Wallet] Gateway transaction failed, falling back to standard method:",
+        error
+      );
+      throw error;
+    }
+  }
+
+  static async isGatewayAvailable(): Promise<boolean> {
+    return (
+      CONFIG.SANCTUM.ENABLED &&
+      !!CONFIG.SANCTUM.API_KEY &&
+      (await SanctumGatewayService.isHealthy())
+    );
   }
 }

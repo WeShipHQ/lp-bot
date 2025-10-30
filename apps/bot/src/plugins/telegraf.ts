@@ -2,8 +2,9 @@ import fp from "fastify-plugin";
 import { FastifyInstance, FastifyPluginAsync } from "fastify";
 import { Telegraf } from "telegraf";
 import { CONFIG } from "../config";
-import { setupBotCommands } from "../bot";
+import { setupBotCommands } from "../presentation";
 import { BotContext } from "@/types/bot.types";
+import { initializeContainer } from "@/infrastructure/di/container";
 
 declare module "fastify" {
   interface FastifyInstance {
@@ -21,6 +22,9 @@ const telegrafPlugin: FastifyPluginAsync = fp(async (server, _options) => {
   }
 
   const bot = new Telegraf<BotContext>(CONFIG.TELEGRAM.BOT_TOKEN);
+
+  // Initialize DI container with runtime bot instance
+  initializeContainer(bot);
 
   await setupBotCommands(bot, server);
 

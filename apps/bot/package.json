@@ -24,6 +24,7 @@
   },
   "type": "module",
   "dependencies": {
+    "@ai-sdk/openai": "^2.0.58",
     "@coral-xyz/anchor": "^0.31.1",
     "@fastify/autoload": "^6.3.1",
     "@fastify/cors": "^11.0.0",
@@ -47,6 +48,7 @@
     "@langchain/textsplitters": "^0.1.0",
     "@meteora-ag/dlmm": "^1.7.0",
     "@napi-rs/canvas": "^0.1.77",
+    "@openrouter/ai-sdk-provider": "^1.2.0",
     "@prisma/adapter-neon": "^6.5.0",
     "@prisma/client": "^6.3.0",
     "@privy-io/server-auth": "^1.31.1",
@@ -58,6 +60,7 @@
     "@types/mime-types": "^2.1.4",
     "@types/qrcode": "^1.5.5",
     "@types/speakeasy": "^2.0.10",
+    "ai": "^5.0.82",
     "bn.js": "^5.2.2",
     "bottleneck": "^2.19.5",
     "bs58": "^6.0.0",
@@ -69,6 +72,7 @@
     "fastify": "^5.0.0",
     "fastify-plugin": "^5.0.1",
     "helius-sdk": "^1.5.3",
+    "inversify": "^6.0.1",
     "ioredis": "^5.7.0",
     "mime-types": "^2.1.35",
     "nanoid": "^5.1.5",
@@ -76,12 +80,13 @@
     "pino-pretty": "^13.0.0",
     "postgres": "^3.4.7",
     "qrcode": "^1.5.4",
+    "reflect-metadata": "^0.2.2",
     "speakeasy": "^2.0.0",
     "superjson": "^2.2.2",
     "telegraf": "^4.16.3",
     "telegram": "^2.26.16",
     "uuid": "^11.1.0",
-    "zod": "^3.24.1"
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@playwright/test": "^1.50.0",

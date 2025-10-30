@@ -1,0 +1,342 @@
+import { eq, sql } from "drizzle-orm";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+
+import { DEFAULT_BIN_RANGE } from "@/config/constants";
+import * as schema from "@/db/schema";
+import {
+  UserNotFoundException,
+  UserPersistenceError,
+} from "@/domain/shared/errors";
+import { IUserRepository } from "@/domain/user/user.repository";
+import { createChildLogger } from "@/utils/logger";
+import {
+  User,
+  UserPreferences,
+  RebalanceStrategy,
+  DEFAULT_SLIPPAGE_PERCENTAGE,
+} from "@/domain";
+
+export class UserRepository implements IUserRepository {
+  private readonly logger = createChildLogger({ context: "UserRepository" });
+
+  constructor(private readonly db: PostgresJsDatabase<typeof schema>) {}
+
+  async findById(id: string): Promise<User | null> {
+    try {
+      const user = await this.db.query.users.findFirst({
+        where: eq(schema.users.id, id),
+      });
+
+      if (!user) {
+        return null;
+      }
+
+      return this.toDomain(user);
+    } catch (error) {
+      throw this.mapToDomainError(
+        error,
+        "findById",
+        `Failed to find user by id: ${id}`,
+        { id }
+      );
+    }
+  }
+
+  async findByTelegramId(telegramId: string): Promise<User | null> {
+    try {
+      const user = await this.db.query.users.findFirst({
+        where: eq(schema.users.telegramId, telegramId),
+      });
+
+      if (!user) {
+        return null;
+      }
+
+      return this.toDomain(user);
+    } catch (error) {
+      throw this.mapToDomainError(
+        error,
+        "findByTelegramId",
+        `Failed to find user by telegram id: ${telegramId}`,
+        { telegramId }
+      );
+    }
+  }
+
+  async findByReferralCode(referralCode: string): Promise<User | null> {
+    const user = await this.db.query.users.findFirst({
+      where: eq(schema.users.referralCode, referralCode),
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    return this.toDomain(user);
+  }
+
+  async findByWalletAddress(address: string): Promise<User | null> {
+    try {
+      const user = await this.db.query.users.findFirst({
+        where: eq(schema.users.walletAddress, address),
+      });
+
+      if (!user) {
+        return null;
+      }
+
+      return this.toDomain(user);
+    } catch (error) {
+      throw this.mapToDomainError(
+        error,
+        "findByWalletAddress",
+        `Failed to find user by wallet address: ${address}`,
+        { address }
+      );
+    }
+  }
+
+  async findByWalletId(walletId: string): Promise<User | null> {
+    try {
+      const user = await this.db.query.users.findFirst({
+        where: eq(schema.users.walletId, walletId),
+      });
+
+      if (!user) {
+        return null;
+      }
+
+      return this.toDomain(user);
+    } catch (error) {
+      throw this.mapToDomainError(
+        error,
+        "findByWalletId",
+        `Failed to find user by wallet id: ${walletId}`,
+        { walletId }
+      );
+    }
+  }
+
+  async save(user: User): Promise<void> {
+    try {
+      const persistenceData = this.toPersistence(user);
+
+      await this.db.insert(schema.users).values(persistenceData);
+    } catch (error) {
+      throw this.mapToDomainError(
+        error,
+        "save",
+        `Failed to save user with id: ${user.id}`,
+        { userId: user.id, telegramId: user.telegramId }
+      );
+    }
+  }
+
+  async update(user: User): Promise<void> {
+    try {
+      const persistenceData = this.toPersistence(user);
+
+      const updatedRows = await this.db
+        .update(schema.users)
+        .set({
+          username: persistenceData.username,
+          walletId: persistenceData.walletId,
+          walletAddress: persistenceData.walletAddress,
+          referralCode: persistenceData.referralCode,
+          referredBy: persistenceData.referredBy,
+
+          // Rebalancing settings
+          autoRebalanceEnabled: persistenceData.autoRebalanceEnabled,
+          rebalanceThreshold: persistenceData.rebalanceThreshold,
+          rebalanceStrategy: persistenceData.rebalanceStrategy,
+          rebalanceSchedule: persistenceData.rebalanceSchedule,
+
+          // Position configuration
+          defaultBinRange: persistenceData.defaultBinRange,
+          balancedPositionBinRange: persistenceData.balancedPositionBinRange,
+
+          // Risk management
+          stopLossPercentage: persistenceData.stopLossPercentage,
+          takeProfitPercentage: persistenceData.takeProfitPercentage,
+
+          // Trading settings
+          autoConvertToSol: persistenceData.autoConvertToSol,
+          slippagePercentage: persistenceData.slippagePercentage,
+
+          // Notification settings
+          notificationsEnabled: persistenceData.notificationsEnabled,
+          priceAlertsEnabled: persistenceData.priceAlertsEnabled,
+          rebalanceAlertsEnabled: persistenceData.rebalanceAlertsEnabled,
+        })
+        .where(eq(schema.users.id, user.id))
+        .returning({ id: schema.users.id });
+
+      if (updatedRows.length === 0) {
+        throw new UserNotFoundException(
+          `User with id ${user.id} not found for update`
+        );
+      }
+    } catch (error) {
+      throw this.mapToDomainError(
+        error,
+        "update",
+        `Failed to update user with id: ${user.id}`,
+        { userId: user.id }
+      );
+    }
+  }
+
+  async delete(id: string): Promise<void> {
+    try {
+      const deletedRows = await this.db
+        .delete(schema.users)
+        .where(eq(schema.users.id, id))
+        .returning({ id: schema.users.id });
+
+      if (deletedRows.length === 0) {
+        throw new UserNotFoundException(
+          `User with id ${id} not found for delete`
+        );
+      }
+    } catch (error) {
+      throw this.mapToDomainError(
+        error,
+        "delete",
+        `Failed to delete user with id: ${id}`,
+        { userId: id }
+      );
+    }
+  }
+
+  async exists(telegramId: string): Promise<boolean> {
+    try {
+      const result = await this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.users)
+        .where(eq(schema.users.telegramId, telegramId));
+
+      return Number(result[0]?.count ?? 0) > 0;
+    } catch (error) {
+      throw this.mapToDomainError(
+        error,
+        "exists",
+        `Failed to check user existence for telegram id: ${telegramId}`,
+        { telegramId }
+      );
+    }
+  }
+
+  private mapToDomainError(
+    error: unknown,
+    method: string,
+    message: string,
+    context: Record<string, unknown> = {}
+  ): Error {
+    if (error instanceof UserNotFoundException) {
+      this.logger.warn({ method, ...context }, error.message);
+      return error;
+    }
+
+    if (error instanceof UserPersistenceError) {
+      this.logger.error({ err: error, method, ...context }, error.message);
+      return error;
+    }
+
+    this.logger.error({ err: error, method, ...context }, message);
+    return new UserPersistenceError(message, { cause: error });
+  }
+
+  /**
+   * Maps database row to domain entity
+   */
+  private toDomain(row: typeof schema.users.$inferSelect): User {
+    const preferences: UserPreferences = {
+      // Rebalancing settings
+      autoRebalanceEnabled: row.autoRebalanceEnabled,
+      rebalanceThreshold: Number(row.rebalanceThreshold),
+      rebalanceStrategy: row.rebalanceStrategy as RebalanceStrategy,
+      rebalanceSchedule: row.rebalanceSchedule || "15m",
+
+      // Position configuration
+      defaultBinRange: row.defaultBinRange || DEFAULT_BIN_RANGE,
+      balancedPositionBinRange: row.balancedPositionBinRange,
+
+      // Risk management
+      stopLossPercentage: row.stopLossPercentage
+        ? Number(row.stopLossPercentage)
+        : null,
+      takeProfitPercentage: row.takeProfitPercentage
+        ? Number(row.takeProfitPercentage)
+        : null,
+
+      // Trading settings
+      autoConvertToSol: row.autoConvertToSol ?? true,
+      slippagePercentage: Number(
+        row.slippagePercentage?.toString() || DEFAULT_SLIPPAGE_PERCENTAGE
+      ),
+
+      // Notification settings
+      notificationsEnabled: row.notificationsEnabled ?? true,
+      priceAlertsEnabled: row.priceAlertsEnabled ?? true,
+      rebalanceAlertsEnabled: row.rebalanceAlertsEnabled ?? true,
+    };
+
+    return User.reconstitute({
+      id: row.id,
+      telegramId: row.telegramId,
+      privyUserId: row.privyUserId!,
+      walletId: row.walletId,
+      walletAddress: row.walletAddress,
+      username: row.username ?? undefined,
+      referralCode: row.referralCode ?? undefined,
+      referredBy: row.referredBy ?? undefined,
+      preferences,
+      createdAt: new Date(row.createdAt),
+      updatedAt: new Date(row.updatedAt),
+    });
+  }
+
+  /**
+   * Maps domain entity to database row
+   */
+  private toPersistence(user: User): typeof schema.users.$inferInsert {
+    const preferences = user.getPreferences();
+
+    return {
+      id: user.id,
+      telegramId: user.telegramId,
+      privyUserId: user.privyUserId,
+      walletId: user.walletId,
+      walletAddress: user.walletAddress,
+      username: user.getUsername() ?? undefined,
+      referralCode: user.getReferralCode() ?? undefined,
+      referredBy: user.getReferredBy() ?? undefined,
+
+      // Rebalancing settings
+      autoRebalanceEnabled: preferences.autoRebalanceEnabled,
+      rebalanceThreshold: preferences.rebalanceThreshold.toString(),
+      rebalanceStrategy: preferences.rebalanceStrategy,
+      rebalanceSchedule: preferences.rebalanceSchedule,
+
+      // Position configuration
+      defaultBinRange: preferences.defaultBinRange,
+      balancedPositionBinRange: preferences.balancedPositionBinRange,
+
+      // Risk management
+      stopLossPercentage: preferences.stopLossPercentage?.toString(),
+      takeProfitPercentage: preferences.takeProfitPercentage?.toString(),
+
+      // Trading settings
+      autoConvertToSol: preferences.autoConvertToSol,
+      slippagePercentage: preferences.slippagePercentage?.toString() || "3.00",
+
+      // Notification settings
+      notificationsEnabled: preferences.notificationsEnabled,
+      priceAlertsEnabled: preferences.priceAlertsEnabled,
+      rebalanceAlertsEnabled: preferences.rebalanceAlertsEnabled,
+
+      createdAt: user.createdAt.toISOString(),
+      updatedAt: user.getUpdatedAt().toISOString(),
+    };
+  }
+}

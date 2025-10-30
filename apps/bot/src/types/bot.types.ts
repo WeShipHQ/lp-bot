@@ -1,4 +1,4 @@
-import { User } from "@/db";
+import { User as UserEntity } from "@/domain/user/user.entity";
 import { StrategyType } from "@meteora-ag/dlmm";
 import type { Context } from "telegraf";
 
@@ -27,11 +27,24 @@ interface TwoFactorVerificationState {
   maxAttempts?: number;
 }
 
+export interface SettingsState {
+  step: 
+    | "vault_input" 
+    | "schedule_input"
+    | "threshold_input"
+    | "bin_input"
+    | "stop_loss_input"
+    | "take_profit_input"
+    | "slippage_input";
+}
+
 export interface BotContext extends Context {
-  user: User;
+  user: UserEntity;
+  privyUserId?: string;
   session?: {
     transferState?: TransferState;
     twoFactorVerification?: TwoFactorVerificationState;
+    settingsState?: SettingsState;
   };
   scene: any;
   wizard: any;

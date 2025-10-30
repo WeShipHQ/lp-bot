@@ -1,0 +1,447 @@
+import "reflect-metadata";
+import { Container } from "inversify";
+
+// Domain repositories
+import { IPositionRepository } from "@/domain/position/position.repository";
+import { IUserRepository } from "@/domain/user/user.repository";
+
+// Infrastructure implementations
+import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
+import { UserRepository } from "@/infrastructure/database/repositories/user.repository";
+import {
+  CacheService,
+  ICacheService,
+} from "@/infrastructure/cache/cache.service";
+import { NotificationService } from "@/infrastructure/messaging/notification.service";
+import {
+  TelegramClient,
+  ITelegramClient,
+} from "@/infrastructure/messaging/telegram-client";
+import { TelegramMessageGateway } from "@/infrastructure/messaging/telegram-message.gateway";
+import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
+
+// Application use-cases
+import { CreatePositionUseCase } from "@/application/position/create-position.use-case";
+import { ClosePositionUseCase } from "@/application/position/close-position.use-case";
+import { ClaimFeesUseCase } from "@/application/position/claim-fees.use-case";
+import { GetPositionUseCase } from "@/application/position/get-position.use-case";
+import { RebalancePositionUseCase } from "@/application/position/rebalance-position.use-case";
+
+import { GetPortfolioUseCase } from "@/application/portfolio/get-portfolio.use-case";
+import { SyncPortfolioUseCase } from "@/application/portfolio/sync-portfolio.use-case";
+import { CalculateMetricsUseCase } from "@/application/portfolio/calculate-metrics.use-case";
+
+import { GetBalanceUseCase } from "@/application/wallet/get-balance.use-case";
+import { GetTokenBalanceUseCase } from "@/application/wallet/get-token-balance.use-case";
+import { GetPoolTokenBalancesUseCase } from "@/application/wallet/get-pool-token-balances.use-case";
+import { ConnectWalletUseCase } from "@/application/wallet/connect-wallet.use-case";
+import { SendTokensUseCase } from "@/application/wallet/send-tokens.use-case";
+import { GetTopTokenBalancesUseCase } from "@/application/wallet/get-top-token-balances.use-case";
+import { UserRebalanceScheduleService } from "@/services/user-rebalance-schedule.service";
+
+import { GetTrendingPoolsUseCase } from "@/application/trending/get-trending-pools.use-case";
+import { SearchPoolsUseCase } from "@/application/trending/search-pools.use-case";
+import { GetPoolDetailsUseCase } from "@/application/trending/get-pool-details.use-case";
+import { CalculateBalancedDistributionUseCase } from "@/application/position/calculate-balanced-distribution.use-case";
+import { GetPriceRangeUseCase } from "@/application/position/get-price-range.use-case";
+
+import { ParseFreeTextMessageUseCase } from "@/application/message/parse-free-text.use-case";
+import { RouteFreeTextMessageUseCase } from "@/application/message/route-free-text.use-case";
+import { MessageService } from "@/application/message/message.service";
+// import { GetUserSettingsUseCase } from "@/application/settings/get-user-settings.use-case";
+import { UpdateUserSettingUseCase } from "@/application/settings/update-user-setting.use-case";
+import { AIService } from "@/services/ai.service";
+import { AnalyzePoolUseCase } from "@/application/ai/analyze-pool.use-case";
+// import { GetUserByTelegramIdUseCase } from "@/application/user/get-user-by-telegram-id.use-case";
+
+// Adapters
+import { SolanaAdapter } from "@/adapters/blockchain/solana.adapter";
+// import { JupiterAdapter } from "@/adapters/external-api/jupiter.adapter";
+import { MeteoraAdapter } from "@/adapters/dex/meteora.adapter";
+import { SarosAdapter } from "@/services/saros/saros.adapter";
+
+// Other services
+import { PrivyTransactionService } from "@/services/transaction.service";
+import {
+  dexRegistry,
+  DexRegistryService,
+} from "@/services/dex-registry.service";
+import { SwapService } from "@/services/swap.service";
+import { JupiterService } from "@/services/jupiter.service";
+import { PriceEnrichmentService } from "@/services/price-enrichment.service";
+
+// DB
+import { db } from "@/db";
+
+// Bot types
+import type { Telegraf } from "telegraf";
+import type { BotContext } from "@/types/bot.types";
+import { getEnabledDexTypes } from "@/config/dex.config";
+import { IDexAdapter } from "@/types/dex-adapter.interface";
+import { UpdateUserUseCase } from "@/application/user/update-user.use-case";
+
+/**
+ * Central DI tokens for interfaces and non-class deps
+ */
+export const DI_TOKENS = {
+  PositionRepo: Symbol("IPositionRepository"),
+  UserRepo: Symbol("IUserRepository"),
+  Cache: Symbol("ICacheService"),
+  DexRegistry: Symbol("DexRegistry"),
+  TelegramBot: Symbol("TelegramBot"),
+  TelegramClient: Symbol("TelegramClient"),
+  JobQueue: Symbol("JobQueueService"),
+  TransactionService: Symbol("ITransactionService"),
+  MessageGateway: Symbol("MessageGateway"),
+  MessageService: Symbol("MessageService"),
+} as const;
+
+// Create Inversify container
+const container = new Container({
+  defaultScope: "Transient",
+  skipBaseClassChecks: true,
+});
+
+let baseRegistered = false;
+
+function registerBase() {
+  if (baseRegistered) return;
+  baseRegistered = true;
+
+  // Repositories (singleton)
+  container
+    .bind<IPositionRepository>(DI_TOKENS.PositionRepo)
+    .toDynamicValue(() => new PositionRepository(db))
+    .inSingletonScope();
+
+  container
+    .bind<IUserRepository>(DI_TOKENS.UserRepo)
+    .toDynamicValue(() => new UserRepository(db))
+    .inSingletonScope();
+
+  // Cache service (singleton)
+  container
+    .bind<ICacheService>(DI_TOKENS.Cache)
+    .toDynamicValue(() => new CacheService())
+    .inSingletonScope();
+
+  // Dex registry (singleton instance)
+  container.bind(DI_TOKENS.DexRegistry).toConstantValue(dexRegistry);
+
+  // Adapters (singleton where appropriate)
+  container
+    .bind(SolanaAdapter)
+    .toDynamicValue(() => new SolanaAdapter())
+    .inSingletonScope();
+  // container
+  //   .bind(JupiterAdapter)
+  //   .toDynamicValue(() => new JupiterAdapter())
+  //   .inSingletonScope();
+  container
+    .bind(MeteoraAdapter)
+    .toDynamicValue(() => new MeteoraAdapter())
+    .inSingletonScope();
+  container
+    .bind(SarosAdapter)
+    .toDynamicValue(() => new SarosAdapter())
+    .inSingletonScope();
+
+  // Transaction service (singleton)
+  container
+    .bind(DI_TOKENS.TransactionService)
+    .toDynamicValue(() => new PrivyTransactionService())
+    .inSingletonScope();
+
+  container
+    .bind(SwapService)
+    .toDynamicValue(() => new SwapService())
+    .inSingletonScope();
+
+  container
+    .bind(JupiterService)
+    .toDynamicValue(() => new JupiterService())
+    .inSingletonScope();
+
+  // Price enrichment service (singleton)
+  container
+    .bind(PriceEnrichmentService)
+    .toDynamicValue(() => new PriceEnrichmentService())
+    .inSingletonScope();
+
+  // Use-cases (transient by default)
+  container.bind(CreatePositionUseCase).toDynamicValue(
+    (c) =>
+      new CreatePositionUseCase(
+        // c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
+        c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
+        // c.container.get(DI_TOKENS.TransactionService),
+        c.container.get<ICacheService>(DI_TOKENS.Cache)
+      )
+  );
+
+  container
+    .bind(ClosePositionUseCase)
+    .toDynamicValue(
+      (c) =>
+        new ClosePositionUseCase(
+          c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
+          c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
+          c.container.get<ICacheService>(DI_TOKENS.Cache)
+        )
+    );
+
+  container
+    .bind(ClaimFeesUseCase)
+    .toDynamicValue(
+      (c) =>
+        new ClaimFeesUseCase(
+          c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
+          c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry)
+        )
+    );
+
+  container
+    .bind(GetPositionUseCase)
+    .toDynamicValue(
+      (c) =>
+        new GetPositionUseCase(
+          c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
+          c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
+          c.container.get<IUserRepository>(DI_TOKENS.UserRepo),
+          c.container.get(PriceEnrichmentService)
+        )
+    );
+
+  container
+    .bind(RebalancePositionUseCase)
+    .toDynamicValue(
+      (c) =>
+        new RebalancePositionUseCase(
+          c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
+          c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry)
+        )
+    );
+
+  container
+    .bind(CalculateBalancedDistributionUseCase)
+    .toDynamicValue(
+      (c) =>
+        new CalculateBalancedDistributionUseCase(
+          c.container.get(JupiterService)
+        )
+    );
+
+  container
+    .bind(GetPriceRangeUseCase)
+    .toDynamicValue(() => new GetPriceRangeUseCase());
+
+  container
+    .bind(GetPortfolioUseCase)
+    .toDynamicValue(
+      (c) =>
+        new GetPortfolioUseCase(
+          c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
+          c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
+          c.container.get<ICacheService>(DI_TOKENS.Cache),
+          c.container.get(PriceEnrichmentService)
+        )
+    );
+
+  container
+    .bind(SyncPortfolioUseCase)
+    .toDynamicValue(
+      (c) =>
+        new SyncPortfolioUseCase(
+          c.container.get<IPositionRepository>(DI_TOKENS.PositionRepo),
+          c.container.get<typeof dexRegistry>(DI_TOKENS.DexRegistry),
+          c.container.get<ICacheService>(DI_TOKENS.Cache)
+        )
+    );
+
+  container
+    .bind(CalculateMetricsUseCase)
+    .toDynamicValue(() => new CalculateMetricsUseCase());
+
+  container
+    .bind(GetBalanceUseCase)
+    .toDynamicValue(() => new GetBalanceUseCase());
+
+  container
+    .bind(GetTokenBalanceUseCase)
+    .toDynamicValue(() => new GetTokenBalanceUseCase());
+
+  // Convenience aggregator use-case
+  container
+    .bind(GetPoolTokenBalancesUseCase)
+    .toDynamicValue(() => new GetPoolTokenBalancesUseCase());
+
+  container
+    .bind(GetTopTokenBalancesUseCase)
+    .toDynamicValue(() => new GetTopTokenBalancesUseCase());
+
+  container
+    .bind(ConnectWalletUseCase)
+    .toDynamicValue(
+      (c) =>
+        new ConnectWalletUseCase(
+          c.container.get<IUserRepository>(DI_TOKENS.UserRepo)
+        )
+    );
+
+  container
+    .bind(SendTokensUseCase)
+    .toDynamicValue(
+      (c) =>
+        new SendTokensUseCase(
+          c.container.get<IUserRepository>(DI_TOKENS.UserRepo)
+        )
+    );
+
+  container
+    .bind(GetTrendingPoolsUseCase)
+    .toDynamicValue(() => new GetTrendingPoolsUseCase());
+  container
+    .bind(SearchPoolsUseCase)
+    .toDynamicValue(() => new SearchPoolsUseCase());
+  container
+    .bind(GetPoolDetailsUseCase)
+    .toDynamicValue(() => new GetPoolDetailsUseCase());
+
+  container
+    .bind(ParseFreeTextMessageUseCase)
+    .toDynamicValue(() => new ParseFreeTextMessageUseCase());
+  container
+    .bind(RouteFreeTextMessageUseCase)
+    .toDynamicValue(() => new RouteFreeTextMessageUseCase());
+
+  // Settings use-cases
+  // container
+  //   .bind(GetUserSettingsUseCase)
+  //   .toDynamicValue(() => new GetUserSettingsUseCase());
+  container
+    .bind(UpdateUserSettingUseCase)
+    .toDynamicValue(() => new UpdateUserSettingUseCase());
+  container
+    .bind(UpdateUserUseCase)
+    .toDynamicValue(() => new UpdateUserUseCase());
+  container
+    .bind(UserRebalanceScheduleService)
+    .toDynamicValue(() => new UserRebalanceScheduleService());
+
+  // AI services
+  container
+    .bind(AIService)
+    .toDynamicValue(() => new AIService())
+    .inSingletonScope();
+  container
+    .bind(AnalyzePoolUseCase)
+    .toDynamicValue((c) => new AnalyzePoolUseCase(c.container.get(AIService)))
+    .inSingletonScope();
+}
+
+let runtimeRegistered = false;
+
+/**
+ * Initialize runtime-bound registrations like Telegram client, JobQueue service,
+ * and register DEX adapters with the registry.
+ */
+export function initializeContainer(bot?: Telegraf<BotContext>) {
+  registerBase();
+  if (runtimeRegistered) return;
+
+  if (bot) {
+    container.bind(DI_TOKENS.TelegramBot).toConstantValue(bot);
+
+    container
+      .bind<ITelegramClient>(DI_TOKENS.TelegramClient)
+      .toDynamicValue(
+        (c) =>
+          new TelegramClient(
+            c.container.get(DI_TOKENS.TelegramBot) as Telegraf<BotContext>
+          )
+      )
+      .inSingletonScope();
+
+    container
+      .bind<JobQueueService>(DI_TOKENS.JobQueue)
+      .toDynamicValue(() => new JobQueueService({ bot }))
+      .inSingletonScope();
+
+    // Message gateway + service (depends on Telegram client)
+    if (!container.isBound(TelegramMessageGateway)) {
+      container
+        .bind(TelegramMessageGateway)
+        .toDynamicValue(
+          (c) =>
+            new TelegramMessageGateway(
+              c.container.get<ITelegramClient>(DI_TOKENS.TelegramClient)
+            )
+        )
+        .inSingletonScope();
+    }
+
+    if (!container.isBound(DI_TOKENS.MessageGateway)) {
+      container
+        .bind(DI_TOKENS.MessageGateway)
+        .toDynamicValue((c) => c.container.get(TelegramMessageGateway))
+        .inSingletonScope();
+    }
+
+    if (!container.isBound(MessageService)) {
+      container
+        .bind(MessageService)
+        .toDynamicValue(
+          (c) => new MessageService(c.container.get(TelegramMessageGateway))
+        )
+        .inSingletonScope();
+    }
+
+    if (!container.isBound(DI_TOKENS.MessageService)) {
+      container
+        .bind(DI_TOKENS.MessageService)
+        .toDynamicValue((c) => c.container.get(MessageService))
+        .inSingletonScope();
+    }
+
+    // Notification service depends on TelegramClient and UserRepository and JobQueue
+    container
+      .bind(NotificationService)
+      .toDynamicValue(
+        (c) =>
+          new NotificationService(
+            c.container.get<ITelegramClient>(DI_TOKENS.TelegramClient),
+            c.container.get<IUserRepository>(DI_TOKENS.UserRepo),
+            c.container.get<JobQueueService>(DI_TOKENS.JobQueue)
+          )
+      )
+      .inSingletonScope();
+  }
+
+  // Register DEX adapters with the dex registry based on configuration
+  try {
+    const enabled = getEnabledDexTypes();
+
+    const adapters: IDexAdapter[] = [];
+    if (enabled.includes("meteora"))
+      adapters.push(container.get<IDexAdapter>(MeteoraAdapter));
+    if (enabled.includes("saros")) adapters.push(container.get(SarosAdapter));
+
+    const dexRegistry = container.get<DexRegistryService>(
+      DI_TOKENS.DexRegistry
+    );
+    for (const adapter of adapters) {
+      try {
+        dexRegistry.register(adapter);
+      } catch (error) {
+        console.error("Error registering DEX adapter:", error);
+      }
+    }
+  } catch (error) {
+    console.error("Error initializing DEX adapters:", error);
+  }
+
+  runtimeRegistered = true;
+}
+
+// Re-export container for convenience
+export { container };
