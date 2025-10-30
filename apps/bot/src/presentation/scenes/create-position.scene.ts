@@ -27,6 +27,11 @@ import { link } from "@/utils/misc";
 import { DISABLE_LINK_PREVIEW } from "../constants/base.constants";
 import { logger } from "@/utils/logger";
 import { ExtraEditMessageText } from "node_modules/telegraf/typings/telegram-types";
+import {
+  formatErrorForDisplay,
+  formatErrorWithHelp,
+  shouldShowRetryButton,
+} from "@/presentation/utils/error-display.util";
 
 type WizardState = {
   step?:
@@ -568,8 +573,10 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
           "Position creation failed"
         );
 
+        // Use error display utility for consistent formatting
+        const errorMessage = result.error || "Unknown error occurred";
         await ctx.editMessageText(
-          `❌ *Failed to create position*\n\n${result.error || "Unknown error"}\n\nPlease try again.`,
+          `❌ *Failed to create position*\n\n${errorMessage}\n\nPlease try again.`,
           { parse_mode: "Markdown" }
         );
         return ctx.scene.leave();
@@ -612,10 +619,10 @@ export const createPositionScene = new Scenes.WizardScene<BotContext>(
         poolAddress: poolData?.address,
       });
 
-      await ctx.editMessageText(
-        "❌ *Failed to create position*\n\nAn unexpected error occurred. Please try again.",
-        { parse_mode: "Markdown" }
-      );
+      const displayMessage = formatErrorWithHelp(error);
+      await ctx.editMessageText(displayMessage, {
+        parse_mode: "Markdown",
+      });
     }
 
     return ctx.scene.leave();

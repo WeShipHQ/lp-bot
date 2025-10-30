@@ -2,6 +2,7 @@
  * Create Position Flow Definition
  * 
  * Defines the explicit state machine for creating a liquidity position.
+ * Integrated with ADR-001 (Error Framework) and ADR-002 (Strategy Pattern).
  */
 
 import {
@@ -13,6 +14,12 @@ import {
 } from "./flow-types";
 import { logger } from "@/utils/logger";
 import { FlowStateMachine, FlowRepository } from "./flow-state-machine";
+import {
+  InvalidPositionAmountError,
+  InvalidPoolError,
+  StrategyValidationError,
+} from "@/domain/position";
+import { strategyRegistry } from "@/domain/strategies/strategy-registry";
 
 export interface CreatePositionFlowParams {
   userId: string;
@@ -45,27 +52,56 @@ export const createPositionFlowDefinition = {
       handler: async (context: FlowContext<CreatePositionCheckpoint>) => {
         logger.info({ flowId: context.flowId }, "[CreatePositionFlow] Validating inputs");
 
-        // Extract checkpoint data
-        const checkpoint = context.checkpointData;
+        try {
+          const checkpoint = context.checkpointData;
 
-        // Validate required fields
-        if (!checkpoint.poolAddress) {
-          return { success: false, error: "Missing poolAddress" };
+          // Validate required fields
+          if (!checkpoint.poolAddress) {
+            throw new InvalidPoolError("", checkpoint.dex ?? "meteora");
+          }
+
+          if (!checkpoint.tokenA || !checkpoint.tokenB) {
+            throw new InvalidPositionAmountError(0, 0.000001);
+          }
+
+          const tokenAAmount = parseFloat(checkpoint.tokenAAmount);
+          const tokenBAmount = parseFloat(checkpoint.tokenBAmount);
+
+          if (!tokenAAmount || tokenAAmount <= 0) {
+            throw new InvalidPositionAmountError(tokenAAmount, 0.000001);
+          }
+
+          if (!tokenBAmount || tokenBAmount <= 0) {
+            throw new InvalidPositionAmountError(tokenBAmount, 0.000001);
+          }
+
+          // Strategy validation (ADR-002)
+          const strategy = strategyRegistry.getOrDefault(checkpoint.strategy);
+          const validation = await strategy.validateDepositPlan?.({
+            tokenAAmount,
+            tokenBAmount,
+            depositMode: checkpoint.depositMethod ?? "sol_auto_convert",
+            poolAddress: checkpoint.poolAddress,
+          });
+
+          if (validation && !validation.valid) {
+            throw new StrategyValidationError(strategy.metadata.name, validation.error ?? "Invalid configuration");
+          }
+
+          return {
+            success: true,
+            state: CreatePositionState.BUILDING_TX,
+          };
+        } catch (error) {
+          if (error instanceof InvalidPositionAmountError || error instanceof InvalidPoolError || error instanceof StrategyValidationError) {
+            return {
+              success: false,
+              error: error.userMessage ?? error.message,
+            };
+          }
+
+          throw error;
         }
-
-        if (!checkpoint.tokenA || !checkpoint.tokenB) {
-          return { success: false, error: "Missing token information" };
-        }
-
-        if (!checkpoint.tokenAAmount || !checkpoint.tokenBAmount) {
-          return { success: false, error: "Missing token amounts" };
-        }
-
-        // Validation passed - move to next state
-        return {
-          success: true,
-          state: CreatePositionState.BUILDING_TX,
-        };
       },
     },
     {

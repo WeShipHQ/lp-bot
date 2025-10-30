@@ -22,6 +22,8 @@ import { JobQueueService } from "@/infrastructure/jobs/job-queue.service";
 
 // Application use-cases
 import { CreatePositionUseCase } from "@/application/position/create-position.use-case";
+import { StartCreatePositionUseCase } from "@/application/position/start-create-position.use-case";
+import { FinalizePositionCreationUseCase } from "@/application/position/finalize-position-creation.use-case";
 import { ClosePositionUseCase } from "@/application/position/close-position.use-case";
 import { ClaimFeesUseCase } from "@/application/position/claim-fees.use-case";
 import { GetPositionUseCase } from "@/application/position/get-position.use-case";
@@ -176,6 +178,14 @@ function registerBase() {
         c.container.get<ICacheService>(DI_TOKENS.Cache)
       )
   );
+
+  container
+    .bind(StartCreatePositionUseCase)
+    .toDynamicValue(() => new StartCreatePositionUseCase());
+
+  container
+    .bind(FinalizePositionCreationUseCase)
+    .toDynamicValue(() => new FinalizePositionCreationUseCase());
 
   container
     .bind(ClosePositionUseCase)
