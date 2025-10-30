@@ -375,30 +375,6 @@ export class TransactionConfirmWorker
         return;
       }
 
-      // TODO: Migrate to FinalizePositionCreationUseCase for better error handling
-      // const finalizeUC = container.get(FinalizePositionCreationUseCase);
-      // await finalizeUC.execute({
-      //   userId: context.userId,
-      //   positionAddress: effectivePositionAddress,
-      //   poolAddress: context.poolAddress,
-      //   dex: context.dex,
-      //   tokenX: context.tokenA,
-      //   tokenY: context.tokenB,
-      //   initialTokenXAmount: actualTokenAAmount,
-      //   initialTokenYAmount: actualTokenBAmount,
-      //   tokenXPriceUSD: prices.tokenAUsd.toString(),
-      //   tokenYPriceUSD: prices.tokenBUsd.toString(),
-      //   solPriceUSD: prices.solUsd.toString(),
-      //   initialValueUSD: (parseFloat(actualTokenAAmount) * prices.tokenAUsd + parseFloat(actualTokenBAmount) * prices.tokenBUsd).toFixed(6),
-      //   initialValueSOL: context.solAmount?.toString() ?? "0",
-      //   strategyType: "DLMM",
-      //   isRebalancingEnabled: context.autoRebalance,
-      //   rebalanceThreshold: context.rebalanceThreshold?.toString(),
-      //   slPercentage: context.slPercentage?.toString(),
-      //   tpPercentage: context.tpPercentage?.toString(),
-      //   creationSignature: signature,
-      // });
-
       const createdPositionId = await positionPersistenceService.createPosition(
         {
           signature,
