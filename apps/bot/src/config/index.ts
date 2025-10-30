@@ -32,6 +32,10 @@ export const CONFIG = {
     ENABLED: process.env.SANCTUM_ENABLED === "true",
   },
 
+  OPENAI: {
+    OPEN_ROUTER_API_KEY: process.env.OPEN_ROUTER_API_KEY || "",
+  },
+
   REDIS: {
     URL: process.env.REDIS_URL || "redis://localhost:6379",
   },

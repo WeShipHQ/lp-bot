@@ -6,6 +6,7 @@ import { DexType, UnifiedPool } from "@/types/core.types";
 import { PoolFormatter } from "../formatters/pool.formatter";
 import { container } from "@/infrastructure/di/container";
 import { GetPoolDetailsUseCase } from "@/application/trending/get-pool-details.use-case";
+import { AnalyzePoolUseCase } from "@/application/ai/analyze-pool.use-case";
 import { DISABLE_LINK_PREVIEW } from "../constants/base.constants";
 
 interface SceneState {
@@ -144,6 +145,70 @@ poolDetailScene.action("refresh_pool_detail", async (ctx) => {
       parse_mode: "Markdown",
       reply_markup: keyboard,
     });
+  }
+});
+
+poolDetailScene.action("ask_panda_ai", async (ctx) => {
+  try {
+    await ctx.answerCbQuery("🐼 Panda AI is analyzing the pool...");
+
+    const state = ctx.scene.state as SceneState;
+    const pool = state.pool;
+
+    if (!pool) {
+      await ctx.reply("❌ Pool data not available for analysis");
+      return;
+    }
+
+    // Send a loading message
+    const loadingMsg = await ctx.reply(
+      "🐼 Panda AI is analyzing the pool... This may take a few moments.",
+      {
+        parse_mode: "Markdown",
+      }
+    );
+
+    try {
+      const analyzePoolUseCase = container.get(AnalyzePoolUseCase);
+      const analysis = await analyzePoolUseCase.execute({ pool });
+
+      await ctx.telegram.editMessageText(
+        ctx.chat?.id,
+        loadingMsg.message_id,
+        undefined,
+        analysis,
+        {
+          parse_mode: "Markdown",
+          ...DISABLE_LINK_PREVIEW,
+        }
+      );
+
+      const message = PoolFormatter.formatPoolDetails(pool);
+      const keyboard = getPoolInfoKeyboard(pool.address);
+
+      await ctx.replyWithMarkdown(message, {
+        parse_mode: "Markdown",
+        reply_markup: keyboard,
+        ...DISABLE_LINK_PREVIEW,
+      });
+    } catch (analysisError) {
+      console.error("Error during AI analysis:", analysisError);
+
+      await ctx.telegram.editMessageText(
+        ctx.chat?.id,
+        loadingMsg.message_id,
+        undefined,
+        "❌ Sorry, Panda AI encountered an error while analyzing the pool. Please try again later.",
+        {
+          parse_mode: "Markdown",
+        }
+      );
+    }
+  } catch (error) {
+    console.error("Error in ask_panda_ai action:", error);
+    await ctx.reply(
+      "❌ An error occurred while requesting AI analysis. Please try again."
+    );
   }
 });
 

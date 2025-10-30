@@ -50,6 +50,8 @@ import { RouteFreeTextMessageUseCase } from "@/application/message/route-free-te
 import { MessageService } from "@/application/message/message.service";
 // import { GetUserSettingsUseCase } from "@/application/settings/get-user-settings.use-case";
 import { UpdateUserSettingUseCase } from "@/application/settings/update-user-setting.use-case";
+import { AIService } from "@/services/ai.service";
+import { AnalyzePoolUseCase } from "@/application/ai/analyze-pool.use-case";
 // import { GetUserByTelegramIdUseCase } from "@/application/user/get-user-by-telegram-id.use-case";
 
 // Adapters
@@ -325,6 +327,16 @@ function registerBase() {
   container
     .bind(UserRebalanceScheduleService)
     .toDynamicValue(() => new UserRebalanceScheduleService());
+
+  // AI services
+  container
+    .bind(AIService)
+    .toDynamicValue(() => new AIService())
+    .inSingletonScope();
+  container
+    .bind(AnalyzePoolUseCase)
+    .toDynamicValue((c) => new AnalyzePoolUseCase(c.container.get(AIService)))
+    .inSingletonScope();
 }
 
 let runtimeRegistered = false;

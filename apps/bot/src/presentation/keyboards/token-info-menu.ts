@@ -60,7 +60,7 @@ export function getPoolInfoKeyboard(
       ],
       [
         {
-          text: "Ask Panda AI",
+          text: "Ask Panda AI 🐼",
           callback_data: "ask_panda_ai",
         },
       ],
