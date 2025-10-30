@@ -58,6 +58,12 @@ export function getPoolInfoKeyboard(
         { text: "Close", callback_data: "close_pool_detail" },
         { text: "Refresh", callback_data: "refresh_pool_detail" },
       ],
+      [
+        {
+          text: "Ask Panda AI",
+          callback_data: "ask_panda_ai",
+        },
+      ],
     ],
   };
 }
