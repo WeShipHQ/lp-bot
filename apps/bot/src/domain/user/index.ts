@@ -22,6 +22,9 @@ export type {
 // Repository interface export
 export type { IUserRepository } from "./user.repository";
 
+// Domain services export
+export { UserDomainService } from "./user.service";
+
 // Validators export
 export * from "./user.validators";
 

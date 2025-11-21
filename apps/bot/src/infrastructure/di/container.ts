@@ -4,6 +4,7 @@ import { Container } from "inversify";
 // Domain repositories
 import { IPositionRepository } from "@/domain/position/position.repository";
 import { IUserRepository } from "@/domain/user/user.repository";
+import { UserDomainService } from "@/domain/user/user.service";
 
 // Infrastructure implementations
 import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
@@ -117,6 +118,16 @@ function registerBase() {
   container
     .bind<IUserRepository>(DI_TOKENS.UserRepo)
     .toDynamicValue(() => new UserRepository(db))
+    .inSingletonScope();
+
+  container
+    .bind(UserDomainService)
+    .toDynamicValue(
+      (c) =>
+        new UserDomainService(
+          c.container.get<IUserRepository>(DI_TOKENS.UserRepo)
+        )
+    )
     .inSingletonScope();
 
   // Cache service (singleton)
@@ -284,7 +295,8 @@ function registerBase() {
     .toDynamicValue(
       (c) =>
         new ConnectWalletUseCase(
-          c.container.get<IUserRepository>(DI_TOKENS.UserRepo)
+          c.container.get<IUserRepository>(DI_TOKENS.UserRepo),
+          c.container.get(UserDomainService)
         )
     );
 
