@@ -8,6 +8,7 @@ import { IUserRepository } from "@/domain/user/user.repository";
 // Infrastructure implementations
 import { PositionRepository } from "@/infrastructure/database/repositories/position.repository";
 import { UserRepository } from "@/infrastructure/database/repositories/user.repository";
+import { CachedUserRepository } from "@/infrastructure/database/repositories/cached-user.repository";
 import {
   CacheService,
   ICacheService,
@@ -72,6 +73,7 @@ import { PriceEnrichmentService } from "@/services/price-enrichment.service";
 
 // DB
 import { db } from "@/db";
+import { CACHE } from "@/config";
 
 // Bot types
 import type { Telegraf } from "telegraf";
@@ -114,15 +116,31 @@ function registerBase() {
     .toDynamicValue(() => new PositionRepository(db))
     .inSingletonScope();
 
-  container
-    .bind<IUserRepository>(DI_TOKENS.UserRepo)
-    .toDynamicValue(() => new UserRepository(db))
-    .inSingletonScope();
-
   // Cache service (singleton)
   container
     .bind<ICacheService>(DI_TOKENS.Cache)
     .toDynamicValue(() => new CacheService())
+    .inSingletonScope();
+
+  container
+    .bind<IUserRepository>(DI_TOKENS.UserRepo)
+    .toDynamicValue((context) => {
+      const baseRepository = new UserRepository(db);
+
+      if (CACHE.USER_CACHE_ENABLED) {
+        const cacheService = context.container.get<ICacheService>(
+          DI_TOKENS.Cache
+        );
+
+        return new CachedUserRepository(
+          baseRepository,
+          cacheService,
+          CACHE.USER_CACHE_TTL
+        );
+      }
+
+      return baseRepository;
+    })
     .inSingletonScope();
 
   // Dex registry (singleton instance)
